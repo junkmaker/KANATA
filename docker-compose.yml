@@ -5,6 +5,9 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/src:/app/src
+      - kanata-db:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/kanata.db
 
   frontend:
     build: ./frontend
@@ -17,3 +20,6 @@ services:
       - CHOKIDAR_USEPOLLING=true
     depends_on:
       - backend
+
+volumes:
+  kanata-db:
