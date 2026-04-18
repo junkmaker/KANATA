@@ -66,7 +66,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const end = primaryData.length;
     const start = Math.max(0, end - 220);
     setView({ start, end });
-  }, [primary]);
+  }, [primary, primaryData?.length]);
 
   const PAD_L = 12, PAD_R = 72, PAD_T = 12;
   const VOL_H = state.showVolume ? 64 : 0;
@@ -90,16 +90,21 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return o;
   }, [primaryData, state.indicators]);
 
+  const safeEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
+
   const yRange = useMemo<YRange>(() => {
     if (!primaryData) return { min: 0, max: 1 };
+    const end = Math.min(view.end, primaryData.length);
     let min = Infinity, max = -Infinity;
-    for (let i = view.start; i < view.end; i++) {
+    for (let i = view.start; i < end; i++) {
       const b = primaryData[i];
+      if (!b) continue;
       if (b.h > max) max = b.h;
       if (b.l < min) min = b.l;
     }
+    if (min === Infinity) return { min: 0, max: 1 };
     if (state.indicators.boll && indi.boll) {
-      for (let i = view.start; i < view.end; i++) {
+      for (let i = view.start; i < end; i++) {
         if (indi.boll.upper[i] != null && indi.boll.upper[i]! > max) max = indi.boll.upper[i]!;
         if (indi.boll.lower[i] != null && indi.boll.lower[i]! < min) min = indi.boll.lower[i]!;
       }
@@ -108,7 +113,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return { min: min - pad, max: max + pad };
   }, [primaryData, view, state.indicators.boll, indi]);
 
-  const nVis = view.end - view.start;
+  const nVis = safeEnd - view.start;
   const bw = priceW / nVis;
   const xScale = (i: number) => PAD_L + (i - view.start) * bw + bw / 2;
   const yScale = (v: number) => {
@@ -117,7 +122,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   };
 
   let volMax = 1;
-  for (let i = view.start; i < view.end; i++) if (primaryData && primaryData[i].v > volMax) volMax = primaryData[i].v;
+  for (let i = view.start; i < safeEnd; i++) if (primaryData && primaryData[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
   const volY0 = PAD_T + priceH + 4;
   const stochY0 = volY0 + VOL_H + 18;
   const stochYScale = (v: number) => stochY0 + (1 - v / 100) * (STOCH_H - 4);
@@ -158,7 +163,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'center';
     const tf = state.timeframe;
-    for (let i = view.start; i < view.end; i += tickStep) {
+    for (let i = view.start; i < safeEnd; i += tickStep) {
       const x = xScale(i);
       ctx.beginPath();
       ctx.moveTo(Math.round(x) + 0.5, PAD_T);
@@ -171,18 +176,18 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
       ctx.beginPath();
       let first = true;
-      for (let i = view.start; i < view.end; i++) {
+      for (let i = view.start; i < safeEnd; i++) {
         if (senkouA[i] == null || senkouB[i] == null) continue;
         const x = xScale(i);
         if (first) { ctx.moveTo(x, yScale(senkouA[i]!)); first = false; }
         else ctx.lineTo(x, yScale(senkouA[i]!));
       }
-      for (let i = view.end - 1; i >= view.start; i--) {
+      for (let i = safeEnd - 1; i >= view.start; i--) {
         if (senkouA[i] == null || senkouB[i] == null) continue;
         ctx.lineTo(xScale(i), yScale(senkouB[i]!));
       }
       ctx.closePath();
-      const midI = Math.floor((view.start + view.end) / 2);
+      const midI = Math.floor((view.start + safeEnd) / 2);
       const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
       ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
       ctx.fill();
@@ -203,7 +208,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     ctx.beginPath();
     ctx.rect(PAD_L, PAD_T, priceW, priceH);
     ctx.clip();
-    for (let i = view.start; i < view.end; i++) {
+    for (let i = view.start; i < safeEnd; i++) {
       const b = primaryData[i];
       const x = xScale(i);
       const up = b.c >= b.o;
@@ -236,7 +241,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     if (state.indicators.psar && indi.psar) {
       ctx.fillStyle = 'oklch(0.78 0.20 350)';
-      for (let i = view.start; i < view.end; i++) {
+      for (let i = view.start; i < safeEnd; i++) {
         if (indi.psar[i] == null) continue;
         const x = xScale(i), y = yScale(indi.psar[i]!);
         ctx.beginPath();
@@ -257,7 +262,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         const basePrice = arr[Math.max(0, view.start + off)]?.c;
         if (!basePrice) continue;
         let pmin = Infinity, pmax = -Infinity;
-        for (let i = view.start; i < view.end; i++) {
+        for (let i = view.start; i < safeEnd; i++) {
           const bi = i + off;
           if (bi < 0 || bi >= arr.length) continue;
           const pct = (arr[bi].c / basePrice - 1) * 100;
@@ -265,7 +270,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           if (pct > pmax) pmax = pct;
         }
         const primBase = primaryData[view.start].c;
-        for (let i = view.start; i < view.end; i++) {
+        for (let i = view.start; i < safeEnd; i++) {
           const pct = (primaryData[i].c / primBase - 1) * 100;
           if (pct < pmin) pmin = pct;
           if (pct > pmax) pmax = pct;
@@ -293,7 +298,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.fillStyle = COLORS.muted;
       ctx.textAlign = 'left';
       ctx.fillText('VOL', PAD_L, volY0 + 10);
-      for (let i = view.start; i < view.end; i++) {
+      for (let i = view.start; i < safeEnd; i++) {
         const b = primaryData[i];
         const up = b.c >= b.o;
         ctx.fillStyle = up ? 'oklch(0.86 0.12 150 / 0.70)' : 'oklch(0.82 0.14 22 / 0.70)';
@@ -389,7 +394,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const xAxisY = size.h - X_AXIS_H / 2;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'center';
-    for (let i = view.start; i < view.end; i += tickStep) {
+    for (let i = view.start; i < safeEnd; i += tickStep) {
       ctx.fillText(fmtDate(primaryData[i].t, tf), xScale(i), xAxisY);
     }
   }, [size, primaryData, view, state, indi, tickers, primary, priceW, priceH]);
@@ -607,7 +612,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return () => cvs.removeEventListener('wheel', handler);
   }, []);
 
-  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : (view.end - 1);
+  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : (safeEnd - 1);
   const hoverBar = primaryData && primaryData[hoverIdx];
 
   return (
