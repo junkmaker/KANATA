@@ -8,7 +8,7 @@ function rand(seed: number) {
   };
 }
 
-function genSeries({ seed, bars, start, vol, drift, base }: {
+export function genSeries({ seed, bars, start, vol, drift, base }: {
   seed: number; bars: number; start: number; vol: number; drift: number; base: number;
 }): OHLCBar[] {
   const r = rand(seed);
