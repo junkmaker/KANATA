@@ -116,3 +116,27 @@ export interface IndiData {
   psar?: (number | null)[];
   ichi?: ICHIResult;
 }
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T | null;
+  error: string | null;
+}
+
+export interface WatchlistItem {
+  id: number;
+  symbol: string;
+  market: string;
+  display_name: string | null;
+  position: number;
+}
+
+export interface Watchlist {
+  id: number;
+  name: string;
+  position: number;
+  is_default: number;
+  created_at: string;
+  updated_at: string;
+  items: WatchlistItem[];
+}

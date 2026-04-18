@@ -281,6 +281,65 @@ input { font: inherit; color: inherit; }
 .ind-pill { display: inline-flex; align-items: center; gap: 5px; color: var(--text-soft); font-size: 10.5px; }
 .ind-pill i { width: 8px; height: 2px; display: inline-block; }
 
+/* ── Right panel: watchlist selector ── */
+.watchlist-selector { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.ws-row { display: flex; gap: 4px; align-items: center; }
+.ws-edit-row { padding-top: 2px; }
+.ws-select {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.ws-select:focus { border-color: var(--accent); outline: none; }
+.ws-input {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 6px 8px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+.ws-input:focus { border-color: var(--accent); }
+.ws-btn {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  min-width: 28px;
+}
+.ws-btn:hover:not(:disabled) { background: var(--panel-3); border-color: var(--accent); }
+.ws-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.ws-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.ws-btn-danger { color: var(--bear); border-color: var(--bear); }
+.ws-btn-danger:hover:not(:disabled) { background: var(--bear); color: var(--bg); }
+
+.tick-remove {
+  margin-left: 6px;
+  width: 18px; height: 18px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--bear);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tick-remove:hover { background: var(--bear); color: var(--bg); border-color: var(--bear); }
+.add-row .add-chk { color: var(--bull); border-color: var(--bull); }
+.add-row:hover { background: color-mix(in oklch, var(--bull) 6%, var(--panel)); }
+
 /* ── Right panel: search + list ── */
 .search-row { display: flex; gap: 4px; }
 .search-input {
