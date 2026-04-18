@@ -191,16 +191,18 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
       ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
       ctx.fill();
-      drawLine(ctx, xScale, tenkan, COLORS.magenta, 1.25);
-      drawLine(ctx, xScale, kijun, COLORS.accent, 1.25);
-      drawLine(ctx, xScale, chikou, COLORS.muted, 1, [4, 3]);
+      const toY = (arr: (number | null)[]) => arr.map(v => v == null ? null : yScale(v));
+      drawLine(ctx, xScale, toY(tenkan), COLORS.magenta, 1.25);
+      drawLine(ctx, xScale, toY(kijun), COLORS.accent, 1.25);
+      drawLine(ctx, xScale, toY(chikou), COLORS.muted, 1, [4, 3]);
     }
 
     // Bollinger bands
     if (state.indicators.boll && indi.boll) {
-      drawLine(ctx, xScale, indi.boll.upper, 'oklch(0.75 0.07 220 / 0.85)', 1);
-      drawLine(ctx, xScale, indi.boll.mid, 'oklch(0.70 0.05 220 / 0.7)', 1, [3, 3]);
-      drawLine(ctx, xScale, indi.boll.lower, 'oklch(0.75 0.07 220 / 0.85)', 1);
+      const toY = (arr: (number | null)[]) => arr.map(v => v == null ? null : yScale(v));
+      drawLine(ctx, xScale, toY(indi.boll.upper), 'oklch(0.75 0.07 220 / 0.85)', 1);
+      drawLine(ctx, xScale, toY(indi.boll.mid), 'oklch(0.70 0.05 220 / 0.7)', 1, [3, 3]);
+      drawLine(ctx, xScale, toY(indi.boll.lower), 'oklch(0.75 0.07 220 / 0.85)', 1);
     }
 
     // Candles
@@ -234,10 +236,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
     }
 
-    if (state.indicators.sma5 && indi.sma5) drawLine(ctx, xScale, indi.sma5, COLORS.amber, 1.25);
-    if (state.indicators.sma25 && indi.sma25) drawLine(ctx, xScale, indi.sma25, COLORS.accent, 1.25);
-    if (state.indicators.sma75 && indi.sma75) drawLine(ctx, xScale, indi.sma75, COLORS.magenta, 1.25);
-    if (state.indicators.ema20 && indi.ema20) drawLine(ctx, xScale, indi.ema20, COLORS.lime, 1.25, [4, 2]);
+    const toY = (arr: (number | null)[]) => arr.map(v => v == null ? null : yScale(v));
+    if (state.indicators.sma5 && indi.sma5) drawLine(ctx, xScale, toY(indi.sma5), COLORS.amber, 1.25);
+    if (state.indicators.sma25 && indi.sma25) drawLine(ctx, xScale, toY(indi.sma25), COLORS.accent, 1.25);
+    if (state.indicators.sma75 && indi.sma75) drawLine(ctx, xScale, toY(indi.sma75), COLORS.magenta, 1.25);
+    if (state.indicators.ema20 && indi.ema20) drawLine(ctx, xScale, toY(indi.ema20), COLORS.lime, 1.25, [4, 2]);
 
     if (state.indicators.psar && indi.psar) {
       ctx.fillStyle = 'oklch(0.78 0.20 350)';
