@@ -2,8 +2,13 @@ import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import type { AppState, Ticker, OHLCBar, IndiData, YRange } from '../../types';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice, fmtVol, fmtDate } from '../../lib/formatters';
-import { SMA, EMA, BOLL, STOCH, PSAR, ICHI } from '../../lib/indicators';
+import { SMA, EMA, BOLL, STOCH, PSAR, ICHI, MACD, RSI } from '../../lib/indicators';
 import { FIN_TS } from '../../lib/data';
+import { drawLine } from './subpanes/drawUtils';
+import { drawVolume } from './subpanes/drawVolume';
+import { drawStoch } from './subpanes/drawStoch';
+import { drawMacd } from './subpanes/drawMacd';
+import { drawRsi } from './subpanes/drawRsi';
 
 interface ChartProps {
   state: AppState;
@@ -28,29 +33,6 @@ function useSize(ref: React.RefObject<HTMLElement | null>) {
   return size;
 }
 
-function drawLine(
-  ctx: CanvasRenderingContext2D,
-  xs: (i: number) => number,
-  ys: (number | null)[],
-  color: string,
-  width = 1.25,
-  dash: number[] | null = null,
-) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
-  ctx.beginPath();
-  let started = false;
-  for (let i = 0; i < ys.length; i++) {
-    if (ys[i] == null) { started = false; continue; }
-    const x = xs(i), y = ys[i]!;
-    if (!started) { ctx.moveTo(x, y); started = true; }
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
-
 export function Chart({ state, setState, tickers, data }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,10 +53,20 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   const PAD_L = 12, PAD_R = 72, PAD_T = 12;
   const VOL_H = state.showVolume ? 64 : 0;
   const STOCH_H = state.indicators.stoch ? 72 : 0;
+  const MACD_H = state.indicators.macd ? 72 : 0;
+  const RSI_H = state.indicators.rsi ? 72 : 0;
   const FIN_H = state.showFinancial ? 96 : 0;
   const X_AXIS_H = 22;
-  const priceH = Math.max(120, size.h - VOL_H - STOCH_H - FIN_H - X_AXIS_H - PAD_T);
+  const priceH = Math.max(120, size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T);
   const priceW = size.w - PAD_L - PAD_R;
+
+  const volY0 = PAD_T + priceH + 4;
+  const stochY0 = volY0 + VOL_H + 18;
+  const macdY0 = stochY0 + STOCH_H + 18;
+  const rsiY0 = macdY0 + MACD_H + 18;
+  const finY0 = rsiY0 + RSI_H + 18;
+
+  const params = state.indicatorParams;
 
   const indi = useMemo<IndiData>(() => {
     if (!primaryData) return {};
@@ -87,8 +79,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     if (state.indicators.stoch) o.stoch = STOCH(primaryData, 14, 3, 3);
     if (state.indicators.psar) o.psar = PSAR(primaryData);
     if (state.indicators.ichi) o.ichi = ICHI(primaryData);
+    if (state.indicators.macd) o.macd = MACD(primaryData, params.macd.fast, params.macd.slow, params.macd.signal);
+    if (state.indicators.rsi) o.rsi = RSI(primaryData, params.rsi.period);
     return o;
-  }, [primaryData, state.indicators]);
+  }, [primaryData, state.indicators, params.macd.fast, params.macd.slow, params.macd.signal, params.rsi.period]);
 
   const safeEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
 
@@ -123,10 +117,6 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
   let volMax = 1;
   for (let i = view.start; i < safeEnd; i++) if (primaryData && primaryData[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
-  const volY0 = PAD_T + priceH + 4;
-  const stochY0 = volY0 + VOL_H + 18;
-  const stochYScale = (v: number) => stochY0 + (1 - v / 100) * (STOCH_H - 4);
-  const finY0 = stochY0 + STOCH_H + 18;
 
   // Main canvas draw
   useEffect(() => {
@@ -167,7 +157,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const x = xScale(i);
       ctx.beginPath();
       ctx.moveTo(Math.round(x) + 0.5, PAD_T);
-      ctx.lineTo(Math.round(x) + 0.5, PAD_T + priceH + VOL_H + STOCH_H + (state.showVolume ? 4 : 0) + (state.indicators.stoch ? 18 : 0));
+      ctx.lineTo(Math.round(x) + 0.5, size.h - X_AXIS_H);
       ctx.stroke();
     }
 
@@ -298,46 +288,22 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     // Volume
     if (state.showVolume) {
-      ctx.fillStyle = COLORS.muted;
-      ctx.textAlign = 'left';
-      ctx.fillText('VOL', PAD_L, volY0 + 10);
-      for (let i = view.start; i < safeEnd; i++) {
-        const b = primaryData[i];
-        const up = b.c >= b.o;
-        ctx.fillStyle = up ? 'oklch(0.86 0.12 150 / 0.70)' : 'oklch(0.82 0.14 22 / 0.70)';
-        const x = xScale(i);
-        const bodyW = Math.max(1, bw * 0.72);
-        const hh = (b.v / volMax) * VOL_H;
-        ctx.fillRect(Math.round(x - bodyW / 2), Math.round(volY0 + VOL_H - hh + 4), Math.round(bodyW), Math.round(hh));
-      }
-      ctx.strokeStyle = COLORS.grid;
-      ctx.beginPath();
-      ctx.moveTo(PAD_L, volY0 + 0.5);
-      ctx.lineTo(PAD_L + priceW, volY0 + 0.5);
-      ctx.stroke();
+      drawVolume({ ctx, padL: PAD_L, priceW, viewStart: view.start, viewEnd: safeEnd, bw, xScale, y0: volY0, height: VOL_H }, primaryData, volMax);
     }
 
     // Stochastics
     if (state.indicators.stoch && indi.stoch) {
-      ctx.fillStyle = COLORS.muted;
-      ctx.textAlign = 'left';
-      ctx.fillText('STOCH %K 14 %D 3', PAD_L, stochY0 - 6);
-      [20, 50, 80].forEach(v => {
-        const y = stochYScale(v);
-        ctx.strokeStyle = COLORS.gridSoft;
-        ctx.setLineDash(v === 50 ? [2, 3] : []);
-        ctx.beginPath();
-        ctx.moveTo(PAD_L, y);
-        ctx.lineTo(PAD_L + priceW, y);
-        ctx.stroke();
-        ctx.fillStyle = COLORS.muted;
-        ctx.textAlign = 'left';
-        ctx.fillText(String(v), PAD_L + priceW + 6, y);
-      });
-      ctx.setLineDash([]);
-      const { k, d } = indi.stoch;
-      drawLine(ctx, xScale, k.map(v => v == null ? null : stochYScale(v)), COLORS.accent, 1.25);
-      drawLine(ctx, xScale, d.map(v => v == null ? null : stochYScale(v)), COLORS.amber, 1.25, [3, 2]);
+      drawStoch({ ctx, padL: PAD_L, priceW, viewStart: view.start, viewEnd: safeEnd, bw, xScale, y0: stochY0, height: STOCH_H }, indi.stoch);
+    }
+
+    // MACD
+    if (state.indicators.macd && indi.macd) {
+      drawMacd({ ctx, padL: PAD_L, priceW, viewStart: view.start, viewEnd: safeEnd, bw, xScale, y0: macdY0, height: MACD_H }, indi.macd, params.macd);
+    }
+
+    // RSI
+    if (state.indicators.rsi && indi.rsi) {
+      drawRsi({ ctx, padL: PAD_L, priceW, viewStart: view.start, viewEnd: safeEnd, bw, xScale, y0: rsiY0, height: RSI_H }, indi.rsi, params.rsi);
     }
 
     // Financial pane
@@ -401,7 +367,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     for (let i = view.start; i < safeEnd; i += tickStep) {
       ctx.fillText(fmtDate(primaryData[i].t, tf), xScale(i), xAxisY);
     }
-  }, [size, primaryData, view, state, indi, tickers, primary, priceW, priceH]);
+  }, [size, primaryData, view, state, indi, tickers, primary, priceW, priceH, volY0, stochY0, macdY0, rsiY0, finY0, VOL_H, STOCH_H, MACD_H, RSI_H, FIN_H, volMax, params]);
 
   // Overlay: crosshair, drawings
   const [hover, setHover] = useState<{ sx: number; sy: number } | null>(null);
@@ -493,7 +459,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
       ctx.moveTo(Math.round(hover.sx) + 0.5, PAD_T);
-      ctx.lineTo(Math.round(hover.sx) + 0.5, PAD_T + priceH + VOL_H + STOCH_H + (state.showVolume ? 4 : 0) + (state.indicators.stoch ? 18 : 0));
+      ctx.lineTo(Math.round(hover.sx) + 0.5, size.h - X_AXIS_H);
       ctx.stroke();
       if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
         ctx.beginPath();
@@ -639,7 +605,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         onPointerUp={onPointerUp}
         onPointerLeave={() => setHover(null)}
       />
-      <ChartLegend state={state} hoverBar={hoverBar} tickers={tickers} primary={primary} data={data} hoverIdx={hoverIdx} yRange={yRange} />
+      <ChartLegend state={state} hoverBar={hoverBar} tickers={tickers} primary={primary} data={data} hoverIdx={hoverIdx} yRange={yRange} indi={indi} />
     </div>
   );
 }
@@ -652,9 +618,10 @@ interface ChartLegendProps {
   data: Record<string, OHLCBar[]>;
   hoverIdx: number;
   yRange: YRange;
+  indi: IndiData;
 }
 
-function ChartLegend({ state, hoverBar, tickers, primary, data, hoverIdx }: ChartLegendProps) {
+function ChartLegend({ state, hoverBar, tickers, primary, data, hoverIdx, indi }: ChartLegendProps) {
   const tk = tickers.find(t => t.code === primary);
   if (!tk || !hoverBar) return null;
   const last = hoverBar;
@@ -663,7 +630,7 @@ function ChartLegend({ state, hoverBar, tickers, primary, data, hoverIdx }: Char
   const chgPct = chg / prev.c * 100;
   const up = chg >= 0;
 
-  const indRows: { label: string; v: number | null | undefined; c: string; extra?: string }[] = [];
+  const indRows: { label: string; v: number | null | undefined; c: string; extra?: string; fmt?: (v: number) => string }[] = [];
   const i = hoverIdx;
   if (state.indicators.sma5) indRows.push({ label: 'MA5', v: SMA(data[primary], 5)[i], c: 'var(--amber)' });
   if (state.indicators.sma25) indRows.push({ label: 'MA25', v: SMA(data[primary], 25)[i], c: 'var(--accent)' });
@@ -672,6 +639,16 @@ function ChartLegend({ state, hoverBar, tickers, primary, data, hoverIdx }: Char
   if (state.indicators.boll) {
     const b = BOLL(data[primary], 20, 2);
     indRows.push({ label: 'BB', v: b.mid[i], extra: ` · U ${fmtPrice(b.upper[i], tk.currency)} · L ${fmtPrice(b.lower[i], tk.currency)}`, c: 'oklch(0.75 0.07 220)' });
+  }
+  if (state.indicators.macd && indi.macd) {
+    const m = indi.macd.macd[i];
+    const s = indi.macd.signal[i];
+    const p = state.indicatorParams.macd;
+    indRows.push({ label: `MACD ${p.fast},${p.slow},${p.signal}`, v: m, c: 'var(--accent)', extra: s != null ? ` · S ${s.toFixed(3)}` : '', fmt: v => v.toFixed(3) });
+  }
+  if (state.indicators.rsi && indi.rsi) {
+    const p = state.indicatorParams.rsi;
+    indRows.push({ label: `RSI ${p.period}`, v: indi.rsi[i], c: 'var(--lime)', fmt: v => v.toFixed(1) });
   }
 
   return (
@@ -694,7 +671,7 @@ function ChartLegend({ state, hoverBar, tickers, primary, data, hoverIdx }: Char
           {indRows.map((r, k) => (
             <span key={k} className="ind-pill">
               <i style={{ background: r.c }} />
-              {r.label} {r.v != null ? fmtPrice(r.v, tk.currency) : '—'}{r.extra || ''}
+              {r.label} {r.v != null ? (r.fmt ? r.fmt(r.v) : fmtPrice(r.v, tk.currency)) : '—'}{r.extra || ''}
             </span>
           ))}
         </div>

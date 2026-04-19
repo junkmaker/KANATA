@@ -1,4 +1,4 @@
-import type { OHLCBar, BOLLResult, STOCHResult, ICHIResult } from '../types';
+import type { OHLCBar, BOLLResult, STOCHResult, ICHIResult, MACDResult } from '../types';
 
 export function SMA(data: OHLCBar[], period: number, field: keyof OHLCBar = 'c'): (number | null)[] {
   const out: (number | null)[] = new Array(data.length).fill(null);
@@ -105,6 +105,66 @@ export function PSAR(data: OHLCBar[], step = 0.02, maxStep = 0.2): (number | nul
       }
     }
     out[i] = sar;
+  }
+  return out;
+}
+
+function emaFromArray(values: (number | null)[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(values.length).fill(null);
+  const k = 2 / (period + 1);
+  let prev: number | null = null;
+  let count = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] == null) continue;
+    const v = values[i]!;
+    count++;
+    if (count < period) continue;
+    if (count === period) {
+      let sum = 0, n = 0;
+      for (let j = i; j >= 0 && n < period; j--) {
+        if (values[j] != null) { sum += values[j]!; n++; }
+      }
+      prev = sum / period;
+      out[i] = prev;
+    } else {
+      prev = v * k + prev! * (1 - k);
+      out[i] = prev;
+    }
+  }
+  return out;
+}
+
+export function MACD(data: OHLCBar[], fast = 12, slow = 26, signal = 9): MACDResult {
+  const emaFast = EMA(data, fast);
+  const emaSlow = EMA(data, slow);
+  const macdLine: (number | null)[] = new Array(data.length).fill(null);
+  for (let i = 0; i < data.length; i++) {
+    if (emaFast[i] != null && emaSlow[i] != null) macdLine[i] = emaFast[i]! - emaSlow[i]!;
+  }
+  const signalLine = emaFromArray(macdLine, signal);
+  const histogram: (number | null)[] = new Array(data.length).fill(null);
+  for (let i = 0; i < data.length; i++) {
+    if (macdLine[i] != null && signalLine[i] != null) histogram[i] = macdLine[i]! - signalLine[i]!;
+  }
+  return { macd: macdLine, signal: signalLine, histogram };
+}
+
+export function RSI(data: OHLCBar[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(data.length).fill(null);
+  if (data.length < period + 1) return out;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const change = data[i].c - data[i - 1].c;
+    if (change > 0) avgGain += change; else avgLoss += Math.abs(change);
+  }
+  avgGain /= period;
+  avgLoss /= period;
+  out[period] = 100 - 100 / (1 + avgGain / (avgLoss || 1e-10));
+  for (let i = period + 1; i < data.length; i++) {
+    const change = data[i].c - data[i - 1].c;
+    avgGain = (avgGain * (period - 1) + (change > 0 ? change : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (change < 0 ? Math.abs(change) : 0)) / period;
+    out[i] = 100 - 100 / (1 + avgGain / (avgLoss || 1e-10));
   }
   return out;
 }

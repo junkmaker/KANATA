@@ -32,14 +32,31 @@ const DEFAULT_STATE: AppState = {
     stoch: true,
     psar: false,
     ichi: false,
+    macd: false,
+    rsi: false,
   },
   financial: { roe: true, roic: true, per: true },
+  indicatorParams: {
+    macd: { fast: 12, slow: 26, signal: 9 },
+    rsi: { period: 14, overbought: 70, oversold: 30 },
+  },
 };
 
 function loadState(): AppState {
   try {
     const s = localStorage.getItem('kanata.state');
-    if (s) return { ...DEFAULT_STATE, ...JSON.parse(s) };
+    if (s) {
+      const saved = JSON.parse(s);
+      return {
+        ...DEFAULT_STATE,
+        ...saved,
+        indicators: { ...DEFAULT_STATE.indicators, ...(saved.indicators || {}) },
+        indicatorParams: {
+          macd: { ...DEFAULT_STATE.indicatorParams.macd, ...(saved.indicatorParams?.macd || {}) },
+          rsi: { ...DEFAULT_STATE.indicatorParams.rsi, ...(saved.indicatorParams?.rsi || {}) },
+        },
+      };
+    }
   } catch { /* noop */ }
   return DEFAULT_STATE;
 }

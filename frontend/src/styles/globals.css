@@ -254,6 +254,26 @@ input { font: inherit; color: inherit; }
 }
 .toggle-row.on .toggle-dot { box-shadow: 0 0 6px 0 currentColor; }
 .toggle-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; }
+.param-row {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 2px 6px 4px 20px;
+}
+.param-row label {
+  display: flex; align-items: center; gap: 3px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+}
+.param-row input[type="number"] {
+  width: 38px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 2px 4px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text); text-align: center;
+  -moz-appearance: textfield;
+}
+.param-row input[type="number"]::-webkit-inner-spin-button { display: none; }
+.param-row input[type="number"]:focus { outline: none; border-color: var(--accent); }
 
 /* ── Chart area ── */
 .chart-area { background: var(--bg); min-width: 0; overflow: hidden; position: relative; }
