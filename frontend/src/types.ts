@@ -46,6 +46,31 @@ export interface IndicatorState {
   stoch: boolean;
   psar: boolean;
   ichi: boolean;
+  macd: boolean;
+  rsi: boolean;
+}
+
+export interface MACDResult {
+  macd: (number | null)[];
+  signal: (number | null)[];
+  histogram: (number | null)[];
+}
+
+export interface MACDParams {
+  fast: number;
+  slow: number;
+  signal: number;
+}
+
+export interface RSIParams {
+  period: number;
+  overbought: number;
+  oversold: number;
+}
+
+export interface IndicatorParams {
+  macd: MACDParams;
+  rsi: RSIParams;
 }
 
 export interface FinancialState {
@@ -80,6 +105,7 @@ export interface AppState {
   showFinancial: boolean;
   indicators: IndicatorState;
   financial: FinancialState;
+  indicatorParams: IndicatorParams;
 }
 
 export interface YRange {
@@ -115,6 +141,8 @@ export interface IndiData {
   stoch?: STOCHResult;
   psar?: (number | null)[];
   ichi?: ICHIResult;
+  macd?: MACDResult;
+  rsi?: (number | null)[];
 }
 
 export interface SearchResult {

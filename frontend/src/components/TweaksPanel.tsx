@@ -55,16 +55,16 @@ export function TweaksPanel({ aesthetic, setAesthetic, density, setDensity, onCl
       <div className="tweaks-row">
         <div className="tweak-label">Quick presets</div>
         <div className="tweak-chips">
-          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { sma5: false, sma25: true, sma75: true, ema20: false, boll: true, stoch: true, psar: false, ichi: false } }))}>
+          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { ...s.indicators, sma5: false, sma25: true, sma75: true, ema20: false, boll: true, stoch: true, psar: false, ichi: false } }))}>
             Swing trader
           </button>
-          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { sma5: true, sma25: false, sma75: false, ema20: true, boll: false, stoch: true, psar: true, ichi: false } }))}>
+          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { ...s.indicators, sma5: true, sma25: false, sma75: false, ema20: true, boll: false, stoch: true, psar: true, ichi: false } }))}>
             Day trader
           </button>
-          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { sma5: false, sma25: false, sma75: false, ema20: false, boll: false, stoch: false, psar: false, ichi: true } }))}>
+          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { ...s.indicators, sma5: false, sma25: false, sma75: false, ema20: false, boll: false, stoch: false, psar: false, ichi: true } }))}>
             Ichimoku
           </button>
-          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { sma5: false, sma25: false, sma75: false, ema20: false, boll: false, stoch: false, psar: false, ichi: false } }))}>
+          <button className="chip" onClick={() => setState(s => ({ ...s, indicators: { ...s.indicators, sma5: false, sma25: false, sma75: false, ema20: false, boll: false, stoch: false, psar: false, ichi: false } }))}>
             Clean
           </button>
         </div>

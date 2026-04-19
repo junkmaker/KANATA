@@ -98,6 +98,22 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         <Toggle label="Ichimoku (一目均衡表)" value={state.indicators.ichi} onChange={v => setInd('ichi', v)} color="var(--magenta)" />
         <div className="subheader">Oscillator</div>
         <Toggle label="Stochastics 14,3,3" value={state.indicators.stoch} onChange={v => setInd('stoch', v)} color="var(--accent)" />
+        <Toggle label="MACD" value={state.indicators.macd} onChange={v => setInd('macd', v)} color="var(--accent)" />
+        {state.indicators.macd && (
+          <div className="param-row">
+            <label>Fast<input type="number" min={1} max={200} value={state.indicatorParams.macd.fast} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, macd: { ...s.indicatorParams.macd, fast: Number(e.target.value) } } }))} /></label>
+            <label>Slow<input type="number" min={1} max={200} value={state.indicatorParams.macd.slow} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, macd: { ...s.indicatorParams.macd, slow: Number(e.target.value) } } }))} /></label>
+            <label>Sig<input type="number" min={1} max={50} value={state.indicatorParams.macd.signal} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, macd: { ...s.indicatorParams.macd, signal: Number(e.target.value) } } }))} /></label>
+          </div>
+        )}
+        <Toggle label="RSI" value={state.indicators.rsi} onChange={v => setInd('rsi', v)} color="var(--lime)" />
+        {state.indicators.rsi && (
+          <div className="param-row">
+            <label>Period<input type="number" min={2} max={200} value={state.indicatorParams.rsi.period} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, rsi: { ...s.indicatorParams.rsi, period: Number(e.target.value) } } }))} /></label>
+            <label>OB<input type="number" min={50} max={99} value={state.indicatorParams.rsi.overbought} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, rsi: { ...s.indicatorParams.rsi, overbought: Number(e.target.value) } } }))} /></label>
+            <label>OS<input type="number" min={1} max={49} value={state.indicatorParams.rsi.oversold} onChange={e => setState(s => ({ ...s, indicatorParams: { ...s.indicatorParams, rsi: { ...s.indicatorParams.rsi, oversold: Number(e.target.value) } } }))} /></label>
+          </div>
+        )}
       </Section>
 
       <Section title="FUNDAMENTALS">
