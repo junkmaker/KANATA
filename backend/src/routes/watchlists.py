@@ -134,13 +134,23 @@ def reorder_watchlists(payload: ReorderRequest, db: Session = Depends(get_db)):
     return ok([_serialize(w) for w in _load_all(db)])
 
 
+def _normalize_symbol(symbol: str, market: str) -> tuple[str, str]:
+    """Normalize symbol to uppercase and infer market for JP 4-digit codes."""
+    sym = symbol.strip().upper()
+    mkt = market.strip()
+    if sym.isdigit() and len(sym) == 4:
+        mkt = "JP"
+    return sym, mkt
+
+
 @router.post("/watchlists/{list_id}/items", status_code=201)
 def add_item(list_id: int, payload: WatchlistItemCreate, db: Session = Depends(get_db)):
     wl = _get_or_404(db, list_id)
+    sym, mkt = _normalize_symbol(payload.symbol, payload.market)
     item = WatchlistItem(
         watchlist_id=wl.id,
-        symbol=payload.symbol.strip(),
-        market=payload.market.strip(),
+        symbol=sym,
+        market=mkt,
         display_name=(payload.display_name or "").strip() or None,
         position=_next_item_position(db, wl.id),
     )

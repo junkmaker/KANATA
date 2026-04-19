@@ -160,6 +160,8 @@ export function App() {
     status: wl.status,
     watchlists: wl.watchlists,
     activeId: activeList?.id ?? null,
+    error: wl.error,
+    clearError: wl.clearError,
     onSelectActive: (id: number) => setActiveListId(id),
     create: async (name: string) => {
       const created = await wl.create(name);
@@ -215,7 +217,6 @@ export function App() {
           setState={setState}
           tickers={displayTickers}
           data={data}
-          searchTickers={TICKERS}
           watchlist={watchlistController}
         />
       </div>

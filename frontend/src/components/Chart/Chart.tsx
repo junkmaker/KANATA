@@ -343,6 +343,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     // Financial pane
     if (state.showFinancial) {
       const finData = FIN_TS[primary];
+      if (!finData) return;
       const finW = priceW;
       const finY = finY0;
       ctx.strokeStyle = COLORS.grid;

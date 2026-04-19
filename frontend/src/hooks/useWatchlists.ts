@@ -17,6 +17,7 @@ interface UseWatchlistsResult {
   watchlists: Watchlist[];
   status: WatchlistsStatus;
   error: string | null;
+  clearError: () => void;
   reload: () => Promise<void>;
   create: (name: string) => Promise<Watchlist | null>;
   rename: (id: number, name: string) => Promise<Watchlist | null>;
@@ -114,8 +115,9 @@ export function useWatchlists(): UseWatchlistsResult {
         replaceList(wl);
         return wl;
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'add item failed');
-        return null;
+        const msg = e instanceof Error ? e.message : 'add item failed';
+        setError(msg);
+        throw e;
       }
     },
     [],
@@ -143,10 +145,13 @@ export function useWatchlists(): UseWatchlistsResult {
     }
   }, []);
 
+  const clearError = useCallback(() => setError(null), []);
+
   return {
     watchlists,
     status,
     error,
+    clearError,
     reload,
     create,
     rename,

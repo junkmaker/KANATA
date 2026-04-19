@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query
 import yfinance as yf
 
+from ..schemas.common import ok
+
 router = APIRouter()
 
 # Preset list for instant results (JP + US majors)
@@ -22,11 +24,28 @@ PRESETS = [
     {"code": "JPM", "name": "JPMorgan Chase", "market": "US"},
 ]
 
+_JP_EXCHANGES = {"TSE", "JPX", "OSA", "TYO"}
+
+
+def _normalize_yf_result(h: dict) -> dict:
+    """Convert a yfinance quote hit to {code, name, market}."""
+    sym: str = h.get("symbol", "")
+    name: str = h.get("shortname") or h.get("longname") or sym
+    ex: str = h.get("exchange", "")
+    if sym.endswith(".T") or ex in _JP_EXCHANGES:
+        market = "JP"
+        code = sym[:-2] if sym.endswith(".T") else sym
+    else:
+        market = "US"
+        code = sym
+    return {"code": code.upper(), "name": name, "market": market}
+
+
 @router.get("/search")
 def search(q: str = Query(default="", description="Search query")):
     ql = q.lower().strip()
     if not ql:
-        return PRESETS
+        return ok(PRESETS)
 
     results = [
         p for p in PRESETS
@@ -38,12 +57,8 @@ def search(q: str = Query(default="", description="Search query")):
         try:
             hits = yf.Search(ql, max_results=8).quotes
             for h in hits:
-                sym = h.get("symbol", "")
-                name = h.get("shortname") or h.get("longname") or sym
-                ex = h.get("exchange", "")
-                market = "JP" if ex in ("TSE", "JPX", "OSA") else "US"
-                results.append({"code": sym, "name": name, "market": market})
+                results.append(_normalize_yf_result(h))
         except Exception:
             pass
 
-    return results
+    return ok(results[:10])

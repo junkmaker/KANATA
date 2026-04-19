@@ -132,3 +132,64 @@ def test_404_on_missing_list(client):
     assert res.status_code == 200
     res = client.delete("/api/watchlists/9999")
     assert res.status_code == 404
+
+
+@pytest.mark.integration
+def test_add_item_normalizes_jp_numeric_market(client):
+    list_id = client.get("/api/watchlists").json()["data"][0]["id"]
+    res = client.post(
+        f"/api/watchlists/{list_id}/items",
+        json={"symbol": "7203", "market": "US"},
+    )
+    assert res.status_code == 201
+    item = res.json()["data"]["items"][0]
+    assert item["symbol"] == "7203"
+    assert item["market"] == "JP"
+
+
+@pytest.mark.integration
+def test_add_item_normalizes_symbol_case(client):
+    list_id = client.get("/api/watchlists").json()["data"][0]["id"]
+    res = client.post(
+        f"/api/watchlists/{list_id}/items",
+        json={"symbol": "aapl", "market": "US"},
+    )
+    assert res.status_code == 201
+    item = res.json()["data"]["items"][0]
+    assert item["symbol"] == "AAPL"
+
+    # Duplicate via uppercase should be 409
+    res = client.post(
+        f"/api/watchlists/{list_id}/items",
+        json={"symbol": "AAPL", "market": "US"},
+    )
+    assert res.status_code == 409
+
+
+@pytest.mark.integration
+def test_add_item_trims_whitespace(client):
+    list_id = client.get("/api/watchlists").json()["data"][0]["id"]
+    res = client.post(
+        f"/api/watchlists/{list_id}/items",
+        json={"symbol": " MSFT ", "market": "US"},
+    )
+    assert res.status_code == 201
+    item = res.json()["data"]["items"][0]
+    assert item["symbol"] == "MSFT"
+
+
+@pytest.mark.integration
+def test_add_item_empty_symbol_rejected(client):
+    list_id = client.get("/api/watchlists").json()["data"][0]["id"]
+    res = client.post(
+        f"/api/watchlists/{list_id}/items",
+        json={"symbol": "", "market": "US"},
+    )
+    assert res.status_code == 422
+
+
+@pytest.mark.integration
+def test_remove_item_unknown_symbol_returns_404(client):
+    list_id = client.get("/api/watchlists").json()["data"][0]["id"]
+    res = client.delete(f"/api/watchlists/{list_id}/items/GHOST")
+    assert res.status_code == 404
