@@ -54,15 +54,26 @@ yfinance → backend (FastAPI + TTLCache) → /api/quotes/{symbol}?timeframe=X
 
 ### バックエンド (`backend/src/`)
 
-- `main.py` — FastAPI エントリ。CORS を `localhost:3000` 限定で開放
+- `main.py` — FastAPI エントリ。`lifespan` で `init_db()` 実行、CORS を `localhost:3000` 限定で開放（`GET/POST/PUT/PATCH/DELETE`）
 - `routes/quotes.py` — `GET /api/quotes/{symbol}?timeframe=...` TTL キャッシュ経由
 - `routes/search.py` — `GET /api/search?q=...` プリセット 15 銘柄 → 不一致時に yfinance.Search へフォールバック
+- `routes/watchlists.py` — `/api/watchlists*` 8 エンドポイント（CRUD + 並び替え + アイテム追加削除）。全レスポンスは `{success, data, error}` エンベロープ。ユーザは `USER_ID = "local"` 固定。最後の 1 件は削除不可（400）、`is_default` トグルで他のデフォルトを解除
 - `services/yfinance_provider.py` — **タイムフレーム変換の要所**。`INTERVAL_MAP` で frontend の `5m/15m/60m/1D/1W/1M` を yfinance の `interval/period/cache TTL` に対応付ける。数字のみの JP 銘柄には `.T` サフィックスを自動付与（`to_yf_symbol`）
 - `services/cache.py` — プロセス内メモリの TTLCache（Redis 等は未使用）
+- `db/database.py` — SQLAlchemy 2.x の `Base` / `engine` / `SessionLocal` / `get_db` 依存性。`DATABASE_URL` 環境変数（デフォルト `sqlite:///./data/kanata.db`）
+- `db/models.py` — `Watchlist` / `WatchlistItem` ORM。`(user_id, name)` と `(watchlist_id, symbol)` にユニーク制約、`WatchlistItem.watchlist_id` は CASCADE 削除
+- `db/init_db.py` — `Base.metadata.create_all` + デフォルトウォッチリスト seed（Alembic は現時点で未導入）
+- `schemas/common.py` — `ApiResponse` エンベロープと `ok` / `fail` ヘルパ
+- `schemas/watchlist.py` — Pydantic v2 スキーマ（`ConfigDict(from_attributes=True)`）
 
 ### フロントエンド (`frontend/src/`)
 
-- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.density` で統一（旧プロトタイプの `stockchart.*` からリネーム済み）
+- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` / `kanata.migrated.v1`（旧 localStorage watchlist の移行フラグ）で統一（旧プロトタイプの `stockchart.*` からリネーム済み）
+- `hooks/useWatchlists.ts` — バックエンド `/api/watchlists*` を叩くフック。`{watchlists, status, error, reload, create, rename, setDefault, remove, reorderLists, addItem, removeItem, reorderItems}`。`status: 'loading' | 'ready' | 'offline'`
+- `lib/watchlistApi.ts` — 8 本の fetch ラッパ。`{success, data, error}` エンベロープを剥がす
+- `lib/watchlistTickers.ts` — `Watchlist.items` を表示用 `Ticker` に変換し、未知銘柄は `genSeries` で合成 OHLC を生成
+- `lib/migrateLocalState.ts` — 既存 `kanata.state.selected` を「Migrated from local」リストに一度だけ移行（フラグ: `kanata.migrated.v1`）
+- `components/RightPanel/WatchlistSelector.tsx` — リスト切替 / 追加 / 名前変更 / 削除の UI
 - `components/Chart/Chart.tsx` — **717 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール、クロスヘア、パン・ズームを単一ファイルで扱う。800 行上限に近いので分割候補
 - `lib/indicators.ts` — SMA/EMA/BOLL/STOCH/PSAR/Ichimoku をクライアント側で計算
 - `lib/data.ts` — 合成 OHLC 生成 + `retime()` でタイムフレーム変換
@@ -81,6 +92,8 @@ yfinance → backend (FastAPI + TTLCache) → /api/quotes/{symbol}?timeframe=X
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - **ホットリロードは Docker volume + `CHOKIDAR_USEPOLLING=true` + Vite `usePolling` で成立**。WSL2 のファイル監視は inotify が届かないのでポーリング必須
 - **WSL2 ではプロジェクトを `/home/` 配下に置く**。`/mnt/c/` だと I/O が著しく劣化する
+- **SQLite は Docker 名前付きボリューム `kanata-db` に永続化**。コンテナ内パスは `/app/data/kanata.db`（`DATABASE_URL=sqlite:////app/data/kanata.db`）。ホストの `backend/tests/` は compose にマウントされていないので、コンテナ内で pytest を動かす場合は `-v "$(pwd)/backend/tests:/app/tests"` を明示的に付ける
+- **ウォッチリスト API のテスト**：`backend/tests/` に pytest 実装済み（`test_models.py` 5 件 + `test_watchlists_api.py` 10 件）。`conftest.py` は tempfile SQLite + `app.dependency_overrides[get_db]` でテスト分離
 
 ## ブランディング
 

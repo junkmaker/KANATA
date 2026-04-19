@@ -117,6 +117,12 @@ export interface IndiData {
   ichi?: ICHIResult;
 }
 
+export interface SearchResult {
+  code: string;
+  name: string;
+  market: 'JP' | 'US';
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data: T | null;

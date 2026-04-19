@@ -3,6 +3,7 @@ import type { AppState, OHLCBar, Ticker, Watchlist } from '../../types';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
 import { WatchlistSelector } from './WatchlistSelector';
+import { AddSymbolForm } from './AddSymbolForm';
 
 interface WatchlistController {
   status: 'loading' | 'ready' | 'offline';
@@ -14,6 +15,8 @@ interface WatchlistController {
   remove: (id: number) => Promise<void>;
   addItem: (symbol: string, market: string, displayName?: string) => Promise<void>;
   removeItem: (symbol: string) => Promise<void>;
+  error: string | null;
+  clearError: () => void;
 }
 
 interface RightPanelProps {
@@ -21,7 +24,6 @@ interface RightPanelProps {
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   tickers: Ticker[];
   data: Record<string, OHLCBar[]>;
-  searchTickers: Ticker[];
   watchlist: WatchlistController;
 }
 
@@ -34,7 +36,7 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
   );
 }
 
-export function RightPanel({ state, setState, tickers, data, searchTickers, watchlist }: RightPanelProps) {
+export function RightPanel({ state, setState, tickers, data, watchlist }: RightPanelProps) {
   const [q, setQ] = useState('');
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [editing, setEditing] = useState(false);
@@ -49,17 +51,7 @@ export function RightPanel({ state, setState, tickers, data, searchTickers, watc
     });
   }, [tickers, q, marketFilter]);
 
-  // Search results from the broader catalog (used when in editing mode to add new symbols)
   const memberSymbols = useMemo(() => new Set(tickers.map(t => t.code)), [tickers]);
-  const addCandidates = useMemo(() => {
-    const ql = q.toLowerCase().trim();
-    if (!editing || !ql) return [];
-    return searchTickers
-      .filter(t => !memberSymbols.has(t.code))
-      .filter(t => marketFilter === 'ALL' || t.market === marketFilter)
-      .filter(t => t.code.toLowerCase().includes(ql) || t.name.toLowerCase().includes(ql))
-      .slice(0, 10);
-  }, [editing, q, searchTickers, memberSymbols, marketFilter]);
 
   // Auto-exit editing mode if backend goes offline
   useEffect(() => {
@@ -82,10 +74,6 @@ export function RightPanel({ state, setState, tickers, data, searchTickers, watc
       const rest = s.selected.filter(c => c !== code);
       return { ...s, selected: [code, ...rest] };
     });
-  };
-
-  const handleAddSymbol = async (t: Ticker) => {
-    await watchlist.addItem(t.code, t.market, t.name);
   };
 
   const handleRemoveSymbol = async (code: string) => {
@@ -120,11 +108,22 @@ export function RightPanel({ state, setState, tickers, data, searchTickers, watc
         <div className="search-row">
           <input
             className="search-input"
-            placeholder={editing ? '銘柄を追加 (検索)…' : 'Search code or name…'}
+            placeholder="Search code or name…"
             value={q}
             onChange={e => setQ(e.target.value)}
           />
         </div>
+        {editing && (
+          <AddSymbolForm
+            activeListId={watchlist.activeId}
+            existingSymbols={memberSymbols}
+            onAdd={watchlist.addItem}
+            disabled={watchlist.status !== 'ready'}
+          />
+        )}
+        {editing && watchlist.error && (
+          <div className="watchlist-error">{watchlist.error}</div>
+        )}
         <div className="market-tabs">
           {['ALL', 'JP', 'US'].map(m => (
             <button key={m} className={`mkt-tab${marketFilter === m ? ' active' : ''}`} onClick={() => setMarketFilter(m)}>
@@ -197,29 +196,6 @@ export function RightPanel({ state, setState, tickers, data, searchTickers, watc
         })}
       </div>
 
-      {editing && addCandidates.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <span>ADD TO LIST</span>
-            <span className="hint">{addCandidates.length}</span>
-          </div>
-          <div className="ticker-list">
-            {addCandidates.map(t => (
-              <div key={t.code} className="ticker-row add-row" onClick={() => handleAddSymbol(t)}>
-                <div className="tick-left">
-                  <div className="tick-chk add-chk">+</div>
-                  <div className="tick-meta">
-                    <div className="tick-code">
-                      {t.code}<span className="tick-mkt">{t.market}</span>
-                    </div>
-                    <div className="tick-name">{t.name}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {primaryTicker && last && prev && (
         <div className="section fundamentals">

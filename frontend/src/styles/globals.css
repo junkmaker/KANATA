@@ -340,6 +340,39 @@ input { font: inherit; color: inherit; }
 .add-row .add-chk { color: var(--bull); border-color: var(--bull); }
 .add-row:hover { background: color-mix(in oklch, var(--bull) 6%, var(--panel)); }
 
+/* ── Add symbol form ── */
+.add-symbol-form { padding: 6px 12px 8px; border-bottom: 1px solid var(--border-soft); position: relative; }
+.add-symbol-row { display: flex; align-items: center; gap: 6px; }
+.add-symbol-input { flex: 1; }
+.add-symbol-spinner { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.add-symbol-error { font-size: 10px; color: var(--bear); margin-top: 4px; padding: 0 2px; }
+.watchlist-error { font-size: 10px; color: var(--bear); padding: 4px 12px 0; }
+
+.suggest-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s;
+}
+.suggest-item:hover, .suggest-item.active { background: var(--panel-3); }
+.suggest-code { font-weight: 600; color: var(--text); min-width: 48px; }
+.suggest-mkt { font-size: 9px; color: var(--accent); background: color-mix(in oklch, var(--accent) 15%, transparent); border-radius: 2px; padding: 1px 3px; flex-shrink: 0; }
+.suggest-name { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── Right panel: search + list ── */
 .search-row { display: flex; gap: 4px; }
 .search-input {
