@@ -1,6 +1,5 @@
 import type { ApiResponse, Watchlist } from '../types';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { getBackendUrl } from './backendUrl';
 
 async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -27,12 +26,14 @@ function jsonInit(method: string, body?: unknown): RequestInit {
 }
 
 export async function fetchWatchlists(): Promise<Watchlist[]> {
-  const res = await fetch(`${BASE_URL}/api/watchlists`);
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists`);
   return unwrap<Watchlist[]>(res);
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
-  const res = await fetch(`${BASE_URL}/api/watchlists`, jsonInit('POST', { name }));
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists`, jsonInit('POST', { name }));
   return unwrap<Watchlist>(res);
 }
 
@@ -40,17 +41,20 @@ export async function updateWatchlist(
   id: number,
   payload: { name?: string; is_default?: boolean },
 ): Promise<Watchlist> {
-  const res = await fetch(`${BASE_URL}/api/watchlists/${id}`, jsonInit('PATCH', payload));
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists/${id}`, jsonInit('PATCH', payload));
   return unwrap<Watchlist>(res);
 }
 
 export async function deleteWatchlist(id: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/watchlists/${id}`, jsonInit('DELETE'));
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists/${id}`, jsonInit('DELETE'));
   await unwrap<{ id: number }>(res);
 }
 
 export async function reorderWatchlists(ids: number[]): Promise<Watchlist[]> {
-  const res = await fetch(`${BASE_URL}/api/watchlists/reorder`, jsonInit('PUT', { ids }));
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists/reorder`, jsonInit('PUT', { ids }));
   return unwrap<Watchlist[]>(res);
 }
 
@@ -58,21 +62,24 @@ export async function addWatchlistItem(
   listId: number,
   payload: { symbol: string; market: string; display_name?: string },
 ): Promise<Watchlist> {
-  const res = await fetch(`${BASE_URL}/api/watchlists/${listId}/items`, jsonInit('POST', payload));
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/watchlists/${listId}/items`, jsonInit('POST', payload));
   return unwrap<Watchlist>(res);
 }
 
 export async function removeWatchlistItem(listId: number, symbol: string): Promise<Watchlist> {
+  const base = await getBackendUrl();
   const res = await fetch(
-    `${BASE_URL}/api/watchlists/${listId}/items/${encodeURIComponent(symbol)}`,
+    `${base}/api/watchlists/${listId}/items/${encodeURIComponent(symbol)}`,
     jsonInit('DELETE'),
   );
   return unwrap<Watchlist>(res);
 }
 
 export async function reorderWatchlistItems(listId: number, symbols: string[]): Promise<Watchlist> {
+  const base = await getBackendUrl();
   const res = await fetch(
-    `${BASE_URL}/api/watchlists/${listId}/items/reorder`,
+    `${base}/api/watchlists/${listId}/items/reorder`,
     jsonInit('PUT', { symbols }),
   );
   return unwrap<Watchlist>(res);

@@ -1,16 +1,17 @@
 import type { OHLCBar } from '../types';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { getBackendUrl } from './backendUrl';
 
 export async function fetchQuotes(symbol: string, timeframe: string): Promise<OHLCBar[]> {
-  const res = await fetch(`${BASE_URL}/api/quotes/${symbol}?timeframe=${timeframe}`);
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/quotes/${symbol}?timeframe=${timeframe}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE_URL}/api/health`, { signal: AbortSignal.timeout(3000) });
+    const base = await getBackendUrl();
+    const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(3000) });
     return res.ok;
   } catch {
     return false;

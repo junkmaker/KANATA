@@ -1,0 +1,23 @@
+{
+  "name": "@kanata/main",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Electron main process for KANATA Terminal",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-vite build && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@kanata/shared-types": "*",
+    "better-sqlite3": "^12.9.0",
+    "yahoo-finance2": "^3.14.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.9.0"
+  }
+}
