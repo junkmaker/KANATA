@@ -17,6 +17,10 @@ async function unwrap<T>(res: Response): Promise<T> {
   return body.data;
 }
 
+function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
+}
+
 function jsonInit(method: string, body?: unknown): RequestInit {
   return {
     method,
@@ -27,13 +31,13 @@ function jsonInit(method: string, body?: unknown): RequestInit {
 
 export async function fetchWatchlists(): Promise<Watchlist[]> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists`);
+  const res = await apiFetch(`${base}/api/watchlists`);
   return unwrap<Watchlist[]>(res);
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists`, jsonInit('POST', { name }));
+  const res = await apiFetch(`${base}/api/watchlists`, jsonInit('POST', { name }));
   return unwrap<Watchlist>(res);
 }
 
@@ -42,19 +46,19 @@ export async function updateWatchlist(
   payload: { name?: string; is_default?: boolean },
 ): Promise<Watchlist> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists/${id}`, jsonInit('PATCH', payload));
+  const res = await apiFetch(`${base}/api/watchlists/${id}`, jsonInit('PATCH', payload));
   return unwrap<Watchlist>(res);
 }
 
 export async function deleteWatchlist(id: number): Promise<void> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists/${id}`, jsonInit('DELETE'));
+  const res = await apiFetch(`${base}/api/watchlists/${id}`, jsonInit('DELETE'));
   await unwrap<{ id: number }>(res);
 }
 
 export async function reorderWatchlists(ids: number[]): Promise<Watchlist[]> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists/reorder`, jsonInit('PUT', { ids }));
+  const res = await apiFetch(`${base}/api/watchlists/reorder`, jsonInit('PUT', { ids }));
   return unwrap<Watchlist[]>(res);
 }
 
@@ -63,13 +67,13 @@ export async function addWatchlistItem(
   payload: { symbol: string; market: string; display_name?: string },
 ): Promise<Watchlist> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/watchlists/${listId}/items`, jsonInit('POST', payload));
+  const res = await apiFetch(`${base}/api/watchlists/${listId}/items`, jsonInit('POST', payload));
   return unwrap<Watchlist>(res);
 }
 
 export async function removeWatchlistItem(listId: number, symbol: string): Promise<Watchlist> {
   const base = await getBackendUrl();
-  const res = await fetch(
+  const res = await apiFetch(
     `${base}/api/watchlists/${listId}/items/${encodeURIComponent(symbol)}`,
     jsonInit('DELETE'),
   );
@@ -78,7 +82,7 @@ export async function removeWatchlistItem(listId: number, symbol: string): Promi
 
 export async function reorderWatchlistItems(listId: number, symbols: string[]): Promise<Watchlist> {
   const base = await getBackendUrl();
-  const res = await fetch(
+  const res = await apiFetch(
     `${base}/api/watchlists/${listId}/items/reorder`,
     jsonInit('PUT', { symbols }),
   );

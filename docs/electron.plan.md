@@ -32,23 +32,21 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 1 — 完了済み状態の確認（トリアージのみ）
+## Phase 1 — 完了済み ✓
 
 **ゴール**: Phase 2 に着手する前に Phase 1 資産が壊れていないことを確認する。
 
 - [x] `npm run dev` で Electron ウィンドウが起動し、Vite Dev サーバー (`http://localhost:5173`) に接続する
 - [x] 起動ログに Python サイドカーのポート取得が表示される
 - [x] `[main] Python backend ready at http://127.0.0.1:<PORT>` が表示される
-- [ ] DevTools の Console で `await window.kanata.getBackendUrl()` が `http://127.0.0.1:<PORT>` を返す（手動確認要）
+- [x] DevTools の Console で `await window.kanata.getBackendUrl()` が `http://127.0.0.1:<PORT>` を返す（CJS プリロード修正後に確認済み）
 - [x] `GET /api/health` が 200 を返す（curl で直接確認済み）
 - [x] 終了時にサイドカーが SIGTERM で停止する（`before-quit` フック動作確認済み）
 
-**判定基準**: 上記すべて PASS。失敗時は Phase 2 に進む前に原因をログ付きで記録する。
-
-**解決した問題（2026-04-24）**:
-- `ELECTRON_RUN_AS_NODE=1` が VSCode の Electron シェルから継承され `app`/`BrowserWindow` が取得不能 → `scripts/dev.cjs` で削除してから起動
-- プリロードパスが `index.js` のまま ESM ビルドの `index.mjs` と不一致 → `apps/main/src/index.ts` を修正
-- CORS が `localhost:3000` のみ → `localhost:5173`（Vite dev）と `file://`（prod）を追加
+**解決した問題:**
+- `ELECTRON_RUN_AS_NODE=1` が VSCode の Electron シェルから継承され `app`/`BrowserWindow` が取得不能 → `scripts/dev.cjs` で削除してから起動（2026-04-24）
+- プリロードが ESM (`index.mjs`) でビルドされ Electron sandbox で `SyntaxError` → `electron.vite.config.ts` に `output: { format: 'cjs', entryFileNames: '[name].js' }` を追加し `apps/main/src/index.ts` のパスを `index.js` に修正（2026-04-24, PR #1）
+- CORS が `localhost:3000` のみ → `localhost:5173`（Vite dev）と `allow_origin_regex: r"file://.*"`（prod）を追加（2026-04-24）
 
 ---
 
@@ -71,21 +69,22 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ### 2.2 CORS の動的ポート対応 (`backend/src/main.py`)
 
-現状: `allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"]` で固定。
+現状（2026-04-25）: `localhost:5173` / `127.0.0.1:5173` を追加済み、`allow_origin_regex=r"file://.*"` を設定済み。`localhost:3000` は残存。`KANATA_ALLOWED_ORIGINS` 環境変数化は未実施。
 
+- [x] `allow_origin_regex` で `file://` を許可（prod の file:// オリジン対応）
+- [x] `localhost:5173` / `127.0.0.1:5173` を追加（Vite dev server 対応）
 - [ ] 環境変数 `KANATA_ALLOWED_ORIGINS` からオリジンを取得する形に変更
-- [ ] `allow_origin_regex` で `^file://` を許可（prod の file:// オリジン対応）
 - [ ] サイドカー起動時の `env` に `KANATA_ALLOWED_ORIGINS` を渡す（`pythonSidecar.ts`）
 - [ ] 旧 `localhost:3000` 参照をコード・ドキュメントから削除
 
 ### 2.3 SQLite を Electron userData に配置
 
-現状: `DATABASE_URL=sqlite:///${dbPath}` をサイドカーに渡しているが、Windows では `sqlite:///C:/...` 形式が必要。
+現状（2026-04-25）: `dbPath = join(app.getPath('userData'), 'kanata.db').replace(/\\/g, '/')` → `sqlite:///${dbPath}` をサイドカー env に渡す実装済み。DB は `%APPDATA%/kanata/kanata.db` に生成される。
 
-- [ ] `dbPath` を `path.resolve` → スラッシュ統一 → `sqlite:///` プレフィックス付与の処理を `pythonSidecar.ts` に実装
-- [ ] DB ディレクトリを `userData/kanata/kanata.db` に統一
-- [ ] サイドカー起動前に `mkdirSync(dbDir, { recursive: true })` を Node 側で実行
-- [ ] `backend/src/db/database.py` のデフォルトパスは Python 単独起動時のみ使用
+- [x] `dbPath` を `app.getPath('userData')` + スラッシュ統一 → `sqlite:///` プレフィックス付与（`pythonSidecar.ts` に実装済み）
+- [x] `backend/src/db/database.py` のデフォルトパスは Python 単独起動時のみ使用（`DATABASE_URL` 環境変数を優先）
+- [ ] DB ディレクトリを `userData/kanata/kanata.db` に統一（現在は `userData/kanata.db` で直置き）
+- [ ] サイドカー起動前に `mkdirSync(dbDir, { recursive: true })` を Node 側で実行（`userData` 自体は常に存在するが、サブディレクトリ化する場合に必要）
 - [ ] 起動時に `kanata.db` → `userData/backups/kanata.db.<date>` へコピー（直近 7 世代保持）
 
 ### 2.4 バックエンド URL 解決の改善 (`apps/renderer/src/lib/backendUrl.ts`)
@@ -98,18 +97,19 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 追加するチャンネル:
 
+- [x] `PreloadApi` 型を `packages/shared-types/src/index.ts` に集約し main/renderer で型共有（`getBackendUrl / platform / appVersion` の型定義済み）
 - [ ] `kanata:backend-status` → `{ status: 'starting' | 'ready' | 'crashed' | 'offline', url: string | null, error?: string }`
 - [ ] `kanata:open-logs` → `shell.openPath(userData/logs/)` でエクスプローラを開く
-- [ ] `kanata:app-version` → `app.getVersion()` を返す（prod では npm_package_version が取れないため IPC 経由に切替）
-- [ ] `PreloadApi` 型を `packages/shared-types/src/index.ts` に集約し main/renderer で型共有
+- [ ] `kanata:app-version` → `app.getVersion()` を返す（prod では `npm_package_version` が取れないため IPC 経由に切替）
 - [ ] `webContents.send` でサイドカー状態変化を push → レンダラーの `useEffect` で購読
 
 ### 2.6 フロントエンド API クライアントの完全移行
 
-- [ ] `useChartData` / `useWatchlists` / `useDebouncedSearch` がハードコード URL を使っていないか全文 grep で確認
+- [x] 旧 `frontend/` ディレクトリは削除済み。`apps/renderer/` に完全移行完了
+- [x] `useWatchlists` に `status: 'loading' | 'ready' | 'offline'` フォールバック実装済み
+- [ ] `useChartData` / `useDebouncedSearch` がハードコード URL を使っていないか全文 grep で確認
 - [ ] タイムアウト統一: `AbortSignal.timeout(10_000)` を `unwrap()` ラッパに組み込む
-- [ ] サイドカーオフライン時のフォールバック UX（`status: 'offline'`）を全 API 共通化
-- [ ] 旧 `frontend/` ディレクトリが残っていれば `apps/renderer/` への移行完了を確認して削除
+- [ ] サイドカーオフライン時のフォールバック UX を全 API 共通化（`useChartData` は未対応）
 
 ### 2.7 better-sqlite3 実装の去就判断 (`apps/main/src/db/database.ts`)
 
@@ -135,6 +135,8 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 **ゴール**: `npm run dist` で NSIS インストーラが生成され、Python / Docker / WSL2 なしの Windows 端末で動作する。
 
 ### 3.1 electron-builder 設定
+
+現状（2026-04-25）: `dist` スクリプト (`electron-vite build && electron-builder --win nsis`) は存在するが、`package.json` に `build` セクション（appId 等）は未設定。
 
 - [ ] ルート `package.json` に `build` セクションを追加:
   - `appId: com.kanata.terminal`
@@ -177,6 +179,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 ### 3.4 単一インスタンス制約
 
 - [ ] `app.requestSingleInstanceLock()` をメインプロセス冒頭に追加（ポート競合・DB ロック回避）
+  - 現状: `apps/main/src/index.ts` に未実装
 
 ### 3.5 ログと診断
 
@@ -196,6 +199,10 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 **ゴール**: Web 版で動作していた機能がすべて Electron 上で同等に動く。
 
+### 4.0 修正済みバグ
+
+- [x] **ファンダメンタルズペイン overflow** (2026-04-25, commit `17aeaa1`): `priceH` の計算がサブペイン間の固定ギャップ（4 + 18×4 = 76px）を考慮しておらず、FIN ペインがキャンバス外にはみ出していた。`gapsToLastPane` ternary を追加して修正。詳細: `.claude/PRPs/plans/completed/fix-fundamentals-pane-overflow.plan.md`
+
 ### 4.1 既存機能チェックリスト
 
 - [ ] チャート描画: ローソク足 / 折れ線 / 面グラフ / Heikin Ashi
@@ -208,14 +215,14 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ### 4.2 Electron 固有の改善
 
+- [x] **外部 URL ガード**: `setWindowOpenHandler` で外部 URL を `shell.openExternal` にルーティング、`will-navigate` をブロック（`apps/main/src/index.ts` 実装済み）
 - [ ] **カスタムタイトルバー**: `frame: false` + `titleBarStyle: 'hidden'` + `components/TitleBar.tsx`。最小化・最大化・閉じるは IPC 経由
 - [ ] **メニューバー**: `Menu.setApplicationMenu` でファイル / 表示 / ヘルプを整備。DevTools 切替・再読み込みを含める
-- [ ] **外部 URL ガード**: `setWindowOpenHandler` で外部 URL を `shell.openExternal` にルーティング、`will-navigate` をブロック（既実装済み、再確認のみ）
 
 ### 4.3 セキュリティ硬化
 
-- [ ] CSP を `index.html` の `<meta>` で設定: `default-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:;`
-- [ ] `webPreferences.sandbox: true` / `nodeIntegration: false` / `contextIsolation: true` を維持
+- [x] `webPreferences.sandbox: true` / `nodeIntegration: false` / `contextIsolation: true` を設定済み（`apps/main/src/index.ts`）
+- [ ] CSP を `apps/renderer/index.html` の `<meta>` で設定: `default-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:;`（現状: CSP 未設定）
 
 ---
 
@@ -261,9 +268,9 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ## 実装前に決定すべき重要事項
 
-1. **better-sqlite3 削除 or 保持** (Phase 2.7): Python を正として削除（推奨）か、将来 Python 撤去を見据えて保持か
-2. **Python バンドル方式** (Phase 3.2): embeddable Python + pip（推奨）か PyInstaller か
-3. **CORS 開発時オリジン** (Phase 2.2): `localhost:3000` を `localhost:5173` に一括置換するタイミング（Phase 2 着手時推奨）
+1. **better-sqlite3 削除 or 保持** (Phase 2.7): Python を正として削除（推奨）か、将来 Python 撤去を見据えて保持か（未決定）
+2. **Python バンドル方式** (Phase 3.2): embeddable Python + pip（推奨）か PyInstaller か（未決定）
+3. **CORS localhost:3000 削除タイミング** (Phase 2.2): `localhost:5173` / `file://` は追加済み。`localhost:3000` の残存は無害だが、混乱を避けるため Phase 2 完了前に削除推奨
 
 ---
 

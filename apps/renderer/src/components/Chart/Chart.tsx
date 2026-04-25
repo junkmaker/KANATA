@@ -57,7 +57,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   const RSI_H = state.indicators.rsi ? 72 : 0;
   const FIN_H = state.showFinancial ? 96 : 0;
   const X_AXIS_H = 22;
-  const priceH = Math.max(120, size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T);
+  const gapsToLastPane =
+    FIN_H > 0   ? 76 :
+    RSI_H > 0   ? 58 :
+    MACD_H > 0  ? 40 :
+    STOCH_H > 0 ? 22 :
+    VOL_H > 0   ?  4 :
+    0;
+  const priceH = Math.max(120, size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T - gapsToLastPane);
   const priceW = size.w - PAD_L - PAD_R;
 
   const volY0 = PAD_T + priceH + 4;
