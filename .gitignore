@@ -2,3 +2,21 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Node / Electron
+node_modules/
+out/
+dist/
+release/
+*.log
+.env
+.env.local
+.vite/
+.electron-vite/
+
+# Runtime data
+backend/data/
+
+# Debug / temporary
+package_debug.json
+
