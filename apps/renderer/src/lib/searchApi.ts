@@ -1,13 +1,13 @@
 import type { ApiResponse, SearchResult } from '../types';
-
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { getBackendUrl } from './backendUrl';
 
 export async function searchSymbols(
   q: string,
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
+  const base = await getBackendUrl();
   const res = await fetch(
-    `${BASE_URL}/api/search?q=${encodeURIComponent(q)}`,
+    `${base}/api/search?q=${encodeURIComponent(q)}`,
     { signal },
   );
   if (!res.ok) {
