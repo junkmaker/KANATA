@@ -3,7 +3,9 @@ import { getBackendUrl } from './backendUrl';
 
 export async function fetchQuotes(symbol: string, timeframe: string): Promise<OHLCBar[]> {
   const base = await getBackendUrl();
-  const res = await fetch(`${base}/api/quotes/${symbol}?timeframe=${timeframe}`);
+  const res = await fetch(`${base}/api/quotes/${symbol}?timeframe=${timeframe}`, {
+    signal: AbortSignal.timeout(10_000),
+  });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

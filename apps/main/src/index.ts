@@ -1,11 +1,23 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'node:path';
-import { startPythonSidecar, stopPythonSidecar } from './sidecar/pythonSidecar.js';
-import { registerIpcHandlers } from './ipc/bridge.js';
+import { startPythonSidecar, stopPythonSidecar, setStatusChangeCallback } from './sidecar/pythonSidecar.js';
+import type { BackendStatusPayload } from '@kanata/shared-types';
+import { registerIpcHandlers, IPC_CHANNELS } from './ipc/bridge.js';
 
 const isDev = !app.isPackaged;
 
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
+
 let mainWindow: BrowserWindow | null = null;
+
+function notifySidecarStatus(payload: BackendStatusPayload): void {
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) w.webContents.send(IPC_CHANNELS.BACKEND_STATUS, payload);
+  });
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -49,6 +61,10 @@ function createWindow(): void {
 async function bootstrap(): Promise<void> {
   registerIpcHandlers();
 
+  setStatusChangeCallback((status, url) => {
+    notifySidecarStatus({ status, url });
+  });
+
   try {
     const url = await startPythonSidecar();
     console.log(`[main] Python backend ready at ${url}`);
@@ -62,6 +78,13 @@ async function bootstrap(): Promise<void> {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 }
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 app.whenReady().then(bootstrap).catch((err) => {
   console.error('[main] bootstrap failed:', err);
