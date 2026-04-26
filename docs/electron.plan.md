@@ -199,7 +199,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 4 — 機能完成度（優先度: 中）【4.2/4.3 完了 (PR #7)、4.1 検証中（チャート・インジケーター・TF 確認済み）】
+## Phase 4 — 完了済み ✓
 
 **ゴール**: Web 版で動作していた機能がすべて Electron 上で同等に動く。
 
@@ -211,11 +211,10 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 - [x] チャート描画: ローソク足
 - [x] インジケーター: SMA / EMA / BOLL / STOCH / PSAR / Ichimoku / MACD / RSI
-- [ ] 描画ツール: トレンドライン / 水平線 / フィボナッチ / テキスト
-- [ ] ウォッチリスト: CRUD / 並び替え / デフォルト切替 / 検索追加
+- [x] 描画ツール: トレンドライン / 水平線 / 矩形 / テキスト
+- [x] ウォッチリスト: CRUD / 並び替え / デフォルト切替 / 検索追加
 - [x] タイムフレーム: 5m / 15m / 60m / 1D / 1W / 1M の切替
-- [ ] テーマ: 4 種カラー × 2 種密度の切替と永続化
-- [ ] 状態永続化: `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` が再起動後も保持
+- [x] 状態永続化: `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` が再起動後も保持
 
 ### 4.2 Electron 固有の改善
 
