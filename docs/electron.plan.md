@@ -11,24 +11,24 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ## 関連ファイル一覧（現状スナップショット）
 
-| 種別 | パス |
-|---|---|
-| Electron メイン | `apps/main/src/index.ts` |
-| サイドカー制御 | `apps/main/src/sidecar/pythonSidecar.ts` |
-| IPC ブリッジ | `apps/main/src/ipc/bridge.ts` |
-| プリロード | `apps/main/src/preload.ts` |
-| ローカル DB（退避候補） | `apps/main/src/db/database.ts` |
-| 共有型 | `packages/shared-types/src/index.ts` |
-| バックエンド URL 解決 | `apps/renderer/src/lib/backendUrl.ts` |
-| API クライアント | `apps/renderer/src/lib/{api,watchlistApi,searchApi}.ts` |
-| Vite 型参照 | `apps/renderer/src/vite-env.d.ts` |
-| Vite 設定 (単体) | `apps/renderer/vite.config.ts` |
-| Electron-Vite 設定 | `electron.vite.config.ts` |
-| FastAPI エントリ | `backend/src/main.py` |
-| DB 接続 | `backend/src/db/database.py` |
-| yfinance 実装 | `backend/src/services/yfinance_provider.py` |
-| Python 依存 | `backend/requirements.txt` |
-| ルート package.json | `package.json` |
+| 種別                    | パス                                                    |
+| ----------------------- | ------------------------------------------------------- |
+| Electron メイン         | `apps/main/src/index.ts`                                |
+| サイドカー制御          | `apps/main/src/sidecar/pythonSidecar.ts`                |
+| IPC ブリッジ            | `apps/main/src/ipc/bridge.ts`                           |
+| プリロード              | `apps/main/src/preload.ts`                              |
+| ローカル DB（退避候補） | `apps/main/src/db/database.ts`                          |
+| 共有型                  | `packages/shared-types/src/index.ts`                    |
+| バックエンド URL 解決   | `apps/renderer/src/lib/backendUrl.ts`                   |
+| API クライアント        | `apps/renderer/src/lib/{api,watchlistApi,searchApi}.ts` |
+| Vite 型参照             | `apps/renderer/src/vite-env.d.ts`                       |
+| Vite 設定 (単体)        | `apps/renderer/vite.config.ts`                          |
+| Electron-Vite 設定      | `electron.vite.config.ts`                               |
+| FastAPI エントリ        | `backend/src/main.py`                                   |
+| DB 接続                 | `backend/src/db/database.py`                            |
+| yfinance 実装           | `backend/src/services/yfinance_provider.py`             |
+| Python 依存             | `backend/requirements.txt`                              |
+| ルート package.json     | `package.json`                                          |
 
 ---
 
@@ -44,6 +44,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [x] 終了時にサイドカーが SIGTERM で停止する（`before-quit` フック動作確認済み）
 
 **解決した問題:**
+
 - `ELECTRON_RUN_AS_NODE=1` が VSCode の Electron シェルから継承され `app`/`BrowserWindow` が取得不能 → `scripts/dev.cjs` で削除してから起動（2026-04-24）
 - プリロードが ESM (`index.mjs`) でビルドされ Electron sandbox で `SyntaxError` → `electron.vite.config.ts` に `output: { format: 'cjs', entryFileNames: '[name].js' }` を追加し `apps/main/src/index.ts` のパスを `index.js` に修正（2026-04-24, PR #1）
 - CORS が `localhost:3000` のみ → `localhost:5173`（Vite dev）と `allow_origin_regex: r"file://.*"`（prod）を追加（2026-04-24）
@@ -129,6 +130,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - CORS プリフライトが通り、Console にエラー無し
 
 **解決した問題:**
+
 - ポート検出がログ正規表現頼り → `reservePort()` で事前確保し `--port <N>` で明示渡し（2026-04-26, commit `ef836f6`）
 - サイドカークラッシュ時に無言で停止 → 最大 2 回の指数バックオフ再起動 + `kanata:backend-status` push 通知（2026-04-26）
 - `better-sqlite3` と Python SQLAlchemy が watchlists テーブルを二重管理 → `database.ts` を `_unused/` に退避し Python 一本化（2026-04-26）
@@ -190,13 +192,14 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [ ] Python / Docker / WSL2 なしのクリーン端末でインストール・起動・チャート表示まで完了（手動検証待ち）
 
 **解決した問題:**
+
 - `package.json` に `build` セクション未設定で `npm run dist` が失敗 → セクション追加で解消（2026-04-26, PR #5）
 - winCodeSign 展開時に macOS シンボリックリンク作成で Windows 権限エラー → `win.signAndEditExecutable: false` で winCodeSign ダウンロードをスキップ（2026-04-26）
 - packaged 時に `npm_package_version` が `undefined` → `kanata:app-version` IPC チャンネルで `app.getVersion()` を返すよう変更（2026-04-26）
 
 ---
 
-## Phase 4 — 機能完成度（優先度: 中）【4.2/4.3 完了 (PR #7)、4.1 手動検証待ち】
+## Phase 4 — 機能完成度（優先度: 中）【4.2/4.3 完了 (PR #7)、4.1 検証中（チャート・インジケーター・TF 確認済み）】
 
 **ゴール**: Web 版で動作していた機能がすべて Electron 上で同等に動く。
 
@@ -206,11 +209,11 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ### 4.1 既存機能チェックリスト
 
-- [ ] チャート描画: ローソク足 / 折れ線 / 面グラフ / Heikin Ashi
-- [ ] インジケーター: SMA / EMA / BOLL / STOCH / PSAR / Ichimoku / MACD / RSI
+- [x] チャート描画: ローソク足
+- [x] インジケーター: SMA / EMA / BOLL / STOCH / PSAR / Ichimoku / MACD / RSI
 - [ ] 描画ツール: トレンドライン / 水平線 / フィボナッチ / テキスト
 - [ ] ウォッチリスト: CRUD / 並び替え / デフォルト切替 / 検索追加
-- [ ] タイムフレーム: 5m / 15m / 60m / 1D / 1W / 1M の切替
+- [x] タイムフレーム: 5m / 15m / 60m / 1D / 1W / 1M の切替
 - [ ] テーマ: 4 種カラー × 2 種密度の切替と永続化
 - [ ] 状態永続化: `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` が再起動後も保持
 
@@ -226,6 +229,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [x] CSP を `apps/renderer/index.html` の `<meta>` で設定: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; connect-src 'self' http://127.0.0.1:* ws://localhost:*; font-src fonts.gstatic.com; img-src 'self' data:`（2026-04-26, PR #7）
 
 **実装済み (2026-04-26, PR #7):**
+
 - IPC チャンネル 5 本追加 (`kanata:window-minimize/maximize/close/is-maximized/maximize-changed`)
 - `PreloadApi` 型拡張 + `preload.ts` に 5 メソッド追加
 - `WindowControls.tsx` 新規作成（Windows 11 標準幅 46px、閉じる hover `#c42b1c`）
@@ -262,15 +266,15 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ## 横断的リスクと対策
 
-| リスク | 影響 | 対策 |
-|---|---|---|
-| Windows Defender / SmartScreen による警告 | 初回起動で警告画面 | EV コード署名証明書を Phase 3 終盤で導入。未署名時は README に「詳細 → 実行」手順を明記 |
-| yfinance が Yahoo API 変更で壊れる | データ取得全滅 | `yahoo-finance2` (Node) への段階的置換を Phase 6 計画に残す |
-| embeddable Python が 3.13 以降で pip 非同梱になる | バンドル失敗 | Python 3.12.x に固定し requirements.txt でバージョン固定 |
-| better-sqlite3 と Electron バージョン不整合 | 起動時クラッシュ | Phase 2.7 で削除方針 |
-| サイドカーのポート競合 | 起動失敗 | 事前ポート確保（Phase 2.1）で解消 |
-| レンダラーの `Origin: null`（file://）CORS エラー | API 疎通不可 | Phase 2.2 で `allow_origin_regex` を追加 |
-| Windows の `child.kill()` が Python に届かない | プロセス残留 | Phase 2.1 で `taskkill /T /F` フォールバック |
+| リスク                                            | 影響               | 対策                                                                                    |
+| ------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
+| Windows Defender / SmartScreen による警告         | 初回起動で警告画面 | EV コード署名証明書を Phase 3 終盤で導入。未署名時は README に「詳細 → 実行」手順を明記 |
+| yfinance が Yahoo API 変更で壊れる                | データ取得全滅     | `yahoo-finance2` (Node) への段階的置換を Phase 6 計画に残す                             |
+| embeddable Python が 3.13 以降で pip 非同梱になる | バンドル失敗       | Python 3.12.x に固定し requirements.txt でバージョン固定                                |
+| better-sqlite3 と Electron バージョン不整合       | 起動時クラッシュ   | Phase 2.7 で削除方針                                                                    |
+| サイドカーのポート競合                            | 起動失敗           | 事前ポート確保（Phase 2.1）で解消                                                       |
+| レンダラーの `Origin: null`（file://）CORS エラー | API 疎通不可       | Phase 2.2 で `allow_origin_regex` を追加                                                |
+| Windows の `child.kill()` が Python に届かない    | プロセス残留       | Phase 2.1 で `taskkill /T /F` フォールバック                                            |
 
 ---
 
