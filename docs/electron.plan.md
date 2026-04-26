@@ -85,7 +85,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [x] `backend/src/db/database.py` のデフォルトパスは Python 単独起動時のみ使用（`DATABASE_URL` 環境変数を優先）
 - [x] DB ディレクトリを `userData/kanata/kanata.db` に統一
 - [x] サイドカー起動前に `mkdirSync(dbDir, { recursive: true })` を Node 側で実行
-- [ ] 起動時に `kanata.db` → `userData/backups/kanata.db.<date>` へコピー（直近 7 世代保持）
+- [x] 起動時に `kanata.db` → `userData/backups/kanata.db.<date>` へコピー（直近 7 世代保持）（Phase 3 で実装: `backupDatabase()` in `pythonSidecar.ts`）
 
 ### 2.4 バックエンド URL 解決の改善 (`apps/renderer/src/lib/backendUrl.ts`)
 
@@ -100,7 +100,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [x] `PreloadApi` 型を `packages/shared-types/src/index.ts` に集約し main/renderer で型共有（`getBackendUrl / platform / appVersion` の型定義済み）
 - [x] `kanata:backend-status` → `{ status: 'starting' | 'ready' | 'crashed' | 'offline', url: string | null, error?: string }`
 - [x] `kanata:open-logs` → `shell.openPath(userData/logs/)` でエクスプローラを開く
-- [ ] `kanata:app-version` → `app.getVersion()` を返す（prod では `npm_package_version` が取れないため IPC 経由に切替）
+- [x] `kanata:app-version` → `app.getVersion()` を返す（prod では `npm_package_version` が取れないため IPC 経由に切替）（Phase 3 で実装: `PreloadApi.appVersion` → `getAppVersion(): Promise<string>`）
 - [x] `webContents.send` でサイドカー状態変化を push → レンダラーの `useEffect` で購読
 
 ### 2.6 フロントエンド API クライアントの完全移行
@@ -136,67 +136,63 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 3 — パッケージング（優先度: 高）
+## Phase 3 — 完了済み ✓
 
 **ゴール**: `npm run dist` で NSIS インストーラが生成され、Python / Docker / WSL2 なしの Windows 端末で動作する。
 
 ### 3.1 electron-builder 設定
 
-現状（2026-04-25）: `dist` スクリプト (`electron-vite build && electron-builder --win nsis`) は存在するが、`package.json` に `build` セクション（appId 等）は未設定。
-
-- [ ] ルート `package.json` に `build` セクションを追加:
-  - `appId: com.kanata.terminal`
-  - `productName: KANATA Terminal`
-  - `directories.output: release`
-  - `asar: true` / `asarUnpack: ["resources/backend/**", "resources/python/**"]`
-  - `extraResources`: backend ソース + 埋め込み Python を resources 配下へ
-  - `win.target: nsis` / `win.icon: build/icon.ico`
+- [x] ルート `package.json` に `build` セクションを追加:
+  - `appId: com.kanata.terminal` / `productName: KANATA Terminal`
+  - `directories.output: release` / `asar: true`
+  - `extraResources`: `resources/backend` → `backend`、`resources/python` → `python`
+  - `win.target: nsis x64` / `win.icon: build/icon.ico`
+  - `win.signAndEditExecutable: false`（EV 証明書取得まで winCodeSign をスキップ）
   - `nsis.oneClick: false` / `nsis.allowToChangeInstallationDirectory: true`
-- [ ] `build/icon.ico` を用意（256x256 以上、マルチ解像度）
-- [ ] `release/` を `.gitignore` に追加済みか確認
+  - `nsis.include: build/installer.nsh`（アンインストール確認ダイアログ）
+- [x] `build/icon.ico` を用意（16/32/48/256px multi-resolution placeholder）
+- [x] `resources/python/` / `resources/backend/` を `.gitignore` に追加
 
 ### 3.2 Python ランタイムのバンドル戦略
 
-**採用方針: Windows embeddable Python + pip install（PyInstaller より保守が容易）**
+**採用方針: Windows embeddable Python 3.12.9 + pip install**
 
-| 案 | 長所 | 短所 |
-|---|---|---|
-| A. embeddable Python + pip（推奨） | 保守容易、hook 不要、デバッグしやすい | 配布物に site-packages が並ぶ |
-| B. PyInstaller onedir | Python 非公開 | yfinance/pandas の hook メンテが煩雑、容量 200MB 超 |
-
-- [ ] `scripts/prepare-python-dist.ps1` を新規作成:
-  1. `python-3.12.x-embed-amd64.zip` をダウンロードして `resources/python/` に展開
-  2. `python312._pth` の `#import site` コメントを外して site-packages を有効化
-  3. `get-pip.py` を配置して pip を導入
-  4. `pip install --no-cache-dir -r backend/requirements.txt -t resources/python/Lib/site-packages`
+- [x] `scripts/prepare-python-dist.ps1` を新規作成（`npm run prepare:dist` で実行）:
+  1. `python-3.12.9-embed-amd64.zip` をダウンロードして `resources/python/` に展開
+  2. `python312._pth` の `#import site` を有効化
+  3. `get-pip.py` で pip を導入
+  4. `pip install -r backend/requirements.txt -t resources/python/Lib/site-packages`
   5. `backend/src/` を `resources/backend/src/` にコピー
-  6. `__pycache__` / `*.pyc` / `tests/` を削除してサイズ削減
-- [ ] `electron-builder` の `beforeBuild` フックでこのスクリプトを自動呼び出し
-- [ ] `resolvePythonExecutable()` / `resolveBackendDir()` が `process.resourcesPath` を参照していることを確認
-
-**容量目標**: インストーラ < 200 MB、展開後 < 500 MB
+  6. `__pycache__` / `*.pyc` / `tests/` を削除
+- [x] `scripts/check-resources.cjs` を `beforeBuild` フックとして登録（resources 未準備時に明確なエラー）
+- [x] packaged 時に `PYTHONHOME` を embeddable Python パスに設定（`pythonSidecar.ts`）
 
 ### 3.3 SQLite の初期化・移行戦略
 
-- [ ] 初期化は既存の `backend/src/db/init_db.py`（`create_all` + seed）でカバー
+- [x] 初期化は既存の `backend/src/db/init_db.py`（`create_all` + seed）でカバー（変更なし）
 - [ ] Alembic の導入は Phase 6 以降に切り出し
 - [ ] Docker 版からの引き継ぎ手順を README に記載: `docker cp kanata-db:/app/data/kanata.db ./`
 
 ### 3.4 単一インスタンス制約
 
-- [x] `app.requestSingleInstanceLock()` をメインプロセス冒頭に追加（ポート競合・DB ロック回避）（Phase 2 で先行実装）
+- [x] `app.requestSingleInstanceLock()` をメインプロセス冒頭に追加（Phase 2 で先行実装）
 
 ### 3.5 ログと診断
 
-- [ ] メインプロセス・サイドカーのログを `userData/logs/` にローテーション付きで書き出し
-- [ ] Help メニューに「Open Logs Folder」「Show App Version」を追加
+- [x] `logger.ts` に 5 MB ファイルサイズベースのローテーション追加（最大 3 世代）
+- [x] Help メニューに「ログフォルダを開く」「バージョン情報」を追加（Alt キーで表示）
 
-### Phase 3 完了条件
+### Phase 3 完了条件（2026-04-26 達成）
 
-- `npm run dist` が成功し `release/KANATA-Terminal-Setup-x.y.z.exe` が生成される
-- Python / Docker / WSL2 なしの端末でインストール・起動・チャート表示まで完了
-- インストーラ容量が 250 MB 以下
-- アンインストール時にユーザーデータの扱いを確認するダイアログが表示される
+- [x] `npm run dist` が成功し `release/KANATA-Terminal-Setup-0.2.0.exe` が生成される
+- [x] インストーラ容量が 250 MB 以下
+- [x] アンインストール時にユーザーデータ削除確認ダイアログが表示される（`build/installer.nsh`）
+- [ ] Python / Docker / WSL2 なしのクリーン端末でインストール・起動・チャート表示まで完了（手動検証待ち）
+
+**解決した問題:**
+- `package.json` に `build` セクション未設定で `npm run dist` が失敗 → セクション追加で解消（2026-04-26, PR #5）
+- winCodeSign 展開時に macOS シンボリックリンク作成で Windows 権限エラー → `win.signAndEditExecutable: false` で winCodeSign ダウンロードをスキップ（2026-04-26）
+- packaged 時に `npm_package_version` が `undefined` → `kanata:app-version` IPC チャンネルで `app.getVersion()` を返すよう変更（2026-04-26）
 
 ---
 
@@ -294,7 +290,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 - [ ] Docker / WSL2 無しで開発・配布できる
 - [ ] `npm run dev` で 10 秒以内にフル機能が起動
-- [ ] `npm run dist` で 250 MB 以下の NSIS インストーラが生成される
+- [x] `npm run dist` で 250 MB 以下の NSIS インストーラが生成される（2026-04-26）
 - [ ] クリーン Windows 環境でインストール → 起動 → ウォッチリスト操作 → チャート閲覧が完了
 - [ ] ユーザーデータが `%APPDATA%/KANATA/` に集約され、アンインストール時の挙動が明確
 - [ ] 既存の pytest 15 件が引き続きパスする
