@@ -196,7 +196,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 4 — 機能完成度（優先度: 中）【in-progress — plan: .claude/PRPs/plans/phase4-feature-completion.plan.md】
+## Phase 4 — 機能完成度（優先度: 中）【4.2/4.3 完了 (PR #7)、4.1 手動検証待ち】
 
 **ゴール**: Web 版で動作していた機能がすべて Electron 上で同等に動く。
 
@@ -217,13 +217,20 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 ### 4.2 Electron 固有の改善
 
 - [x] **外部 URL ガード**: `setWindowOpenHandler` で外部 URL を `shell.openExternal` にルーティング、`will-navigate` をブロック（`apps/main/src/index.ts` 実装済み）
-- [ ] **カスタムタイトルバー**: `frame: false` + `titleBarStyle: 'hidden'` + `components/TitleBar.tsx`。最小化・最大化・閉じるは IPC 経由
-- [ ] **メニューバー**: `Menu.setApplicationMenu` でファイル / 表示 / ヘルプを整備。DevTools 切替・再読み込みを含める
+- [x] **カスタムタイトルバー**: `frame: false` + `WindowControls.tsx`（最小化・最大化・閉じる IPC 経由）+ TopBar に `-webkit-app-region: drag/no-drag` 設定（2026-04-26, PR #7）
+- [x] **メニューバー**: `Menu.setApplicationMenu` でファイル（終了）/ 表示（再読み込み・強制再読み込み・DevTools・全画面）/ ヘルプを整備（2026-04-26, PR #7）
 
 ### 4.3 セキュリティ硬化
 
 - [x] `webPreferences.sandbox: true` / `nodeIntegration: false` / `contextIsolation: true` を設定済み（`apps/main/src/index.ts`）
-- [ ] CSP を `apps/renderer/index.html` の `<meta>` で設定: `default-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:;`（現状: CSP 未設定）
+- [x] CSP を `apps/renderer/index.html` の `<meta>` で設定: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; connect-src 'self' http://127.0.0.1:* ws://localhost:*; font-src fonts.gstatic.com; img-src 'self' data:`（2026-04-26, PR #7）
+
+**実装済み (2026-04-26, PR #7):**
+- IPC チャンネル 5 本追加 (`kanata:window-minimize/maximize/close/is-maximized/maximize-changed`)
+- `PreloadApi` 型拡張 + `preload.ts` に 5 メソッド追加
+- `WindowControls.tsx` 新規作成（Windows 11 標準幅 46px、閉じる hover `#c42b1c`）
+- `buildAppMenu()` にファイル / 表示 サブメニュー追加
+- CSP `<meta>` タグを `index.html` に追加
 
 ---
 
@@ -295,4 +302,4 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [ ] ユーザーデータが `%APPDATA%/KANATA/` に集約され、アンインストール時の挙動が明確
 - [ ] 既存の pytest 15 件が引き続きパスする
 - [ ] TypeScript 型チェック (`npm run typecheck`) が警告なしで通る
-- [ ] Electron セキュリティ推奨事項 (contextIsolation / sandbox / CSP) を満たす
+- [x] Electron セキュリティ推奨事項 (contextIsolation / sandbox / CSP) を満たす（2026-04-26, PR #7）
