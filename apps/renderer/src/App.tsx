@@ -229,13 +229,15 @@ export function App() {
         <div className="chart-area">
           <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
         </div>
-        <RightPanel
-          state={state}
-          setState={setState}
-          tickers={displayTickers}
-          data={data}
-          watchlist={watchlistController}
-        />
+        <div data-testid="watchlist">
+          <RightPanel
+            state={state}
+            setState={setState}
+            tickers={displayTickers}
+            data={data}
+            watchlist={watchlistController}
+          />
+        </div>
       </div>
       <StatusBar state={state} primaryTicker={primaryTicker} last={last} />
       {tweaksOpen && (
