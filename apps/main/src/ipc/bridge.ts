@@ -15,4 +15,5 @@ export function registerIpcHandlers(): void {
     const logsDir = join(app.getPath('userData'), 'logs');
     await shell.openPath(logsDir);
   });
+  ipcMain.handle(IPC_CHANNELS.APP_VERSION, () => app.getVersion());
 }

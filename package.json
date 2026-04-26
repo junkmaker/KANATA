@@ -12,9 +12,53 @@
     "dev": "node scripts/dev.cjs",
     "build": "electron-vite build",
     "dist": "electron-vite build && electron-builder --win nsis",
+    "prepare:dist": "pwsh -ExecutionPolicy Bypass -File scripts/prepare-python-dist.ps1",
     "preview": "electron-vite preview",
-    "typecheck": "npm --workspace apps/renderer run typecheck && npm --workspace apps/main run typecheck",
-    "postinstall": "electron-builder install-app-deps"
+    "typecheck": "npm --workspace apps/renderer run typecheck && npm --workspace apps/main run typecheck"
+  },
+  "build": {
+    "appId": "com.kanata.terminal",
+    "productName": "KANATA Terminal",
+    "copyright": "Copyright 2026 KANATA",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "!out/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/tests/**"]
+      },
+      {
+        "from": "resources/python",
+        "to": "python",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"]
+      }
+    ],
+    "asar": true,
+    "beforeBuild": "scripts/check-resources.cjs",
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KANATA Terminal"
+    }
   },
   "devDependencies": {
     "electron": "^40.0.0",

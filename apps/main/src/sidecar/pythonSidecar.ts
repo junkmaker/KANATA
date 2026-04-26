@@ -2,11 +2,38 @@ import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { get as httpGet } from 'node:http';
 import { app } from 'electron';
 import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { reservePort } from '../lib/port.js';
 import { sidecarLogger as log } from '../lib/logger.js';
 
 const BACKEND_READY_TIMEOUT_MS = 20_000;
+const MAX_BACKUPS = 7;
+
+function backupDatabase(dbPath: string): void {
+  if (!existsSync(dbPath)) return;
+
+  const backupDir = join(app.getPath('userData'), 'backups');
+  mkdirSync(backupDir, { recursive: true });
+
+  const date = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const dest = join(backupDir, `kanata.db.${date}`);
+  try {
+    copyFileSync(dbPath, dest);
+    log.info(`DB backed up to ${dest}`);
+  } catch (err) {
+    log.warn(`DB backup failed: ${String(err)}`);
+    return;
+  }
+
+  const files = readdirSync(backupDir)
+    .filter((f) => f.startsWith('kanata.db.'))
+    .map((f) => ({ name: f, mtime: statSync(join(backupDir, f)).mtime }))
+    .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+  for (const file of files.slice(MAX_BACKUPS)) {
+    try { unlinkSync(join(backupDir, file.name)); } catch { /* ignore */ }
+  }
+}
 const MAX_RESTARTS = 2;
 const HEALTH_CHECK_INTERVAL_MS = 500;
 
@@ -88,6 +115,12 @@ async function launchSidecar(): Promise<string> {
   mkdirSync(dbDir, { recursive: true });
   const dbPath = join(dbDir, 'kanata.db').replace(/\\/g, '/');
 
+  backupDatabase(join(dbDir, 'kanata.db'));
+
+  const pythonHome = app.isPackaged
+    ? join(process.resourcesPath, 'python')
+    : undefined;
+
   const args = [
     '-m', 'uvicorn', 'src.main:app',
     '--host', '127.0.0.1',
@@ -105,6 +138,7 @@ async function launchSidecar(): Promise<string> {
       PYTHONUNBUFFERED: '1',
       DATABASE_URL: `sqlite:///${dbPath}`,
       KANATA_ALLOWED_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173',
+      ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
