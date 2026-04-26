@@ -27,6 +27,7 @@ function createWindow(): void {
     minHeight: 640,
     backgroundColor: '#0b0d12',
     show: false,
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -39,6 +40,13 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+  });
+
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZE_CHANGED, true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZE_CHANGED, false);
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -61,6 +69,22 @@ function createWindow(): void {
 function buildAppMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
+      label: 'ファイル(&F)',
+      submenu: [
+        { role: 'quit', label: '終了' },
+      ],
+    },
+    {
+      label: '表示(&V)',
+      submenu: [
+        { role: 'reload', label: '再読み込み' },
+        { role: 'forceReload', label: '強制再読み込み' },
+        ...(isDev ? [{ role: 'toggleDevTools' as const, label: 'DevTools' }] : []),
+        { type: 'separator' as const },
+        { role: 'togglefullscreen', label: '全画面表示' },
+      ],
+    },
+    {
       label: 'ヘルプ(&H)',
       submenu: [
         {
@@ -70,7 +94,7 @@ function buildAppMenu(): void {
             await shell.openPath(logsDir);
           },
         },
-        { type: 'separator' },
+        { type: 'separator' as const },
         {
           label: 'バージョン情報',
           click: () => {
