@@ -65,7 +65,7 @@ export function getSidecarStatus(): SidecarStatus {
   return state.status;
 }
 
-function resolveBackendDir(): string {
+export function resolveBackendDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'backend');
   }
@@ -74,7 +74,7 @@ function resolveBackendDir(): string {
   return join(app.getAppPath(), 'backend');
 }
 
-function resolvePythonExecutable(): string {
+export function resolvePythonExecutable(): string {
   if (app.isPackaged) {
     const embedded = join(process.resourcesPath, 'python', 'python.exe');
     if (existsSync(embedded)) return embedded;

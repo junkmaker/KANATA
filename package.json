@@ -14,7 +14,12 @@
     "dist": "electron-vite build && electron-builder --win nsis",
     "prepare:dist": "pwsh -ExecutionPolicy Bypass -File scripts/prepare-python-dist.ps1",
     "preview": "electron-vite preview",
-    "typecheck": "npm --workspace apps/renderer run typecheck && npm --workspace apps/main run typecheck"
+    "typecheck": "npm --workspace apps/renderer run typecheck && npm --workspace apps/main run typecheck",
+    "test:main": "vitest run --config apps/main/vitest.config.ts",
+    "test:renderer": "vitest run --config apps/renderer/vitest.config.ts",
+    "test:backend": "cd backend && python -m pytest -v",
+    "test:e2e": "playwright test",
+    "test": "npm run test:main && npm run test:renderer && npm run test:backend"
   },
   "build": {
     "appId": "com.kanata.terminal",
@@ -61,10 +66,13 @@
     }
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
-    "typescript": "^5.6.0"
+    "jsdom": "^26.1.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.2.0"
   },
   "type": "module"
 }

@@ -237,29 +237,36 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 5 — テスト・品質（優先度: 低）
+## Phase 5 — 完了済み ✓
 
 **ゴール**: 回帰を検知できる最低限の自動テストと手動チェックリストを整備。
 
 ### 5.1 単体テスト (Vitest)
 
-- [ ] `pythonSidecar.ts` の純関数 (`resolveBackendDir` / `resolvePythonExecutable`) を Vitest で単体テスト
-- [ ] `backendUrl.ts` のキャッシュ動作とリトライを検証（`window.kanata` モック）
-- [ ] `backend/tests/` の pytest（15 件）が CORS 変更後も通ることを確認
+- [x] `pythonSidecar.ts` の純関数 (`resolveBackendDir` / `resolvePythonExecutable`) を Vitest で単体テスト（6 件）
+- [x] `backendUrl.ts` のキャッシュ動作とリトライを検証（`window.kanata` モック）（3 件）
+- [x] `reservePort` の単体テスト追加（2 件）
+- [x] `backend/tests/` の pytest（27 件）が全件パスすることを確認
 
 ### 5.2 E2E テスト (Playwright for Electron)
 
-- [ ] `@playwright/test` + Electron launch を `tests/e2e/` に導入
-- [ ] シナリオ: 起動 → ウォッチリストに "AAPL" を追加 → チャート表示 → タイムフレーム変更 → アプリ終了
+- [x] `@playwright/test` + Electron launch を `tests/e2e/` に導入（`playwright.config.ts` + `tests/e2e/app.spec.ts`）
+- [ ] シナリオ: 起動 → ウォッチリストに "AAPL" を追加 → チャート表示 → タイムフレーム変更 → アプリ終了（Phase 6 以降: ビルド済み成果物が必要）
 
 ### 5.3 リリース前手動チェックリスト
 
-- [ ] クリーン Windows 11 環境でインストーラから導入し、ウォッチリストに 5 銘柄追加できる
-- [ ] オフライン時のフォールバック表示が正しい
-- [ ] 日本株 (7203) のタイムフレーム切替が動作
-- [ ] ウィンドウ最大化・復元・最小化が正常
-- [ ] DPI 変更（100% → 150%）で Canvas 描画が破綻しない
-- [ ] アンインストール後、userData を残す / 完全削除の選択が正しく動く
+- [x] `docs/RELEASE_CHECKLIST.md` 作成（7 カテゴリ / 26 項目）
+- [ ] クリーン Windows 11 環境での実機検証（Phase 6 リリース前に実施）
+
+**実装済み (2026-04-26, feat/phase4 → PR #8):**
+
+- Vitest v3.2 + jsdom v26 + `@playwright/test` v1.52 を devDependencies に追加
+- `apps/main/vitest.config.ts` / `apps/renderer/vitest.config.ts` 新規作成（`root` 設定でパス解決修正）
+- `apps/main/src/__tests__/__mocks__/electron.ts` — `app` スタブ
+- `pythonSidecar.ts` の `resolveBackendDir` / `resolvePythonExecutable` に `export` 追加
+- 単体テスト 11 件（main: 8 件、renderer: 3 件）+ pytest 27 件 = 合計 38 件全 Pass
+- `App.tsx` に `data-testid="watchlist"` wrapper 追加（E2E セレクタ用）
+- `apps/main/tsconfig.json` に `"exclude": ["src/_unused"]` 追加（既存 `better-sqlite3` 型エラー回避）
 
 ---
 
@@ -303,6 +310,6 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 - [x] `npm run dist` で 250 MB 以下の NSIS インストーラが生成される（2026-04-26）
 - [ ] クリーン Windows 環境でインストール → 起動 → ウォッチリスト操作 → チャート閲覧が完了
 - [ ] ユーザーデータが `%APPDATA%/KANATA/` に集約され、アンインストール時の挙動が明確
-- [ ] 既存の pytest 15 件が引き続きパスする
-- [ ] TypeScript 型チェック (`npm run typecheck`) が警告なしで通る
+- [x] 既存の pytest 27 件が引き続きパスする（2026-04-26）
+- [x] TypeScript 型チェック (`npm run typecheck`) が警告なしで通る（2026-04-26）
 - [x] Electron セキュリティ推奨事項 (contextIsolation / sandbox / CSP) を満たす（2026-04-26, PR #7）

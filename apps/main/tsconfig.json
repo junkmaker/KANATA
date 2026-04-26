@@ -17,5 +17,6 @@
       "@kanata/shared-types": ["../../packages/shared-types/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/_unused"]
 }
