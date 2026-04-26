@@ -196,7 +196,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 4 — 機能完成度（優先度: 中）
+## Phase 4 — 機能完成度（優先度: 中）【in-progress — plan: .claude/PRPs/plans/phase4-feature-completion.plan.md】
 
 **ゴール**: Web 版で動作していた機能がすべて Electron 上で同等に動く。
 

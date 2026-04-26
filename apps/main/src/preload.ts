@@ -13,6 +13,15 @@ const api: PreloadApi = {
     return () => ipcRenderer.off(IPC_CHANNELS.BACKEND_STATUS, handler as Parameters<typeof ipcRenderer.off>[1]);
   },
   platform: process.platform,
+  minimizeWindow:    () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+  maximizeWindow:    () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
+  closeWindow:       () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
+  isWindowMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
+  onMaximizeChange: (cb) => {
+    const handler = (_event: unknown, isMaximized: boolean) => cb(isMaximized);
+    ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZE_CHANGED, handler as Parameters<typeof ipcRenderer.on>[1]);
+    return () => ipcRenderer.off(IPC_CHANNELS.WINDOW_MAXIMIZE_CHANGED, handler as Parameters<typeof ipcRenderer.off>[1]);
+  },
 };
 
 try {

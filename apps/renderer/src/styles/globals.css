@@ -150,6 +150,26 @@ input { font: inherit; color: inherit; }
 .tt-price.up, .tt-chg.up { color: var(--bull); }
 .tt-price.down, .tt-chg.down { color: var(--bear); }
 .top-controls { margin-left: auto; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+/* ── Window controls (custom title bar) ── */
+.win-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+.win-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  color: var(--text-soft);
+  transition: background 0.1s;
+  border-radius: 0;
+}
+.win-btn:hover { background: var(--panel-3); color: var(--text); }
+.win-btn-close:hover { background: #c42b1c; color: #fff; }
+.win-btn svg { pointer-events: none; }
 .status-dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--bull);

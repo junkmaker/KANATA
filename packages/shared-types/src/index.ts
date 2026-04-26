@@ -12,7 +12,12 @@ export interface PreloadApi {
   openLogs:         () => Promise<void>;
   getAppVersion:    () => Promise<string>;
   onBackendStatus:  (cb: (payload: BackendStatusPayload) => void) => () => void;
-  platform:    NodeJS.Platform;
+  platform:         NodeJS.Platform;
+  minimizeWindow:    () => Promise<void>;
+  maximizeWindow:    () => Promise<void>;
+  closeWindow:       () => Promise<void>;
+  isWindowMaximized: () => Promise<boolean>;
+  onMaximizeChange:  (cb: (isMaximized: boolean) => void) => () => void;
 }
 
 declare global {

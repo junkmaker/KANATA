@@ -1,6 +1,7 @@
 import type { AppState, Ticker, OHLCBar } from '../types';
 import type { DataStatus } from '../hooks/useChartData';
 import { fmtPrice } from '../lib/formatters';
+import { WindowControls } from './WindowControls';
 
 interface TopBarProps {
   state: AppState;
@@ -32,7 +33,7 @@ export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: Top
   const dotColor = STATUS_COLOR[dataStatus];
 
   return (
-    <header className="topbar">
+    <header className="topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
       <div className="brand">
         <div className="brand-mark">
           <svg width={20} height={20} viewBox="0 0 20 20">
@@ -49,7 +50,7 @@ export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: Top
       </div>
 
       {primaryTicker && (
-        <div className="top-ticker">
+        <div className="top-ticker" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <div className="tt-code">
             {primaryTicker.code}
             <span className="tt-mkt">{primaryTicker.market}</span>
@@ -64,11 +65,13 @@ export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: Top
         </div>
       )}
 
-      <div className="top-controls">
+      <div className="top-controls" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <div className="status-dot" style={{ background: dotColor, boxShadow: `0 0 0 0 ${dotColor}` }} title={STATUS_LABEL[dataStatus]} />
         <span className="status-text" style={{ color: dotColor }}>{STATUS_LABEL[dataStatus]}</span>
         <span className="clock">{marketTime} JST</span>
       </div>
+
+      <WindowControls />
     </header>
   );
 }

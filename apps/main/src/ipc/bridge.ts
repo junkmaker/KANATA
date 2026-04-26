@@ -1,4 +1,4 @@
-import { ipcMain, shell, app } from 'electron';
+import { ipcMain, shell, app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
 import { getBackendUrl, getSidecarStatus } from '../sidecar/pythonSidecar.js';
 import { IPC_CHANNELS } from './channels.js';
@@ -16,4 +16,18 @@ export function registerIpcHandlers(): void {
     await shell.openPath(logsDir);
   });
   ipcMain.handle(IPC_CHANNELS.APP_VERSION, () => app.getVersion());
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, () => {
+    BrowserWindow.getFocusedWindow()?.minimize();
+  });
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, () => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return;
+    win.isMaximized() ? win.unmaximize() : win.maximize();
+  });
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, () => {
+    BrowserWindow.getFocusedWindow()?.close();
+  });
+  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, () => {
+    return BrowserWindow.getFocusedWindow()?.isMaximized() ?? false;
+  });
 }
