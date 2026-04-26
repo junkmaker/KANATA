@@ -50,7 +50,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ---
 
-## Phase 2 — バックエンド統合（優先度: 高）
+## Phase 2 — 完了済み ✓
 
 **ゴール**: 開発・本番の両環境で Python サイドカーが安定して起動し、レンダラーが IPC 経由でバックエンド URL を解決し、すべての API 呼び出しが `/api/*` に到達する。SQLite は Electron の `userData` に永続化される。
 
@@ -60,55 +60,55 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 **採用方針: 事前ポート確保（Node 側で `net.createServer().listen(0)` → ポート取得 → close → `--port <n>` で明示渡し）**
 
-- [ ] `reservePort()` ユーティリティを `apps/main/src/lib/port.ts` に実装
-- [ ] `pythonSidecar.ts` の起動引数に `--port <n>` を追加し、ログパースによるポート検出を廃止
-- [ ] `child.once('exit', ...)` で異常終了時に最大 2 回まで指数バックオフで再起動。限界超過時は IPC でレンダラーにエラー通知
-- [ ] Windows では `child.kill()` が届かない場合があるため、`taskkill /pid <pid> /T /F` をフォールバックとして追加（`process.platform === 'win32'` 分岐）
-- [ ] ヘルスチェック待機: `startPythonSidecar` の解決条件を「ポート取得」＋「`GET /api/health` が 200」まで待つ（タイムアウト 20s）
-- [ ] 軽量ロガーを `apps/main/src/lib/logger.ts` に導入: dev は stdout、prod は `userData/logs/main.log` / `userData/logs/sidecar.log`
+- [x] `reservePort()` ユーティリティを `apps/main/src/lib/port.ts` に実装
+- [x] `pythonSidecar.ts` の起動引数に `--port <n>` を追加し、ログパースによるポート検出を廃止
+- [x] `child.once('exit', ...)` で異常終了時に最大 2 回まで指数バックオフで再起動。限界超過時は IPC でレンダラーにエラー通知
+- [x] Windows では `child.kill()` が届かない場合があるため、`taskkill /pid <pid> /T /F` をフォールバックとして追加（`process.platform === 'win32'` 分岐）
+- [x] ヘルスチェック待機: `startPythonSidecar` の解決条件を「ポート取得」＋「`GET /api/health` が 200」まで待つ（タイムアウト 20s）
+- [x] 軽量ロガーを `apps/main/src/lib/logger.ts` に導入: dev は stdout、prod は `userData/logs/main.log` / `userData/logs/sidecar.log`
 
 ### 2.2 CORS の動的ポート対応 (`backend/src/main.py`)
 
-現状（2026-04-25）: `localhost:5173` / `127.0.0.1:5173` を追加済み、`allow_origin_regex=r"file://.*"` を設定済み。`localhost:3000` は残存。`KANATA_ALLOWED_ORIGINS` 環境変数化は未実施。
+現状（2026-04-26）: `KANATA_ALLOWED_ORIGINS` 環境変数化完了、`localhost:3000` 削除済み。
 
 - [x] `allow_origin_regex` で `file://` を許可（prod の file:// オリジン対応）
 - [x] `localhost:5173` / `127.0.0.1:5173` を追加（Vite dev server 対応）
-- [ ] 環境変数 `KANATA_ALLOWED_ORIGINS` からオリジンを取得する形に変更
-- [ ] サイドカー起動時の `env` に `KANATA_ALLOWED_ORIGINS` を渡す（`pythonSidecar.ts`）
-- [ ] 旧 `localhost:3000` 参照をコード・ドキュメントから削除
+- [x] 環境変数 `KANATA_ALLOWED_ORIGINS` からオリジンを取得する形に変更
+- [x] サイドカー起動時の `env` に `KANATA_ALLOWED_ORIGINS` を渡す（`pythonSidecar.ts`）
+- [x] 旧 `localhost:3000` 参照をコード・ドキュメントから削除
 
 ### 2.3 SQLite を Electron userData に配置
 
-現状（2026-04-25）: `dbPath = join(app.getPath('userData'), 'kanata.db').replace(/\\/g, '/')` → `sqlite:///${dbPath}` をサイドカー env に渡す実装済み。DB は `%APPDATA%/kanata/kanata.db` に生成される。
+現状（2026-04-26）: DB は `%APPDATA%/KANATA/kanata/kanata.db` に配置済み。`mkdirSync` で初回自動生成。バックアップは Phase 3 以降に持ち越し。
 
 - [x] `dbPath` を `app.getPath('userData')` + スラッシュ統一 → `sqlite:///` プレフィックス付与（`pythonSidecar.ts` に実装済み）
 - [x] `backend/src/db/database.py` のデフォルトパスは Python 単独起動時のみ使用（`DATABASE_URL` 環境変数を優先）
-- [ ] DB ディレクトリを `userData/kanata/kanata.db` に統一（現在は `userData/kanata.db` で直置き）
-- [ ] サイドカー起動前に `mkdirSync(dbDir, { recursive: true })` を Node 側で実行（`userData` 自体は常に存在するが、サブディレクトリ化する場合に必要）
+- [x] DB ディレクトリを `userData/kanata/kanata.db` に統一
+- [x] サイドカー起動前に `mkdirSync(dbDir, { recursive: true })` を Node 側で実行
 - [ ] 起動時に `kanata.db` → `userData/backups/kanata.db.<date>` へコピー（直近 7 世代保持）
 
 ### 2.4 バックエンド URL 解決の改善 (`apps/renderer/src/lib/backendUrl.ts`)
 
-- [ ] `getBackendUrl()` にリトライ機構を追加（200ms インターバル × 最大 10 回）
-- [ ] IPC チャンネル `kanata:backend-url-changed` でサイドカー再起動時にキャッシュを破棄
-- [ ] Electron 判定は `window.kanata` の存在で行う（現状通り）
+- [x] `getBackendUrl()` にリトライ機構を追加（200ms インターバル × 最大 10 回）
+- [x] `onBackendStatus` コールバック経由でサイドカー再起動時にキャッシュを破棄（`kanata:backend-status` push）
+- [x] Electron 判定は `window.kanata` の存在で行う（現状通り）
 
 ### 2.5 IPC ブリッジの拡張 (`apps/main/src/ipc/bridge.ts`, `apps/main/src/preload.ts`)
 
 追加するチャンネル:
 
 - [x] `PreloadApi` 型を `packages/shared-types/src/index.ts` に集約し main/renderer で型共有（`getBackendUrl / platform / appVersion` の型定義済み）
-- [ ] `kanata:backend-status` → `{ status: 'starting' | 'ready' | 'crashed' | 'offline', url: string | null, error?: string }`
-- [ ] `kanata:open-logs` → `shell.openPath(userData/logs/)` でエクスプローラを開く
+- [x] `kanata:backend-status` → `{ status: 'starting' | 'ready' | 'crashed' | 'offline', url: string | null, error?: string }`
+- [x] `kanata:open-logs` → `shell.openPath(userData/logs/)` でエクスプローラを開く
 - [ ] `kanata:app-version` → `app.getVersion()` を返す（prod では `npm_package_version` が取れないため IPC 経由に切替）
-- [ ] `webContents.send` でサイドカー状態変化を push → レンダラーの `useEffect` で購読
+- [x] `webContents.send` でサイドカー状態変化を push → レンダラーの `useEffect` で購読
 
 ### 2.6 フロントエンド API クライアントの完全移行
 
 - [x] 旧 `frontend/` ディレクトリは削除済み。`apps/renderer/` に完全移行完了
 - [x] `useWatchlists` に `status: 'loading' | 'ready' | 'offline'` フォールバック実装済み
-- [ ] `useChartData` / `useDebouncedSearch` がハードコード URL を使っていないか全文 grep で確認
-- [ ] タイムアウト統一: `AbortSignal.timeout(10_000)` を `unwrap()` ラッパに組み込む
+- [x] `useChartData` / `useDebouncedSearch` がハードコード URL を使っていないか全文 grep で確認済み
+- [x] タイムアウト統一: `AbortSignal.timeout(10_000)` を `watchlistApi.ts` / `api.ts` 全 fetch に適用
 - [ ] サイドカーオフライン時のフォールバック UX を全 API 共通化（`useChartData` は未対応）
 
 ### 2.7 better-sqlite3 実装の去就判断 (`apps/main/src/db/database.ts`)
@@ -117,16 +117,22 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 **採用方針: Python を正として better-sqlite3 を削除**
 
-- [ ] `apps/main/src/db/database.ts` を `_unused/` へ退避（または削除）
-- [ ] `better-sqlite3` / `@types/better-sqlite3` を `apps/main/package.json` から除去
-- [ ] `postinstall: electron-builder install-app-deps` の必要性を再評価
+- [x] `apps/main/src/db/database.ts` を `_unused/` へ退避
+- [x] `better-sqlite3` / `@types/better-sqlite3` を `apps/main/package.json` から除去
+- [x] `postinstall: electron-builder install-app-deps` を削除（ネイティブモジュールなし）
 
-### Phase 2 完了条件
+### Phase 2 完了条件（2026-04-26 達成）
 
 - `npm run dev` 起動時、`GET /api/health` / `GET /api/watchlists` / `GET /api/search?q=ap` / `GET /api/quotes/AAPL?timeframe=1D` が成功
 - サイドカーを強制終了 → 自動再起動またはレンダラーにエラー通知
 - DB ファイルが `%APPDATA%/KANATA/kanata/kanata.db` に生成され、再起動後もウォッチリストが残る
 - CORS プリフライトが通り、Console にエラー無し
+
+**解決した問題:**
+- ポート検出がログ正規表現頼り → `reservePort()` で事前確保し `--port <N>` で明示渡し（2026-04-26, commit `ef836f6`）
+- サイドカークラッシュ時に無言で停止 → 最大 2 回の指数バックオフ再起動 + `kanata:backend-status` push 通知（2026-04-26）
+- `better-sqlite3` と Python SQLAlchemy が watchlists テーブルを二重管理 → `database.ts` を `_unused/` に退避し Python 一本化（2026-04-26）
+- 全 fetch にタイムアウトなし → `AbortSignal.timeout(10_000)` を `watchlistApi.ts` / `api.ts` 全箇所に適用（2026-04-26）
 
 ---
 
@@ -178,8 +184,7 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 ### 3.4 単一インスタンス制約
 
-- [ ] `app.requestSingleInstanceLock()` をメインプロセス冒頭に追加（ポート競合・DB ロック回避）
-  - 現状: `apps/main/src/index.ts` に未実装
+- [x] `app.requestSingleInstanceLock()` をメインプロセス冒頭に追加（ポート競合・DB ロック回避）（Phase 2 で先行実装）
 
 ### 3.5 ログと診断
 
