@@ -1,17 +1,35 @@
 import { app } from 'electron';
-import { createWriteStream, mkdirSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WriteStream } from 'node:fs';
 
 type Level = 'info' | 'warn' | 'error';
 
-function makeWriter(name: string): WriteStream {
-  const logDir = join(app.getPath('userData'), 'logs');
-  mkdirSync(logDir, { recursive: true });
-  return createWriteStream(join(logDir, `${name}.log`), { flags: 'a' });
+const MAX_LOG_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_ROTATIONS = 3;
+
+function rotateLog(logPath: string): void {
+  if (!existsSync(logPath)) return;
+  if (statSync(logPath).size < MAX_LOG_BYTES) return;
+
+  for (let i = MAX_ROTATIONS; i >= 1; i--) {
+    const from = i === 1 ? logPath : `${logPath}.${i - 1}`;
+    const to   = `${logPath}.${i}`;
+    if (existsSync(from)) {
+      try { renameSync(from, to); } catch { /* ignore */ }
+    }
+  }
 }
 
-const mainStream: WriteStream | null = app.isPackaged ? makeWriter('main') : null;
+function makeWriter(name: string): WriteStream {
+  const logDir  = join(app.getPath('userData'), 'logs');
+  mkdirSync(logDir, { recursive: true });
+  const logPath = join(logDir, `${name}.log`);
+  rotateLog(logPath);
+  return createWriteStream(logPath, { flags: 'a' });
+}
+
+const mainStream:    WriteStream | null = app.isPackaged ? makeWriter('main')    : null;
 const sidecarStream: WriteStream | null = app.isPackaged ? makeWriter('sidecar') : null;
 
 function write(stream: WriteStream | null, level: Level, tag: string, msg: string): void {

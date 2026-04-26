@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, Menu, dialog } from 'electron';
 import { join } from 'node:path';
 import { startPythonSidecar, stopPythonSidecar, setStatusChangeCallback } from './sidecar/pythonSidecar.js';
 import type { BackendStatusPayload } from '@kanata/shared-types';
@@ -58,8 +58,41 @@ function createWindow(): void {
   });
 }
 
+function buildAppMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'ヘルプ(&H)',
+      submenu: [
+        {
+          label: 'ログフォルダを開く',
+          click: async () => {
+            const logsDir = join(app.getPath('userData'), 'logs');
+            await shell.openPath(logsDir);
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'バージョン情報',
+          click: () => {
+            void dialog.showMessageBox({
+              type: 'info',
+              title: 'KANATA Terminal',
+              message: `KANATA Terminal v${app.getVersion()}`,
+              detail: `Electron: ${process.versions.electron}\nNode: ${process.versions.node}`,
+              buttons: ['OK'],
+            });
+          },
+        },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 async function bootstrap(): Promise<void> {
   registerIpcHandlers();
+  buildAppMenu();
 
   setStatusChangeCallback((status, url) => {
     notifySidecarStatus({ status, url });
