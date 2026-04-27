@@ -17,6 +17,9 @@ def to_yf_symbol(symbol: str) -> str:
 
 
 def fetch_ohlcv(symbol: str, timeframe: str) -> list[dict]:
+    if not symbol.isascii():
+        return []
+
     yf_symbol = to_yf_symbol(symbol)
     yf_interval, yf_period, _ = INTERVAL_MAP.get(timeframe, ("1d", "5y", 3600))
 
