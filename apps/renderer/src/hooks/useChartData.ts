@@ -43,7 +43,13 @@ export function useChartData(symbols: string[], timeframe: string): UseChartData
       setErrors(errs);
 
       const allFailed = symbols.every(s => errs[s]);
-      setStatus(allFailed ? 'error' : Object.keys(results).length > 0 ? 'ready' : 'error');
+      if (!allFailed) {
+        setStatus(Object.keys(results).length > 0 ? 'ready' : 'error');
+      } else if (symbols.every(s => errs[s]?.startsWith('404'))) {
+        setStatus('synthetic');
+      } else {
+        setStatus('error');
+      }
     };
 
     fetchAll();

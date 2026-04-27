@@ -8,6 +8,11 @@ function inferMarket(sym: string): 'JP' | 'US' {
   return JP_CODE_RE.test(sym.trim()) ? 'JP' : 'US';
 }
 
+function isValidRawSymbol(sym: string, market: 'JP' | 'US'): boolean {
+  if (market === 'JP') return /^\d{4}$/.test(sym);
+  return /^[A-Z]{1,6}$/.test(sym);
+}
+
 interface AddSymbolFormProps {
   activeListId: number | null;
   existingSymbols: Set<string>;
@@ -40,6 +45,14 @@ export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }
     const sym = target?.code ?? trimmed;
     const market = target?.market ?? inferMarket(trimmed);
     const displayName = target?.name;
+
+    if (!target) {
+      const mkt = inferMarket(trimmed) as 'JP' | 'US';
+      if (!isValidRawSymbol(trimmed, mkt)) {
+        setLocalError('有効な銘柄コードを入力してください（例: 7203, AAPL）');
+        return;
+      }
+    }
 
     if (existingSymbols.has(sym)) {
       setLocalError(`${sym} は既にリストにあります`);
