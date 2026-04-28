@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppState, OHLCBar, Ticker, Watchlist } from '../../types';
+import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
+import { fetchFundamentals } from '../../lib/api';
 import { WatchlistSelector } from './WatchlistSelector';
 import { AddSymbolForm } from './AddSymbolForm';
 
@@ -40,6 +41,7 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   const [q, setQ] = useState('');
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [editing, setEditing] = useState(false);
+  const [fetchedFin, setFetchedFin] = useState<FinMetrics | null>(null);
 
   // Source list for the visible watchlist rows (the active list's members)
   const visibleTickers = useMemo(() => {
@@ -57,6 +59,21 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   useEffect(() => {
     if (watchlist.status !== 'ready') setEditing(false);
   }, [watchlist.status]);
+
+  // Fetch real fundamentals for non-preset symbols (those using FALLBACK_FIN where mcap === '—')
+  const primaryTicker = tickers.find(t => t.code === state.selected[0]);
+  useEffect(() => {
+    if (!primaryTicker || primaryTicker.fin.mcap !== '—') {
+      setFetchedFin(null);
+      return;
+    }
+    setFetchedFin(null);
+    let cancelled = false;
+    fetchFundamentals(primaryTicker.code)
+      .then(fin => { if (!cancelled) setFetchedFin(fin); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [primaryTicker?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (code: string) => {
     setState(s => {
@@ -82,10 +99,10 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   };
 
   const primary = state.selected[0];
-  const primaryTicker = tickers.find(t => t.code === primary);
   const primarySeries = data[primary];
   const last = primarySeries?.[primarySeries.length - 1];
   const prev = primarySeries?.[primarySeries.length - 2];
+  const displayFin = fetchedFin ?? primaryTicker?.fin;
 
   return (
     <aside className="panel panel-right">
@@ -197,19 +214,19 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
       </div>
 
 
-      {primaryTicker && last && prev && (
+      {primaryTicker && last && prev && displayFin && (
         <div className="section fundamentals">
           <div className="section-head">
             <span>FUNDAMENTALS</span>
             <span className="hint">{primaryTicker.code}</span>
           </div>
           <div className="fund-grid">
-            <Metric label="ROE" value={primaryTicker.fin.roe.toFixed(1) + '%'} color="var(--lime)" />
-            <Metric label="ROIC" value={primaryTicker.fin.roic.toFixed(1) + '%'} color="var(--teal)" />
-            <Metric label="PER" value={primaryTicker.fin.per.toFixed(1) + '×'} color="var(--amber)" />
-            <Metric label="PBR" value={primaryTicker.fin.pbr.toFixed(2) + '×'} />
-            <Metric label="DIV" value={primaryTicker.fin.div.toFixed(1) + '%'} />
-            <Metric label="MCAP" value={primaryTicker.fin.mcap} />
+            <Metric label="ROE" value={displayFin.roe.toFixed(1) + '%'} color="var(--lime)" />
+            <Metric label="ROIC" value={displayFin.roic.toFixed(1) + '%'} color="var(--teal)" />
+            <Metric label="PER" value={displayFin.per.toFixed(1) + '×'} color="var(--amber)" />
+            <Metric label="PBR" value={displayFin.pbr.toFixed(2) + '×'} />
+            <Metric label="DIV" value={displayFin.div.toFixed(1) + '%'} />
+            <Metric label="MCAP" value={displayFin.mcap} />
           </div>
           <div className="sector">
             <span className="label">SECTOR</span>

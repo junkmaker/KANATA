@@ -1,9 +1,18 @@
-import type { OHLCBar } from '../types';
+import type { FinMetrics, OHLCBar } from '../types';
 import { getBackendUrl } from './backendUrl';
 
 export async function fetchQuotes(symbol: string, timeframe: string): Promise<OHLCBar[]> {
   const base = await getBackendUrl();
   const res = await fetch(`${base}/api/quotes/${symbol}?timeframe=${timeframe}`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchFundamentals(symbol: string): Promise<FinMetrics> {
+  const base = await getBackendUrl();
+  const res = await fetch(`${base}/api/fundamentals/${symbol}`, {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
