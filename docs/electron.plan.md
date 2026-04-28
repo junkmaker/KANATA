@@ -173,7 +173,6 @@ Python (FastAPI) バックエンドをサイドカーとして起動し、React 
 
 - [x] 初期化は既存の `backend/src/db/init_db.py`（`create_all` + seed）でカバー（変更なし）
 - [ ] Alembic の導入は Phase 6 以降に切り出し
-- [ ] Docker 版からの引き継ぎ手順を README に記載: `docker cp kanata-db:/app/data/kanata.db ./`
 
 ### 3.4 単一インスタンス制約
 

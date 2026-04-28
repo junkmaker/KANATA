@@ -4,32 +4,31 @@
 
 ```mermaid
 graph TB
-    subgraph Host["WSL2 Host"]
-        subgraph DC["Docker Compose"]
-            subgraph FE["Frontend Container (Node 20)"]
-                VITE["Vite Dev Server\n:3000"]
-            end
-            subgraph BE["Backend Container (Python 3.12)"]
-                UVICORN["Uvicorn / FastAPI\n:8000"]
-            end
-            subgraph VOL["Named Volume"]
-                SQLITE["SQLite\nkanata.db"]
-            end
+    subgraph Electron["Electron App (Windows)"]
+        subgraph MAIN["Main Process"]
+            IDX["index.ts\nBrowserWindow"]
+            SIDECAR["pythonSidecar.ts\nサブプロセス管理"]
+            IPC["ipc/bridge.ts\nipcMain handler"]
+            PRE["preload.ts\ncontextBridge"]
         end
-        subgraph FS["Host Filesystem"]
-            SRC_FE["./frontend/src"]
-            SRC_BE["./backend/src"]
+        subgraph RENDERER["Renderer Process"]
+            VITE["React + Vite\nrenderer"]
+        end
+        subgraph SIDECARPROC["Python Sidecar (subprocess)"]
+            UVICORN["Uvicorn / FastAPI\n動的ポート"]
+            SQLITE["SQLite\n%APPDATA%/kanata/kanata.db"]
         end
     end
     EXT["yfinance (PyPI)\n外部株価データ"]
 
-    VITE -- "HTTP fetch\nVITE_API_URL" --> UVICORN
+    IDX -- "spawn" --> SIDECAR
+    SIDECAR -- "起動 --port 0" --> UVICORN
+    IDX -- "register" --> IPC
+    PRE -- "contextBridge" --> VITE
+    VITE -- "IPC getBackendUrl()" --> IPC
+    VITE -- "HTTP fetch\n動的ポート" --> UVICORN
     UVICORN -- "SQLAlchemy 2.x" --> SQLITE
     UVICORN -- "pip request" --> EXT
-    SRC_FE -- "bind mount\nホットリロード" --> VITE
-    SRC_BE -- "bind mount\nホットリロード" --> UVICORN
-
-    Browser["Browser\nlocalhost:3000"] -- "HTTP" --> VITE
 ```
 
 ---
@@ -259,11 +258,10 @@ graph LR
 
 | 項目 | 値 |
 |------|-----|
-| Frontend | React 18 + TypeScript + Vite / Node 20 |
-| Backend | FastAPI + SQLAlchemy 2.x / Python 3.12 |
-| DB | SQLite（Docker Named Volume `kanata-db`） |
+| Electron | v28 / Windows ネイティブアプリ |
+| Frontend | React 18 + TypeScript + Vite / Node 20（Renderer Process）|
+| Backend | FastAPI + SQLAlchemy 2.x / Python 3.12（Sidecar subprocess）|
+| DB | SQLite（`%APPDATA%/kanata/kanata.db`）|
 | 外部データ | yfinance（pip）|
-| コンテナ化 | Docker Compose（開発モード：bind mount + ホットリロード） |
-| WSL2 監視 | `CHOKIDAR_USEPOLLING=true` + Vite `usePolling` |
 | 認証 | なし（`user_id = "local"` 固定）|
 | キャッシュ | プロセス内メモリ TTLCache（Redis 未使用）|
