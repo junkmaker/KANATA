@@ -76,7 +76,7 @@ TICKERS.forEach(t => {
   DATA[t.code] = genSeries({ seed: t.seed, bars: 1500, start: t.start, vol: t.vol, drift: t.drift, base: t.base });
 });
 
-function genFin(seed: number, baseROE: number, baseROIC: number, basePER: number): FinBar[] {
+export function genFin(seed: number, baseROE: number, baseROIC: number, basePER: number): FinBar[] {
   const r = rand(seed + 100);
   const out: FinBar[] = [];
   const now = Date.now();
