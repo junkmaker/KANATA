@@ -125,16 +125,17 @@ export function App() {
     return d;
   }, [state.timeframe, displayTickers]);
 
-  // Real data for selected tickers from backend
-  const { realData, status } = useChartData(state.selected, state.timeframe);
+  // Real data for all watchlist tickers from backend (keeps prices consistent regardless of selection)
+  const allSymbols = useMemo(() => displayTickers.map(t => t.code), [displayTickers]);
+  const { realData, status } = useChartData(allSymbols, state.timeframe);
 
   const data = useMemo(() => {
     const merged = { ...syntheticData };
-    state.selected.forEach(sym => {
+    Object.keys(realData).forEach(sym => {
       if (realData[sym]?.length) merged[sym] = realData[sym];
     });
     return merged;
-  }, [syntheticData, realData, state.selected]);
+  }, [syntheticData, realData]);
 
   useEffect(() => {
     try { localStorage.setItem('kanata.state', JSON.stringify(state)); } catch { /* noop */ }
