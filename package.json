@@ -23,6 +23,7 @@
   },
   "build": {
     "appId": "com.kanata.terminal",
+    "forceCodeSigning": false,
     "productName": "KANATA Terminal",
     "copyright": "Copyright 2026 KANATA",
     "directories": {
@@ -50,8 +51,7 @@
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "asInvoker",
-      "signAndEditExecutable": false
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,

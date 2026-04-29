@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Python resources
+        id: cache-resources
+        uses: actions/cache@v4
+        with:
+          path: |
+            resources/python
+            resources/backend
+          key: resources-py3.12.9-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            resources-py3.12.9-
+
+      - name: Prepare Python distribution
+        if: steps.cache-resources.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File scripts/prepare-python-dist.ps1
+
+      - name: Build Electron app
+        run: npm run build
+
+      - name: Package NSIS installer
+        # WIN_CSC_LINK が設定されている場合は Authenticode 署名も実行される
+        # Secrets 未設定時は署名スキップ（forceCodeSigning: false）
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Get version from package.json
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Find installer file
+        id: installer
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem release -Filter "*.exe" | Select-Object -First 1
+          if (-not $file) { throw "NSIS installer (.exe) not found in release/" }
+          echo "path=$($file.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($file.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "KANATA Terminal v${{ steps.version.outputs.version }}"
+          body: |
+            ## KANATA Terminal v${{ steps.version.outputs.version }}
+
+            ### インストール方法
+            1. `${{ steps.installer.outputs.name }}` をダウンロード
+            2. インストーラを実行してセットアップを完了
+            3. デスクトップまたはスタートメニューの「KANATA Terminal」から起動
+
+            > Windows Defender SmartScreen の警告が表示される場合は「詳細情報」→「実行」を選択してください（コード署名証明書が設定されていない場合）
+          files: ${{ steps.installer.outputs.path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
