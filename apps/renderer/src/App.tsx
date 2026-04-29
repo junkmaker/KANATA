@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { AppState, OHLCBar } from './types';
-import { TICKERS, TF, retime } from './lib/data';
+import { TF, retime } from './lib/data';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
@@ -16,7 +16,7 @@ import './styles/globals.css';
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
 
 const DEFAULT_STATE: AppState = {
-  selected: ['AAPL'],
+  selected: [],
   timeframe: '1D',
   compareMode: 'percent',
   activeTool: 'pan',
@@ -108,9 +108,8 @@ export function App() {
     }
   }, [activeList]);
 
-  // Display tickers come from the active watchlist when ready; otherwise full preset
   const displayTickers = useMemo(() => {
-    if (wl.status === 'offline') return TICKERS;
+    if (wl.status === 'offline') return [];
     return watchlistToTickers(activeList);
   }, [wl.status, activeList]);
 

@@ -15,14 +15,14 @@ interface TopBarProps {
 }
 
 const STATUS_LABEL: Record<DataStatus, string> = {
-  synthetic: 'DEMO',
+  idle: '—',
   loading: 'LOADING',
   ready: 'LIVE',
   error: 'ERROR',
 };
 
 const STATUS_COLOR: Record<DataStatus, string> = {
-  synthetic: 'var(--muted)',
+  idle: 'var(--muted)',
   loading: 'var(--amber)',
   ready: 'var(--bull)',
   error: 'var(--bear)',

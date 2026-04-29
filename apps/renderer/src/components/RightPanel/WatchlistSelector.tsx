@@ -69,7 +69,7 @@ export function WatchlistSelector({
           disabled={status !== 'ready' || watchlists.length === 0}
         >
           {status === 'loading' && <option value="">Loading…</option>}
-          {status === 'offline' && <option value="">Offline (preset)</option>}
+          {status === 'offline' && <option value="">Offline</option>}
           {watchlists.map(w => (
             <option key={w.id} value={w.id}>
               {w.name} ({w.items.length})

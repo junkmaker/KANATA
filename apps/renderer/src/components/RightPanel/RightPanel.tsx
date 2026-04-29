@@ -60,18 +60,13 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
     if (watchlist.status !== 'ready') setEditing(false);
   }, [watchlist.status]);
 
-  // Fetch real fundamentals for non-preset symbols (those using FALLBACK_FIN where mcap === '—')
   const primaryTicker = tickers.find(t => t.code === state.selected[0]);
   useEffect(() => {
-    if (!primaryTicker || primaryTicker.fin.mcap !== '—') {
-      setFetchedFin(null);
-      return;
-    }
-    setFetchedFin(null);
+    if (!primaryTicker) { setFetchedFin(null); return; }
     let cancelled = false;
     fetchFundamentals(primaryTicker.code)
       .then(fin => { if (!cancelled) setFetchedFin(fin); })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setFetchedFin(null); });
     return () => { cancelled = true; };
   }, [primaryTicker?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 

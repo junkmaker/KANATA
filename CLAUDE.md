@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 言語
+
+ユーザーへの応答、コメント、コミットメッセージなどユーザーが読むものは日本語を使用すること。
+
 ## プロジェクト概要
 
 KANATA (Karte for Analytical Navigation And Technical Analysis) は TradingView ライクな株式チャート **Windows ネイティブ Electron アプリ**。Docker/WSL2 構成から移行済み。Python FastAPI バックエンドをサイドカープロセスとして内包し、React + Vite レンダラーと IPC 経由で接続する。実装計画は [docs/electron.plan.md](docs/electron.plan.md) を参照（Phase 1 完了・Phase 2 進行中）。
@@ -85,6 +89,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 ```
 
 ポイントは **合成データと実データの二層構造**：
+
 - `lib/data.ts` が 15 銘柄分の合成 OHLC を生成（ウォッチリストのスパークライン、API 失敗時フォールバック、比較表示に常時使用）
 - `useChartData` が `state.selected` の銘柄だけをバックエンドから取得
 - `App.tsx` で `realData[sym]` があれば `syntheticData[sym]` を上書きしてマージ
