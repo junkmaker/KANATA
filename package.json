@@ -1,6 +1,6 @@
 {
   "name": "kanata",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "KANATA Terminal - Windows native Electron edition",
   "main": "./out/main/index.js",
@@ -38,18 +38,34 @@
       {
         "from": "resources/backend",
         "to": "backend",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!**/tests/**"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/tests/**"
+        ]
       },
       {
         "from": "resources/python",
         "to": "python",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
       }
     ],
     "asar": true,
     "beforeBuild": "scripts/check-resources.cjs",
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker"
     },
