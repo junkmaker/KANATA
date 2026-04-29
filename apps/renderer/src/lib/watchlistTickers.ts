@@ -1,5 +1,5 @@
 import type { OHLCBar, Ticker, Watchlist, WatchlistItem } from '../types';
-import { DATA, TICKERS, genSeries } from './data';
+import { genSeries } from './data';
 
 const FALLBACK_FIN = { roe: 0, roic: 0, per: 0, pbr: 0, div: 0, mcap: '—' };
 
@@ -14,8 +14,6 @@ function inferCurrency(market: string): string {
 }
 
 export function itemToTicker(item: WatchlistItem): Ticker {
-  const known = TICKERS.find(t => t.code === item.symbol);
-  if (known) return known;
   const seed = hashSeed(item.symbol);
   return {
     code: item.symbol,
@@ -33,11 +31,10 @@ export function itemToTicker(item: WatchlistItem): Ticker {
 }
 
 export function watchlistToTickers(list: Watchlist | null | undefined): Ticker[] {
-  if (!list || list.items.length === 0) return TICKERS;
+  if (!list || list.items.length === 0) return [];
   return list.items.map(itemToTicker);
 }
 
 export function syntheticSeriesForTicker(t: Ticker): OHLCBar[] {
-  if (DATA[t.code]) return DATA[t.code];
   return genSeries({ seed: t.seed, bars: 1500, start: t.start, vol: t.vol, drift: t.drift, base: t.base });
 }

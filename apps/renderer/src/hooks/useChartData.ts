@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { OHLCBar } from '../types';
 import { fetchQuotes } from '../lib/api';
 
-export type DataStatus = 'synthetic' | 'loading' | 'ready' | 'error';
+export type DataStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 interface UseChartDataResult {
   realData: Record<string, OHLCBar[]>;
@@ -12,12 +12,15 @@ interface UseChartDataResult {
 
 export function useChartData(symbols: string[], timeframe: string): UseChartDataResult {
   const [realData, setRealData] = useState<Record<string, OHLCBar[]>>({});
-  const [status, setStatus] = useState<DataStatus>('synthetic');
+  const [status, setStatus] = useState<DataStatus>('idle');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const symbolsKey = symbols.join(',');
 
   useEffect(() => {
-    if (!symbols.length) return;
+    if (!symbols.length) {
+      setStatus('idle');
+      return;
+    }
     let cancelled = false;
 
     setStatus('loading');
@@ -46,7 +49,7 @@ export function useChartData(symbols: string[], timeframe: string): UseChartData
       if (!allFailed) {
         setStatus(Object.keys(results).length > 0 ? 'ready' : 'error');
       } else if (symbols.every(s => errs[s]?.startsWith('404'))) {
-        setStatus('synthetic');
+        setStatus('idle');
       } else {
         setStatus('error');
       }
