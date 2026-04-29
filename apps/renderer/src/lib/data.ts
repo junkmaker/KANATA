@@ -1,4 +1,4 @@
-import type { OHLCBar } from '../types';
+import type { FinBar, OHLCBar } from '../types';
 
 function rand(seed: number) {
   let s = seed >>> 0;
@@ -42,6 +42,24 @@ export function retime(series: OHLCBar[], tfMs: number): OHLCBar[] {
   const n = series.length;
   const now = Date.now();
   return series.map((b, i) => ({ ...b, t: now - (n - 1 - i) * tfMs }));
+}
+
+export function genFin(seed: number, baseRoe: number, baseRoic: number, basePer: number): FinBar[] {
+  const r = rand(seed + 9999);
+  const now = Date.now();
+  const quarterMs = 91 * 24 * 3600 * 1000;
+  const quarters = 20;
+  const out: FinBar[] = [];
+  let roe = baseRoe || 10;
+  let roic = baseRoic || 8;
+  let per = basePer || 15;
+  for (let i = 0; i < quarters; i++) {
+    roe = Math.max(0, roe + (r() - 0.5) * 4);
+    roic = Math.max(0, roic + (r() - 0.5) * 3);
+    per = Math.max(0, per + (r() - 0.5) * 6);
+    out.push({ t: now - (quarters - 1 - i) * quarterMs, roe, roic, per });
+  }
+  return out;
 }
 
 export const TF: Record<string, number> = {

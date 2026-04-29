@@ -1,8 +1,10 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import type { AppState, Ticker, OHLCBar, IndiData, YRange } from '../../types';
+import type { AppState, FinMetrics, Ticker, OHLCBar, IndiData, YRange } from '../../types';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice, fmtVol, fmtDate } from '../../lib/formatters';
 import { SMA, EMA, BOLL, STOCH, PSAR, ICHI, MACD, RSI } from '../../lib/indicators';
+import { genFin } from '../../lib/data';
+import { fetchFundamentals } from '../../lib/api';
 import { drawLine } from './subpanes/drawUtils';
 import { drawVolume } from './subpanes/drawVolume';
 import { drawStoch } from './subpanes/drawStoch';
@@ -48,6 +50,16 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const start = Math.max(0, end - 220);
     setView({ start, end });
   }, [primary, primaryData?.length]);
+
+  const [finMetrics, setFinMetrics] = useState<FinMetrics | null>(null);
+  useEffect(() => {
+    if (!state.showFinancial) { setFinMetrics(null); return; }
+    let cancelled = false;
+    fetchFundamentals(primary)
+      .then(m => { if (!cancelled) setFinMetrics(m); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [primary, state.showFinancial]);
 
   const PAD_L = 12, PAD_R = 72, PAD_T = 12;
   const VOL_H = state.showVolume ? 64 : 0;
@@ -314,6 +326,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     // Financial pane
     if (state.showFinancial) {
+      const tk = tickers.find(t => t.code === primary);
       const finW = priceW;
       const finY = finY0;
       ctx.strokeStyle = COLORS.grid;
@@ -323,7 +336,57 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.stroke();
       ctx.fillStyle = COLORS.muted;
       ctx.textAlign = 'left';
-      ctx.fillText('FUNDAMENTALS', PAD_L, finY - 6);
+      ctx.fillText('FUNDAMENTALS · last 20 quarters', PAD_L, finY - 6);
+
+      const src = finMetrics ?? (tk && tk.fin.roe ? tk.fin : null);
+      const seed = tk?.seed ?? 1;
+      const finData = src ? genFin(seed, src.roe, src.roic, src.per) : null;
+
+      if (finData) {
+        let rmin = Infinity, rmax = -Infinity;
+        let pmin = Infinity, pmax = -Infinity;
+        finData.forEach(f => {
+          if (state.financial.roe) { if (f.roe < rmin) rmin = f.roe; if (f.roe > rmax) rmax = f.roe; }
+          if (state.financial.roic) { if (f.roic < rmin) rmin = f.roic; if (f.roic > rmax) rmax = f.roic; }
+          if (state.financial.per) { if (f.per < pmin) pmin = f.per; if (f.per > pmax) pmax = f.per; }
+        });
+        if (rmin === Infinity) { rmin = 0; rmax = 1; }
+        if (pmin === Infinity) { pmin = 0; pmax = 1; }
+        const rSpan = rmax - rmin || 1;
+        const pSpan = pmax - pmin || 1;
+        rmin -= rSpan * 0.1; rmax += rSpan * 0.1;
+        pmin -= pSpan * 0.1; pmax += pSpan * 0.1;
+
+        const fx = (i: number) => PAD_L + (i / (finData.length - 1)) * finW;
+        const fyL = (v: number) => finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
+        const fyR = (v: number) => finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
+
+        ctx.fillStyle = COLORS.muted;
+        ctx.textAlign = 'right';
+        ctx.fillText(rmax.toFixed(1) + '%', PAD_L + finW + 56, finY + 12);
+        ctx.fillText(rmin.toFixed(1) + '%', PAD_L + finW + 56, finY + FIN_H - 8);
+
+        const drawFin = (ys: number[], color: string, dash?: number[]) => {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+          ctx.beginPath();
+          ys.forEach((y, i) => { if (i === 0) ctx.moveTo(fx(i), y); else ctx.lineTo(fx(i), y); });
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(fx(finData.length - 1), ys[ys.length - 1], 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        };
+        if (state.financial.roe) drawFin(finData.map(f => fyL(f.roe)), COLORS.lime);
+        if (state.financial.roic) drawFin(finData.map(f => fyL(f.roic)), COLORS.teal);
+        if (state.financial.per) drawFin(finData.map(f => fyR(f.per)), COLORS.amber, [4, 2]);
+      } else {
+        ctx.fillStyle = COLORS.muted;
+        ctx.textAlign = 'center';
+        ctx.fillText('No data available', PAD_L + finW / 2, finY + FIN_H / 2);
+      }
     }
 
     // X axis labels
@@ -333,7 +396,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     for (let i = view.start; i < safeEnd; i += tickStep) {
       ctx.fillText(fmtDate(primaryData[i].t, tf), xScale(i), xAxisY);
     }
-  }, [size, primaryData, view, state, indi, tickers, primary, priceW, priceH, volY0, stochY0, macdY0, rsiY0, finY0, VOL_H, STOCH_H, MACD_H, RSI_H, FIN_H, volMax, params]);
+  }, [size, primaryData, view, state, indi, tickers, primary, priceW, priceH, volY0, stochY0, macdY0, rsiY0, finY0, VOL_H, STOCH_H, MACD_H, RSI_H, FIN_H, volMax, params, finMetrics]);
 
   // Overlay: crosshair, drawings
   const [hover, setHover] = useState<{ sx: number; sy: number } | null>(null);
