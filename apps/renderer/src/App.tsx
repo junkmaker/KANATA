@@ -208,8 +208,32 @@ export function App() {
   const chgPct = last && prev ? (chg / prev.c) * 100 : 0;
   const up = chg >= 0;
 
-  if (!last) {
+  // Still fetching watchlists from backend
+  if (wl.status === 'loading') {
     return <div className="app"><div style={{ padding: 24 }}>Loading…</div></div>;
+  }
+
+  // Watchlist loaded but empty — render shell so user can add tickers
+  if (!last) {
+    return (
+      <div className="app">
+        <div className="main-grid">
+          <LeftPanel state={state} setState={setState} />
+          <div className="chart-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ padding: 24, opacity: 0.5 }}>ウォッチリストに銘柄を追加してください</div>
+          </div>
+          <div data-testid="watchlist">
+            <RightPanel
+              state={state}
+              setState={setState}
+              tickers={displayTickers}
+              data={data}
+              watchlist={watchlistController}
+            />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
