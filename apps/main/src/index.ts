@@ -29,6 +29,7 @@ function createWindow(): void {
     show: false,
     frame: false,
     autoHideMenuBar: true,
+    ...(isDev ? { icon: join(app.getAppPath(), 'build/icon.ico') } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
