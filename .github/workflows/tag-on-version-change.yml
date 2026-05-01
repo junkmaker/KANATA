@@ -18,6 +18,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # GH_PAT が必要: GITHUB_TOKEN で push したタグは他のワークフローをトリガーしないため
+          token: ${{ secrets.GH_PAT }}
 
       - name: Read version from package.json
         id: version
