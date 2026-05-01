@@ -330,19 +330,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const h = Math.max(1, Math.abs(yc - yo));
       const bodyW = Math.max(1, bw * 0.72);
       if (up) {
-        ctx.fillStyle = "oklch(0.82 0.13 150 / 0.30)";
         ctx.fillRect(
           Math.round(x - bodyW / 2),
           Math.round(top),
           Math.round(bodyW),
           Math.round(h),
-        );
-        ctx.strokeStyle = COLORS.bull;
-        ctx.strokeRect(
-          Math.round(x - bodyW / 2) + 0.5,
-          Math.round(top) + 0.5,
-          Math.round(bodyW) - 1,
-          Math.round(h) - 1,
         );
       } else {
         ctx.fillRect(
