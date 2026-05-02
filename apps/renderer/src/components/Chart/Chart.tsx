@@ -557,6 +557,36 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     startView?: typeof view;
   } | null>(null);
   const [tempDrawing, setTempDrawing] = useState<(typeof state.drawings)[0] | null>(null);
+  const [textInput, setTextInput] = useState<{
+    x: number;
+    y: number;
+    idx: number;
+    v: number;
+  } | null>(null);
+
+  const commitTextNote = (text: string) => {
+    if (text.trim() && textInput) {
+      setState((s) => ({
+        ...s,
+        drawings: [
+          ...s.drawings,
+          {
+            type: 'text',
+            idx: textInput.idx,
+            v: textInput.v,
+            text: text.trim(),
+            color: COLORS.accent,
+            ticker: primary,
+            id: Math.random(),
+          },
+        ],
+        activeTool: 'pan',
+      }));
+    } else {
+      setState((s) => ({ ...s, activeTool: 'pan' }));
+    }
+    setTextInput(null);
+  };
 
   const screenToData = useCallback(
     (sx: number, sy: number) => {
@@ -778,27 +808,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       setDragging({ type: 'drawing' });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'text') {
-      const txt = prompt('Annotation text:');
-      if (txt) {
-        setState((s) => ({
-          ...s,
-          drawings: [
-            ...s.drawings,
-            {
-              type: 'text',
-              idx,
-              v,
-              text: txt,
-              color: COLORS.accent,
-              ticker: primary,
-              id: Math.random(),
-            },
-          ],
-          activeTool: 'pan',
-        }));
-      } else {
-        setState((s) => ({ ...s, activeTool: 'pan' }));
-      }
+      const rect = e.currentTarget.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      setTextInput({ x: sx, y: sy, idx, v });
     }
   };
 
@@ -907,6 +920,40 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         onPointerUp={onPointerUp}
         onPointerLeave={() => setHover(null)}
       />
+      {textInput && (
+        <input
+          autoFocus
+          type="text"
+          defaultValue=""
+          placeholder="テキストを入力..."
+          style={{
+            position: 'absolute',
+            left: textInput.x,
+            top: textInput.y - 12,
+            zIndex: 10,
+            background: 'rgba(0,0,0,0.85)',
+            color: COLORS.accent,
+            border: `1px solid ${COLORS.accent}`,
+            borderRadius: 3,
+            padding: '2px 6px',
+            fontSize: 11,
+            fontFamily: '"JetBrains Mono", monospace',
+            outline: 'none',
+            minWidth: 120,
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              commitTextNote(e.currentTarget.value);
+            } else if (e.key === 'Escape') {
+              setState((s) => ({ ...s, activeTool: 'pan' }));
+              setTextInput(null);
+            }
+          }}
+          onBlur={(e) => {
+            commitTextNote(e.currentTarget.value);
+          }}
+        />
+      )}
       <ChartLegend
         state={state}
         hoverBar={hoverBar}
