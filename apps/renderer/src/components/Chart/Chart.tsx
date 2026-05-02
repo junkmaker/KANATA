@@ -563,6 +563,23 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     idx: number;
     v: number;
   } | null>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputReadyRef = useRef(false);
+
+  useEffect(() => {
+    if (!textInput) {
+      textInputReadyRef.current = false;
+      return;
+    }
+    const rafId = requestAnimationFrame(() => {
+      textInputRef.current?.focus();
+      textInputReadyRef.current = true;
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      textInputReadyRef.current = false;
+    };
+  }, [textInput]);
 
   const commitTextNote = (text: string) => {
     if (text.trim() && textInput) {
@@ -922,7 +939,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       />
       {textInput && (
         <input
-          autoFocus
+          ref={textInputRef}
           type="text"
           defaultValue=""
           placeholder="テキストを入力..."
@@ -950,6 +967,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
             }
           }}
           onBlur={(e) => {
+            if (!textInputReadyRef.current) return;
             commitTextNote(e.currentTarget.value);
           }}
         />
