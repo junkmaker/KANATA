@@ -473,10 +473,17 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         const fyL = (v: number) => finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
         const fyR = (v: number) => finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
 
-        ctx.fillStyle = COLORS.muted;
         ctx.textAlign = 'right';
-        ctx.fillText(rmax.toFixed(1) + '%', PAD_L + finW + 56, finY + 12);
-        ctx.fillText(rmin.toFixed(1) + '%', PAD_L + finW + 56, finY + FIN_H - 8);
+        if (state.financial.roe || state.financial.roic) {
+          ctx.fillStyle = COLORS.muted;
+          ctx.fillText(`${rmax.toFixed(1)}%`, PAD_L + finW + 56, finY + 14);
+          ctx.fillText(`${rmin.toFixed(1)}%`, PAD_L + finW + 56, finY + FIN_H - 14);
+        }
+        if (state.financial.per) {
+          ctx.fillStyle = COLORS.amber;
+          ctx.fillText(`${pmax.toFixed(1)}×`, PAD_L + finW + 56, finY + 26);
+          ctx.fillText(`${pmin.toFixed(1)}×`, PAD_L + finW + 56, finY + FIN_H - 2);
+        }
 
         const drawFin = (ys: number[], color: string, dash?: number[]) => {
           ctx.strokeStyle = color;
