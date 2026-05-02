@@ -1,10 +1,10 @@
-import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { get as httpGet } from 'node:http';
-import { app } from 'electron';
-import { join } from 'node:path';
+import { type ChildProcess, execSync, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
-import { reservePort } from '../lib/port.js';
+import { get as httpGet } from 'node:http';
+import { join } from 'node:path';
+import { app } from 'electron';
 import { sidecarLogger as log } from '../lib/logger.js';
+import { reservePort } from '../lib/port.js';
 
 const BACKEND_READY_TIMEOUT_MS = 20_000;
 const MAX_BACKUPS = 7;
@@ -31,7 +31,11 @@ function backupDatabase(dbPath: string): void {
     .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
   for (const file of files.slice(MAX_BACKUPS)) {
-    try { unlinkSync(join(backupDir, file.name)); } catch { /* ignore */ }
+    try {
+      unlinkSync(join(backupDir, file.name));
+    } catch {
+      /* ignore */
+    }
   }
 }
 const MAX_RESTARTS = 2;
@@ -117,15 +121,18 @@ async function launchSidecar(): Promise<string> {
 
   backupDatabase(join(dbDir, 'kanata.db'));
 
-  const pythonHome = app.isPackaged
-    ? join(process.resourcesPath, 'python')
-    : undefined;
+  const pythonHome = app.isPackaged ? join(process.resourcesPath, 'python') : undefined;
 
   const args = [
-    '-m', 'uvicorn', 'src.main:app',
-    '--host', '127.0.0.1',
-    '--port', String(port),
-    '--log-level', 'info',
+    '-m',
+    'uvicorn',
+    'src.main:app',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--log-level',
+    'info',
   ];
 
   log.info(`Spawning ${python} ${args.join(' ')} (cwd=${backendDir})`);

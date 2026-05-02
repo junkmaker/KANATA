@@ -1,7 +1,7 @@
-import { app } from 'electron';
+import type { WriteStream } from 'node:fs';
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import type { WriteStream } from 'node:fs';
+import { app } from 'electron';
 
 type Level = 'info' | 'warn' | 'error';
 
@@ -14,22 +14,26 @@ function rotateLog(logPath: string): void {
 
   for (let i = MAX_ROTATIONS; i >= 1; i--) {
     const from = i === 1 ? logPath : `${logPath}.${i - 1}`;
-    const to   = `${logPath}.${i}`;
+    const to = `${logPath}.${i}`;
     if (existsSync(from)) {
-      try { renameSync(from, to); } catch { /* ignore */ }
+      try {
+        renameSync(from, to);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
 
 function makeWriter(name: string): WriteStream {
-  const logDir  = join(app.getPath('userData'), 'logs');
+  const logDir = join(app.getPath('userData'), 'logs');
   mkdirSync(logDir, { recursive: true });
   const logPath = join(logDir, `${name}.log`);
   rotateLog(logPath);
   return createWriteStream(logPath, { flags: 'a' });
 }
 
-const mainStream:    WriteStream | null = app.isPackaged ? makeWriter('main')    : null;
+const mainStream: WriteStream | null = app.isPackaged ? makeWriter('main') : null;
 const sidecarStream: WriteStream | null = app.isPackaged ? makeWriter('sidecar') : null;
 
 function write(stream: WriteStream | null, level: Level, tag: string, msg: string): void {
@@ -39,13 +43,13 @@ function write(stream: WriteStream | null, level: Level, tag: string, msg: strin
 }
 
 export const mainLogger = {
-  info:  (msg: string) => write(mainStream,    'info',  'main',    msg),
-  warn:  (msg: string) => write(mainStream,    'warn',  'main',    msg),
-  error: (msg: string) => write(mainStream,    'error', 'main',    msg),
+  info: (msg: string) => write(mainStream, 'info', 'main', msg),
+  warn: (msg: string) => write(mainStream, 'warn', 'main', msg),
+  error: (msg: string) => write(mainStream, 'error', 'main', msg),
 };
 
 export const sidecarLogger = {
-  info:  (msg: string) => write(sidecarStream, 'info',  'sidecar', msg),
-  warn:  (msg: string) => write(sidecarStream, 'warn',  'sidecar', msg),
+  info: (msg: string) => write(sidecarStream, 'info', 'sidecar', msg),
+  warn: (msg: string) => write(sidecarStream, 'warn', 'sidecar', msg),
   error: (msg: string) => write(sidecarStream, 'error', 'sidecar', msg),
 };

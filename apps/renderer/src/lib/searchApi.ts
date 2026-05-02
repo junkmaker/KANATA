@@ -1,15 +1,9 @@
 import type { ApiResponse, SearchResult } from '../types';
 import { getBackendUrl } from './backendUrl';
 
-export async function searchSymbols(
-  q: string,
-  signal?: AbortSignal,
-): Promise<SearchResult[]> {
+export async function searchSymbols(q: string, signal?: AbortSignal): Promise<SearchResult[]> {
   const base = await getBackendUrl();
-  const res = await fetch(
-    `${base}/api/search?q=${encodeURIComponent(q)}`,
-    { signal },
-  );
+  const res = await fetch(`${base}/api/search?q=${encodeURIComponent(q)}`, { signal });
   if (!res.ok) {
     throw new Error(`Search failed: ${res.status}`);
   }

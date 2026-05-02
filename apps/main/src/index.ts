@@ -1,8 +1,12 @@
-import { app, BrowserWindow, shell, Menu, dialog } from 'electron';
 import { join } from 'node:path';
-import { startPythonSidecar, stopPythonSidecar, setStatusChangeCallback } from './sidecar/pythonSidecar.js';
 import type { BackendStatusPayload } from '@kanata/shared-types';
-import { registerIpcHandlers, IPC_CHANNELS } from './ipc/bridge.js';
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { IPC_CHANNELS, registerIpcHandlers } from './ipc/bridge.js';
+import {
+  setStatusChangeCallback,
+  startPythonSidecar,
+  stopPythonSidecar,
+} from './sidecar/pythonSidecar.js';
 
 const isDev = !app.isPackaged;
 
@@ -71,9 +75,7 @@ function buildAppMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'ファイル(&F)',
-      submenu: [
-        { role: 'quit', label: '終了' },
-      ],
+      submenu: [{ role: 'quit', label: '終了' }],
     },
     {
       label: '表示(&V)',
@@ -144,10 +146,13 @@ app.on('second-instance', () => {
   }
 });
 
-app.whenReady().then(bootstrap).catch((err) => {
-  console.error('[main] bootstrap failed:', err);
-  app.quit();
-});
+app
+  .whenReady()
+  .then(bootstrap)
+  .catch((err) => {
+    console.error('[main] bootstrap failed:', err);
+    app.quit();
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

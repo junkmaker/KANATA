@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Watchlist } from '../types';
 import {
   addWatchlistItem,
   createWatchlist,
@@ -10,6 +9,7 @@ import {
   reorderWatchlists,
   updateWatchlist,
 } from '../lib/watchlistApi';
+import type { Watchlist } from '../types';
 
 export type WatchlistsStatus = 'loading' | 'ready' | 'offline';
 
@@ -24,7 +24,12 @@ interface UseWatchlistsResult {
   setDefault: (id: number) => Promise<Watchlist | null>;
   remove: (id: number) => Promise<boolean>;
   reorderLists: (ids: number[]) => Promise<void>;
-  addItem: (listId: number, symbol: string, market: string, displayName?: string) => Promise<Watchlist | null>;
+  addItem: (
+    listId: number,
+    symbol: string,
+    market: string,
+    displayName?: string,
+  ) => Promise<Watchlist | null>;
   removeItem: (listId: number, symbol: string) => Promise<Watchlist | null>;
   reorderItems: (listId: number, symbols: string[]) => Promise<Watchlist | null>;
 }
@@ -52,13 +57,13 @@ export function useWatchlists(): UseWatchlistsResult {
   }, [reload]);
 
   const replaceList = (updated: Watchlist) => {
-    setWatchlists(prev => prev.map(w => (w.id === updated.id ? updated : w)));
+    setWatchlists((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
   };
 
   const create = useCallback(async (name: string) => {
     try {
       const wl = await createWatchlist(name);
-      setWatchlists(prev => [...prev, wl]);
+      setWatchlists((prev) => [...prev, wl]);
       return wl;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'create failed');
@@ -80,7 +85,7 @@ export function useWatchlists(): UseWatchlistsResult {
   const setDefault = useCallback(async (id: number) => {
     try {
       const wl = await updateWatchlist(id, { is_default: true });
-      setWatchlists(prev => prev.map(w => ({ ...w, is_default: w.id === id ? 1 : 0 })));
+      setWatchlists((prev) => prev.map((w) => ({ ...w, is_default: w.id === id ? 1 : 0 })));
       return wl;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'setDefault failed');
@@ -91,7 +96,7 @@ export function useWatchlists(): UseWatchlistsResult {
   const remove = useCallback(async (id: number) => {
     try {
       await deleteWatchlist(id);
-      setWatchlists(prev => prev.filter(w => w.id !== id));
+      setWatchlists((prev) => prev.filter((w) => w.id !== id));
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'delete failed');

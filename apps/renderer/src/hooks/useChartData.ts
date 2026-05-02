@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import type { OHLCBar } from '../types';
+import { useEffect, useRef, useState } from 'react';
 import { fetchQuotes } from '../lib/api';
+import type { OHLCBar } from '../types';
 
 export type DataStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -42,13 +42,13 @@ export function useChartData(symbols: string[], timeframe: string): UseChartData
 
       if (cancelled) return;
 
-      setRealData(prev => ({ ...prev, ...results }));
+      setRealData((prev) => ({ ...prev, ...results }));
       setErrors(errs);
 
-      const allFailed = symbols.every(s => errs[s]);
+      const allFailed = symbols.every((s) => errs[s]);
       if (!allFailed) {
         setStatus(Object.keys(results).length > 0 ? 'ready' : 'error');
-      } else if (symbols.every(s => errs[s]?.startsWith('404'))) {
+      } else if (symbols.every((s) => errs[s]?.startsWith('404'))) {
         setStatus('idle');
       } else {
         setStatus('error');
@@ -56,7 +56,9 @@ export function useChartData(symbols: string[], timeframe: string): UseChartData
     };
 
     fetchAll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [symbolsKey, timeframe]);
 
   return { realData, status, errors };

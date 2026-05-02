@@ -8,8 +8,20 @@ function rand(seed: number) {
   };
 }
 
-export function genSeries({ seed, bars, start, vol, drift, base }: {
-  seed: number; bars: number; start: number; vol: number; drift: number; base: number;
+export function genSeries({
+  seed,
+  bars,
+  start,
+  vol,
+  drift,
+  base,
+}: {
+  seed: number;
+  bars: number;
+  start: number;
+  vol: number;
+  drift: number;
+  base: number;
 }): OHLCBar[] {
   const r = rand(seed);
   const out: OHLCBar[] = [];
@@ -21,16 +33,17 @@ export function genSeries({ seed, bars, start, vol, drift, base }: {
     const sigma = vol * o;
     const dr = drift * o;
     const moves = 4;
-    let hi = o, lo = o;
+    let hi = o,
+      lo = o;
     let p = o;
     for (let k = 0; k < moves; k++) {
-      const g = (r() + r() + r() - 1.5) * sigma / Math.sqrt(moves);
+      const g = ((r() + r() + r() - 1.5) * sigma) / Math.sqrt(moves);
       p = p + g + dr / moves;
       if (p > hi) hi = p;
       if (p < lo) lo = p;
     }
     const c = p;
-    const v = Math.round((base + r() * base * 1.2) * (1 + Math.abs(c - o) / o * 10));
+    const v = Math.round((base + r() * base * 1.2) * (1 + (Math.abs(c - o) / o) * 10));
     const t = now - (bars - 1 - i) * dayMs;
     out.push({ t, o, h: hi, l: lo, c, v });
     price = c;
@@ -70,4 +83,3 @@ export const TF: Record<string, number> = {
   '15m': 15 * 60 * 1000,
   '60m': 60 * 60 * 1000,
 };
-

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { app } from 'electron';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveBackendDir, resolvePythonExecutable } from '../sidecar/pythonSidecar.js';
 
 // vi.hoisted ensures this variable is available inside the vi.mock factory
@@ -12,7 +12,8 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 describe('resolveBackendDir', () => {
-  const originalResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const originalResourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
+    .resourcesPath;
 
   beforeEach(() => {
     existsSyncFn.mockReset();
@@ -46,7 +47,8 @@ describe('resolveBackendDir', () => {
 
 describe('resolvePythonExecutable', () => {
   const originalPlatform = process.platform;
-  const originalResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const originalResourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
+    .resourcesPath;
 
   beforeEach(() => {
     existsSyncFn.mockReset();

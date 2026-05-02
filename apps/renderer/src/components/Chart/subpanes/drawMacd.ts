@@ -1,23 +1,34 @@
 import { COLORS } from '../../../lib/colors';
-import type { MACDResult, MACDParams } from '../../../types';
-import type { SubPaneContext } from './types';
+import type { MACDParams, MACDResult } from '../../../types';
 import { drawLine } from './drawUtils';
+import type { SubPaneContext } from './types';
 
 export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDParams): void {
   const { ctx, padL, priceW, viewStart, viewEnd, bw, xScale, y0, height } = pane;
   const { macd: macdLine, signal: signalLine, histogram } = macd;
 
-  let min = Infinity, max = -Infinity;
+  let min = Infinity,
+    max = -Infinity;
   for (let i = viewStart; i < viewEnd; i++) {
-    if (macdLine[i] != null) { if (macdLine[i]! > max) max = macdLine[i]!; if (macdLine[i]! < min) min = macdLine[i]!; }
-    if (signalLine[i] != null) { if (signalLine[i]! > max) max = signalLine[i]!; if (signalLine[i]! < min) min = signalLine[i]!; }
-    if (histogram[i] != null) { if (histogram[i]! > max) max = histogram[i]!; if (histogram[i]! < min) min = histogram[i]!; }
+    if (macdLine[i] != null) {
+      if (macdLine[i]! > max) max = macdLine[i]!;
+      if (macdLine[i]! < min) min = macdLine[i]!;
+    }
+    if (signalLine[i] != null) {
+      if (signalLine[i]! > max) max = signalLine[i]!;
+      if (signalLine[i]! < min) min = signalLine[i]!;
+    }
+    if (histogram[i] != null) {
+      if (histogram[i]! > max) max = histogram[i]!;
+      if (histogram[i]! < min) min = histogram[i]!;
+    }
   }
   if (min === Infinity) return;
   if (max < 0) max = 0;
   if (min > 0) min = 0;
   const pad = (max - min) * 0.1 || 0.001;
-  min -= pad; max += pad;
+  min -= pad;
+  max += pad;
 
   const yScale = (v: number) => y0 + (1 - (v - min) / (max - min)) * (height - 4);
   const zeroY = yScale(0);
@@ -53,6 +64,19 @@ export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDPar
     ctx.fillRect(Math.round(x - bodyW / 2), Math.round(yTop), Math.round(bodyW), Math.round(barH));
   }
 
-  drawLine(ctx, xScale, macdLine.map(v => v == null ? null : yScale(v)), COLORS.accent, 1.25);
-  drawLine(ctx, xScale, signalLine.map(v => v == null ? null : yScale(v)), COLORS.amber, 1.25, [3, 2]);
+  drawLine(
+    ctx,
+    xScale,
+    macdLine.map((v) => (v == null ? null : yScale(v))),
+    COLORS.accent,
+    1.25,
+  );
+  drawLine(
+    ctx,
+    xScale,
+    signalLine.map((v) => (v == null ? null : yScale(v))),
+    COLORS.amber,
+    1.25,
+    [3, 2],
+  );
 }

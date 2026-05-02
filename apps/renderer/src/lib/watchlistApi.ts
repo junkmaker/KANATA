@@ -7,7 +7,9 @@ async function unwrap<T>(res: Response): Promise<T> {
     try {
       const body = await res.json();
       detail = body?.detail || body?.error || detail;
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
     throw new Error(detail);
   }
   const body = (await res.json()) as ApiResponse<T>;

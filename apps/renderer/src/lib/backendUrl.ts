@@ -12,7 +12,9 @@ async function resolveFromPreload(): Promise<string> {
     try {
       const url = await api.getBackendUrl();
       if (url) return url;
-    } catch { /* retry */ }
+    } catch {
+      /* retry */
+    }
     await new Promise<void>((r) => setTimeout(r, RETRY_INTERVAL_MS));
   }
   return FALLBACK_URL;

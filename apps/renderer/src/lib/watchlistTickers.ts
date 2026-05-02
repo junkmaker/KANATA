@@ -36,5 +36,12 @@ export function watchlistToTickers(list: Watchlist | null | undefined): Ticker[]
 }
 
 export function syntheticSeriesForTicker(t: Ticker): OHLCBar[] {
-  return genSeries({ seed: t.seed, bars: 1500, start: t.start, vol: t.vol, drift: t.drift, base: t.base });
+  return genSeries({
+    seed: t.seed,
+    bars: 1500,
+    start: t.start,
+    vol: t.vol,
+    drift: t.drift,
+    base: t.base,
+  });
 }

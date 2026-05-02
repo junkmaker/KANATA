@@ -1,7 +1,7 @@
 import { COLORS } from '../../../lib/colors';
 import type { RSIParams } from '../../../types';
-import type { SubPaneContext } from './types';
 import { drawLine } from './drawUtils';
+import type { SubPaneContext } from './types';
 
 export function drawRsi(pane: SubPaneContext, rsi: (number | null)[], params: RSIParams): void {
   const { ctx, padL, priceW, xScale, y0, height } = pane;
@@ -18,7 +18,7 @@ export function drawRsi(pane: SubPaneContext, rsi: (number | null)[], params: RS
   ctx.fillStyle = 'oklch(0.65 0.12 22 / 0.07)';
   ctx.fillRect(padL, osY, priceW, Math.max(0, y0 + height - 4 - osY));
 
-  [params.overbought, 50, params.oversold].forEach(v => {
+  [params.overbought, 50, params.oversold].forEach((v) => {
     const y = yScale(v);
     ctx.strokeStyle = COLORS.gridSoft;
     ctx.setLineDash(v === 50 ? [2, 3] : []);
@@ -32,5 +32,11 @@ export function drawRsi(pane: SubPaneContext, rsi: (number | null)[], params: RS
   });
   ctx.setLineDash([]);
 
-  drawLine(ctx, xScale, rsi.map(v => v == null ? null : yScale(v)), COLORS.lime, 1.25);
+  drawLine(
+    ctx,
+    xScale,
+    rsi.map((v) => (v == null ? null : yScale(v))),
+    COLORS.lime,
+    1.25,
+  );
 }

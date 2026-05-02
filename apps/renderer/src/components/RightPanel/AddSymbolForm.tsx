@@ -20,7 +20,12 @@ interface AddSymbolFormProps {
   disabled?: boolean;
 }
 
-export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }: AddSymbolFormProps) {
+export function AddSymbolForm({
+  activeListId,
+  existingSymbols,
+  onAdd,
+  disabled,
+}: AddSymbolFormProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -30,7 +35,7 @@ export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }
 
   const { results, loading } = useDebouncedSearch(query);
 
-  const candidates = results.filter(r => !existingSymbols.has(r.code));
+  const candidates = results.filter((r) => !existingSymbols.has(r.code));
 
   const resetForm = useCallback(() => {
     setQuery('');
@@ -38,63 +43,69 @@ export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }
     setLocalError(null);
   }, []);
 
-  const submit = useCallback(async (target: SearchResult | null) => {
-    const trimmed = query.trim().toUpperCase();
-    if (!trimmed || submitting || !activeListId) return;
+  const submit = useCallback(
+    async (target: SearchResult | null) => {
+      const trimmed = query.trim().toUpperCase();
+      if (!trimmed || submitting || !activeListId) return;
 
-    const sym = target?.code ?? trimmed;
-    const market = target?.market ?? inferMarket(trimmed);
-    const displayName = target?.name;
+      const sym = target?.code ?? trimmed;
+      const market = target?.market ?? inferMarket(trimmed);
+      const displayName = target?.name;
 
-    if (!target) {
-      const mkt = inferMarket(trimmed) as 'JP' | 'US';
-      if (!isValidRawSymbol(trimmed, mkt)) {
-        setLocalError('有効な銘柄コードを入力してください（例: 7203, AAPL）');
+      if (!target) {
+        const mkt = inferMarket(trimmed) as 'JP' | 'US';
+        if (!isValidRawSymbol(trimmed, mkt)) {
+          setLocalError('有効な銘柄コードを入力してください（例: 7203, AAPL）');
+          return;
+        }
+      }
+
+      if (existingSymbols.has(sym)) {
+        setLocalError(`${sym} は既にリストにあります`);
         return;
       }
-    }
 
-    if (existingSymbols.has(sym)) {
-      setLocalError(`${sym} は既にリストにあります`);
-      return;
-    }
-
-    setSubmitting(true);
-    setLocalError(null);
-    try {
-      await onAdd(sym, market, displayName);
-      resetForm();
-      inputRef.current?.focus();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '追加に失敗しました';
-      if (msg.includes('409') || msg.includes('already')) {
-        setLocalError(`${sym} は既にリストにあります`);
-      } else {
-        setLocalError(msg);
+      setSubmitting(true);
+      setLocalError(null);
+      try {
+        await onAdd(sym, market, displayName);
+        resetForm();
+        inputRef.current?.focus();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : '追加に失敗しました';
+        if (msg.includes('409') || msg.includes('already')) {
+          setLocalError(`${sym} は既にリストにあります`);
+        } else {
+          setLocalError(msg);
+        }
+      } finally {
+        setSubmitting(false);
       }
-    } finally {
-      setSubmitting(false);
-    }
-  }, [query, submitting, activeListId, existingSymbols, onAdd, resetForm]);
+    },
+    [query, submitting, activeListId, existingSymbols, onAdd, resetForm],
+  );
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (composingRef.current) return;
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (composingRef.current) return;
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedIndex(i => Math.min(i + 1, candidates.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedIndex(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const candidate = candidates[selectedIndex] ?? null;
-      submit(candidate);
-    } else if (e.key === 'Escape') {
-      resetForm();
-      inputRef.current?.blur();
-    }
-  }, [candidates, selectedIndex, submit, resetForm]);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, candidates.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const candidate = candidates[selectedIndex] ?? null;
+        submit(candidate);
+      } else if (e.key === 'Escape') {
+        resetForm();
+        inputRef.current?.blur();
+      }
+    },
+    [candidates, selectedIndex, submit, resetForm],
+  );
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -115,17 +126,19 @@ export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }
           disabled={isDisabled}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onCompositionStart={() => { composingRef.current = true; }}
-          onCompositionEnd={() => { composingRef.current = false; }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
           autoComplete="off"
           spellCheck={false}
         />
         {loading && <span className="add-symbol-spinner">…</span>}
       </div>
 
-      {localError && (
-        <div className="add-symbol-error">{localError}</div>
-      )}
+      {localError && <div className="add-symbol-error">{localError}</div>}
 
       {candidates.length > 0 && query.trim() && (
         <ul className="suggest-list">
@@ -133,7 +146,10 @@ export function AddSymbolForm({ activeListId, existingSymbols, onAdd, disabled }
             <li
               key={r.code}
               className={`suggest-item${i === selectedIndex ? ' active' : ''}`}
-              onMouseDown={e => { e.preventDefault(); submit(r); }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                submit(r);
+              }}
               onMouseEnter={() => setSelectedIndex(i)}
             >
               <span className="suggest-code">{r.code}</span>

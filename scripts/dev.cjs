@@ -10,4 +10,4 @@ const child = spawn('electron-vite', ['dev'], {
   shell: true,
 });
 
-child.on('close', code => process.exit(code ?? 0));
+child.on('close', (code) => process.exit(code ?? 0));

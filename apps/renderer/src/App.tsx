@@ -1,16 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
-import type { AppState, OHLCBar } from './types';
-import { TF, retime } from './lib/data';
-import { useChartData } from './hooks/useChartData';
-import { useWatchlists } from './hooks/useWatchlists';
-import { migrateLegacyWatchlist } from './lib/migrateLocalState';
-import { syntheticSeriesForTicker, watchlistToTickers } from './lib/watchlistTickers';
-import { TopBar } from './components/TopBar';
-import { StatusBar } from './components/StatusBar';
-import { TweaksPanel } from './components/TweaksPanel';
+import { useEffect, useMemo, useState } from 'react';
+import { Chart } from './components/Chart/Chart';
 import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { RightPanel } from './components/RightPanel/RightPanel';
-import { Chart } from './components/Chart/Chart';
+import { StatusBar } from './components/StatusBar';
+import { TopBar } from './components/TopBar';
+import { TweaksPanel } from './components/TweaksPanel';
+import { useChartData } from './hooks/useChartData';
+import { useWatchlists } from './hooks/useWatchlists';
+import { retime, TF } from './lib/data';
+import { migrateLegacyWatchlist } from './lib/migrateLocalState';
+import { syntheticSeriesForTicker, watchlistToTickers } from './lib/watchlistTickers';
+import type { AppState, OHLCBar } from './types';
 import './styles/globals.css';
 
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
@@ -57,7 +57,9 @@ function loadState(): AppState {
         },
       };
     }
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
   return DEFAULT_STATE;
 }
 
@@ -74,10 +76,18 @@ export function App() {
   const [state, setState] = useState<AppState>(loadState);
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [aesthetic, setAesthetic] = useState(() => {
-    try { return localStorage.getItem('kanata.aesthetic') || 'dark-blue'; } catch { return 'dark-blue'; }
+    try {
+      return localStorage.getItem('kanata.aesthetic') || 'dark-blue';
+    } catch {
+      return 'dark-blue';
+    }
   });
   const [density, setDensity] = useState(() => {
-    try { return localStorage.getItem('kanata.density') || 'comfortable'; } catch { return 'comfortable'; }
+    try {
+      return localStorage.getItem('kanata.density') || 'comfortable';
+    } catch {
+      return 'comfortable';
+    }
   });
 
   const wl = useWatchlists();
@@ -86,7 +96,7 @@ export function App() {
   // One-shot migration of legacy localStorage watchlist on first ready load
   useEffect(() => {
     if (wl.status !== 'ready') return;
-    migrateLegacyWatchlist(wl.watchlists).then(created => {
+    migrateLegacyWatchlist(wl.watchlists).then((created) => {
       if (created) wl.reload();
     });
   }, [wl.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -95,16 +105,20 @@ export function App() {
   const activeList = useMemo(() => {
     if (wl.watchlists.length === 0) return null;
     if (activeListId !== null) {
-      const found = wl.watchlists.find(w => w.id === activeListId);
+      const found = wl.watchlists.find((w) => w.id === activeListId);
       if (found) return found;
     }
-    return wl.watchlists.find(w => w.is_default === 1) || wl.watchlists[0];
+    return wl.watchlists.find((w) => w.is_default === 1) || wl.watchlists[0];
   }, [wl.watchlists, activeListId]);
 
   // Persist active list selection
   useEffect(() => {
     if (activeList) {
-      try { localStorage.setItem(ACTIVE_LIST_KEY, String(activeList.id)); } catch { /* noop */ }
+      try {
+        localStorage.setItem(ACTIVE_LIST_KEY, String(activeList.id));
+      } catch {
+        /* noop */
+      }
     }
   }, [activeList]);
 
@@ -117,7 +131,7 @@ export function App() {
   const syntheticData = useMemo(() => {
     const tfMs = TF[state.timeframe] || TF['1D'];
     const d: Record<string, OHLCBar[]> = {};
-    displayTickers.forEach(t => {
+    displayTickers.forEach((t) => {
       const series = syntheticSeriesForTicker(t);
       d[t.code] = retime(series, tfMs);
     });
@@ -125,28 +139,40 @@ export function App() {
   }, [state.timeframe, displayTickers]);
 
   // Real data for all watchlist tickers from backend (keeps prices consistent regardless of selection)
-  const allSymbols = useMemo(() => displayTickers.map(t => t.code), [displayTickers]);
+  const allSymbols = useMemo(() => displayTickers.map((t) => t.code), [displayTickers]);
   const { realData, status } = useChartData(allSymbols, state.timeframe);
 
   const data = useMemo(() => {
     const merged = { ...syntheticData };
-    Object.keys(realData).forEach(sym => {
+    Object.keys(realData).forEach((sym) => {
       if (realData[sym]?.length) merged[sym] = realData[sym];
     });
     return merged;
   }, [syntheticData, realData]);
 
   useEffect(() => {
-    try { localStorage.setItem('kanata.state', JSON.stringify(state)); } catch { /* noop */ }
+    try {
+      localStorage.setItem('kanata.state', JSON.stringify(state));
+    } catch {
+      /* noop */
+    }
   }, [state]);
 
   useEffect(() => {
-    try { localStorage.setItem('kanata.aesthetic', aesthetic); } catch { /* noop */ }
+    try {
+      localStorage.setItem('kanata.aesthetic', aesthetic);
+    } catch {
+      /* noop */
+    }
     document.documentElement.dataset.aesthetic = aesthetic;
   }, [aesthetic]);
 
   useEffect(() => {
-    try { localStorage.setItem('kanata.density', density); } catch { /* noop */ }
+    try {
+      localStorage.setItem('kanata.density', density);
+    } catch {
+      /* noop */
+    }
     document.documentElement.dataset.density = density;
   }, [density]);
 
@@ -164,43 +190,48 @@ export function App() {
   // Ensure the primary selection is always available in the visible tickers
   useEffect(() => {
     if (displayTickers.length === 0) return;
-    setState(s => {
-      const codes = new Set(displayTickers.map(t => t.code));
-      const filtered = s.selected.filter(c => codes.has(c));
+    setState((s) => {
+      const codes = new Set(displayTickers.map((t) => t.code));
+      const filtered = s.selected.filter((c) => codes.has(c));
       if (filtered.length === s.selected.length && filtered.length > 0) return s;
       const next = filtered.length > 0 ? filtered : [displayTickers[0].code];
       return { ...s, selected: next };
     });
   }, [displayTickers]);
 
-  const watchlistController = useMemo(() => ({
-    status: wl.status,
-    watchlists: wl.watchlists,
-    activeId: activeList?.id ?? null,
-    error: wl.error,
-    clearError: wl.clearError,
-    onSelectActive: (id: number) => setActiveListId(id),
-    create: async (name: string) => {
-      const created = await wl.create(name);
-      if (created) setActiveListId(created.id);
-    },
-    rename: async (id: number, name: string) => { await wl.rename(id, name); },
-    remove: async (id: number) => {
-      const ok = await wl.remove(id);
-      if (ok && activeListId === id) setActiveListId(null);
-    },
-    addItem: async (symbol: string, market: string, displayName?: string) => {
-      if (!activeList) return;
-      await wl.addItem(activeList.id, symbol, market, displayName);
-    },
-    removeItem: async (symbol: string) => {
-      if (!activeList) return;
-      await wl.removeItem(activeList.id, symbol);
-    },
-  }), [wl, activeList, activeListId]);
+  const watchlistController = useMemo(
+    () => ({
+      status: wl.status,
+      watchlists: wl.watchlists,
+      activeId: activeList?.id ?? null,
+      error: wl.error,
+      clearError: wl.clearError,
+      onSelectActive: (id: number) => setActiveListId(id),
+      create: async (name: string) => {
+        const created = await wl.create(name);
+        if (created) setActiveListId(created.id);
+      },
+      rename: async (id: number, name: string) => {
+        await wl.rename(id, name);
+      },
+      remove: async (id: number) => {
+        const ok = await wl.remove(id);
+        if (ok && activeListId === id) setActiveListId(null);
+      },
+      addItem: async (symbol: string, market: string, displayName?: string) => {
+        if (!activeList) return;
+        await wl.addItem(activeList.id, symbol, market, displayName);
+      },
+      removeItem: async (symbol: string) => {
+        if (!activeList) return;
+        await wl.removeItem(activeList.id, symbol);
+      },
+    }),
+    [wl, activeList, activeListId],
+  );
 
   const primary = state.selected[0];
-  const primaryTicker = displayTickers.find(t => t.code === primary);
+  const primaryTicker = displayTickers.find((t) => t.code === primary);
   const primarySeries = data[primary];
   const last = primarySeries?.[primarySeries.length - 1];
   const prev = primarySeries?.[primarySeries.length - 2];
@@ -210,7 +241,11 @@ export function App() {
 
   // Still fetching watchlists from backend
   if (wl.status === 'loading') {
-    return <div className="app"><div style={{ padding: 24 }}>Loading…</div></div>;
+    return (
+      <div className="app">
+        <div style={{ padding: 24 }}>Loading…</div>
+      </div>
+    );
   }
 
   // Watchlist loaded but empty — render shell so user can add tickers
@@ -219,7 +254,10 @@ export function App() {
       <div className="app">
         <div className="main-grid">
           <LeftPanel state={state} setState={setState} />
-          <div className="chart-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            className="chart-area"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
             <div style={{ padding: 24, opacity: 0.5 }}>ウォッチリストに銘柄を追加してください</div>
           </div>
           <div data-testid="watchlist">

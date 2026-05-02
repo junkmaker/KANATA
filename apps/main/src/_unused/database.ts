@@ -1,7 +1,7 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import { app } from 'electron';
-import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
 
 let db: DatabaseType | null = null;
 
@@ -53,9 +53,9 @@ export function initDatabase(): DatabaseType {
 }
 
 function seedDefaultWatchlist(conn: DatabaseType): void {
-  const row = conn
-    .prepare('SELECT id FROM watchlists WHERE user_id = ? LIMIT 1')
-    .get('local') as { id: number } | undefined;
+  const row = conn.prepare('SELECT id FROM watchlists WHERE user_id = ? LIMIT 1').get('local') as
+    | { id: number }
+    | undefined;
   if (row) return;
   const now = new Date().toISOString();
   conn

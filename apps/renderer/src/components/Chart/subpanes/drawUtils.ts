@@ -8,14 +8,21 @@ export function drawLine(
 ) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
-  if (dash) ctx.setLineDash(dash); else ctx.setLineDash([]);
+  if (dash) ctx.setLineDash(dash);
+  else ctx.setLineDash([]);
   ctx.beginPath();
   let started = false;
   for (let i = 0; i < ys.length; i++) {
-    if (ys[i] == null) { started = false; continue; }
-    const x = xs(i), y = ys[i]!;
-    if (!started) { ctx.moveTo(x, y); started = true; }
-    else ctx.lineTo(x, y);
+    if (ys[i] == null) {
+      started = false;
+      continue;
+    }
+    const x = xs(i),
+      y = ys[i]!;
+    if (!started) {
+      ctx.moveTo(x, y);
+      started = true;
+    } else ctx.lineTo(x, y);
   }
   ctx.stroke();
   ctx.setLineDash([]);

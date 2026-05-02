@@ -1,31 +1,15 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import type {
-  AppState,
-  FinMetrics,
-  Ticker,
-  OHLCBar,
-  IndiData,
-  YRange,
-} from "../../types";
-import { COLORS, COMPARE_COLORS } from "../../lib/colors";
-import { fmtPrice, fmtVol, fmtDate } from "../../lib/formatters";
-import {
-  SMA,
-  EMA,
-  BOLL,
-  STOCH,
-  PSAR,
-  ICHI,
-  MACD,
-  RSI,
-} from "../../lib/indicators";
-import { genFin } from "../../lib/data";
-import { fetchFundamentals } from "../../lib/api";
-import { drawLine } from "./subpanes/drawUtils";
-import { drawVolume } from "./subpanes/drawVolume";
-import { drawStoch } from "./subpanes/drawStoch";
-import { drawMacd } from "./subpanes/drawMacd";
-import { drawRsi } from "./subpanes/drawRsi";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchFundamentals } from '../../lib/api';
+import { COLORS, COMPARE_COLORS } from '../../lib/colors';
+import { genFin } from '../../lib/data';
+import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
+import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
+import type { AppState, FinMetrics, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import { drawMacd } from './subpanes/drawMacd';
+import { drawRsi } from './subpanes/drawRsi';
+import { drawStoch } from './subpanes/drawStoch';
+import { drawLine } from './subpanes/drawUtils';
+import { drawVolume } from './subpanes/drawVolume';
 
 interface ChartProps {
   state: AppState;
@@ -94,28 +78,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   const FIN_H = state.showFinancial ? 96 : 0;
   const X_AXIS_H = 22;
   const gapsToLastPane =
-    FIN_H > 0
-      ? 76
-      : RSI_H > 0
-        ? 58
-        : MACD_H > 0
-          ? 40
-          : STOCH_H > 0
-            ? 22
-            : VOL_H > 0
-              ? 4
-              : 0;
+    FIN_H > 0 ? 76 : RSI_H > 0 ? 58 : MACD_H > 0 ? 40 : STOCH_H > 0 ? 22 : VOL_H > 0 ? 4 : 0;
   const priceH = Math.max(
     120,
-    size.h -
-      VOL_H -
-      STOCH_H -
-      MACD_H -
-      RSI_H -
-      FIN_H -
-      X_AXIS_H -
-      PAD_T -
-      gapsToLastPane,
+    size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T - gapsToLastPane,
   );
   const priceW = size.w - PAD_L - PAD_R;
 
@@ -149,12 +115,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     if (state.indicators.psar) o.psar = PSAR(primaryData);
     if (state.indicators.ichi) o.ichi = ICHI(primaryData);
     if (state.indicators.macd)
-      o.macd = MACD(
-        primaryData,
-        params.macd.fast,
-        params.macd.slow,
-        params.macd.signal,
-      );
+      o.macd = MACD(primaryData, params.macd.fast, params.macd.slow, params.macd.signal);
     if (state.indicators.rsi) o.rsi = RSI(primaryData, params.rsi.period);
     return o;
   }, [
@@ -166,9 +127,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     params.rsi.period,
   ]);
 
-  const safeEnd = primaryData
-    ? Math.min(view.end, primaryData.length)
-    : view.end;
+  const safeEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
 
   const yRange = useMemo<YRange>(() => {
     if (!primaryData) return { min: 0, max: 1 };
@@ -184,10 +143,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     if (min === Infinity) return { min: 0, max: 1 };
     if (state.indicators.boll && indi.boll) {
       for (let i = view.start; i < end; i++) {
-        if (indi.boll.upper[i] != null && indi.boll.upper[i]! > max)
-          max = indi.boll.upper[i]!;
-        if (indi.boll.lower[i] != null && indi.boll.lower[i]! < min)
-          min = indi.boll.lower[i]!;
+        if (indi.boll.upper[i] != null && indi.boll.upper[i]! > max) max = indi.boll.upper[i]!;
+        if (indi.boll.lower[i] != null && indi.boll.lower[i]! < min) min = indi.boll.lower[i]!;
       }
     }
     const pad = (max - min) * 0.08;
@@ -204,8 +161,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
   let volMax = 1;
   for (let i = view.start; i < safeEnd; i++)
-    if (primaryData && primaryData[i] && primaryData[i].v > volMax)
-      volMax = primaryData[i].v;
+    if (primaryData && primaryData[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
 
   // Main canvas draw
   useEffect(() => {
@@ -214,14 +170,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const dpr = window.devicePixelRatio || 1;
     cvs.width = size.w * dpr;
     cvs.height = size.h * dpr;
-    cvs.style.width = size.w + "px";
-    cvs.style.height = size.h + "px";
-    const ctx = cvs.getContext("2d")!;
+    cvs.style.width = size.w + 'px';
+    cvs.style.height = size.h + 'px';
+    const ctx = cvs.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
     ctx.font = '11px "JetBrains Mono", monospace';
-    ctx.textBaseline = "middle";
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = COLORS.muted;
     const nLines = 6;
     for (let i = 0; i <= nLines; i++) {
@@ -232,16 +188,16 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.lineTo(PAD_L + priceW, Math.round(y) + 0.5);
       ctx.stroke();
       const v = yRange.max - (yRange.max - yRange.min) * (i / nLines);
-      ctx.textAlign = "left";
+      ctx.textAlign = 'left';
       const tk = tickers.find((t) => t.code === primary);
-      ctx.fillText(fmtPrice(v, tk?.currency || "$"), PAD_L + priceW + 6, y);
+      ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, y);
     }
 
     const xAxisGridBottom = FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H;
     const tickStep = Math.max(1, Math.floor(nVis / 10));
     ctx.strokeStyle = COLORS.gridSoft;
     ctx.fillStyle = COLORS.muted;
-    ctx.textAlign = "center";
+    ctx.textAlign = 'center';
     const tf = state.timeframe;
     for (let i = view.start; i < safeEnd; i += tickStep) {
       const x = xScale(i);
@@ -273,8 +229,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
       ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
       ctx.fill();
-      const toY = (arr: (number | null)[]) =>
-        arr.map((v) => (v == null ? null : yScale(v)));
+      const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
       drawLine(ctx, xScale, toY(tenkan), COLORS.magenta, 1.25);
       drawLine(ctx, xScale, toY(kijun), COLORS.accent, 1.25);
       drawLine(ctx, xScale, toY(chikou), COLORS.muted, 1, [4, 3]);
@@ -282,30 +237,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     // Bollinger bands
     if (state.indicators.boll && indi.boll) {
-      const toY = (arr: (number | null)[]) =>
-        arr.map((v) => (v == null ? null : yScale(v)));
-      drawLine(
-        ctx,
-        xScale,
-        toY(indi.boll.upper),
-        "oklch(0.75 0.07 220 / 0.85)",
-        1,
-      );
-      drawLine(
-        ctx,
-        xScale,
-        toY(indi.boll.mid),
-        "oklch(0.70 0.05 220 / 0.7)",
-        1,
-        [3, 3],
-      );
-      drawLine(
-        ctx,
-        xScale,
-        toY(indi.boll.lower),
-        "oklch(0.75 0.07 220 / 0.85)",
-        1,
-      );
+      const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
+      drawLine(ctx, xScale, toY(indi.boll.upper), 'oklch(0.75 0.07 220 / 0.85)', 1);
+      drawLine(ctx, xScale, toY(indi.boll.mid), 'oklch(0.70 0.05 220 / 0.7)', 1, [3, 3]);
+      drawLine(ctx, xScale, toY(indi.boll.lower), 'oklch(0.75 0.07 220 / 0.85)', 1);
     }
 
     // Candles
@@ -330,24 +265,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const h = Math.max(1, Math.abs(yc - yo));
       const bodyW = Math.max(1, bw * 0.72);
       if (up) {
-        ctx.fillRect(
-          Math.round(x - bodyW / 2),
-          Math.round(top),
-          Math.round(bodyW),
-          Math.round(h),
-        );
+        ctx.fillRect(Math.round(x - bodyW / 2), Math.round(top), Math.round(bodyW), Math.round(h));
       } else {
-        ctx.fillRect(
-          Math.round(x - bodyW / 2),
-          Math.round(top),
-          Math.round(bodyW),
-          Math.round(h),
-        );
+        ctx.fillRect(Math.round(x - bodyW / 2), Math.round(top), Math.round(bodyW), Math.round(h));
       }
     }
 
-    const toY = (arr: (number | null)[]) =>
-      arr.map((v) => (v == null ? null : yScale(v)));
+    const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
     if (state.indicators.sma5 && indi.sma5)
       drawLine(ctx, xScale, toY(indi.sma5), COLORS.amber, 1.25);
     if (state.indicators.sma25 && indi.sma25)
@@ -358,7 +282,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       drawLine(ctx, xScale, toY(indi.ema20), COLORS.lime, 1.25, [4, 2]);
 
     if (state.indicators.psar && indi.psar) {
-      ctx.fillStyle = "oklch(0.78 0.20 350)";
+      ctx.fillStyle = 'oklch(0.78 0.20 350)';
       for (let i = view.start; i < safeEnd; i++) {
         if (indi.psar[i] == null) continue;
         const x = xScale(i),
@@ -371,7 +295,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     ctx.restore();
 
     // Comparison lines
-    if (state.selected.length > 1 && state.compareMode === "percent") {
+    if (state.selected.length > 1 && state.compareMode === 'percent') {
       for (let idx = 1; idx < state.selected.length; idx++) {
         const code = state.selected[idx];
         const arr = data[code];
@@ -398,8 +322,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         const pad2 = (pmax - pmin) * 0.1 || 1;
         pmin -= pad2;
         pmax += pad2;
-        const pctY = (p: number) =>
-          PAD_T + (1 - (p - pmin) / (pmax - pmin)) * priceH;
+        const pctY = (p: number) => PAD_T + (1 - (p - pmin) / (pmax - pmin)) * priceH;
         const ys: (number | null)[] = [];
         for (let i = 0; i < primaryData.length; i++) {
           const bi = i + off;
@@ -504,8 +427,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.lineTo(PAD_L + finW, finY + 0.5);
       ctx.stroke();
       ctx.fillStyle = COLORS.muted;
-      ctx.textAlign = "left";
-      ctx.fillText("FUNDAMENTALS · last 20 quarters", PAD_L, finY + 8);
+      ctx.textAlign = 'left';
+      ctx.fillText('FUNDAMENTALS · last 20 quarters', PAD_L, finY + 8);
 
       const src = finMetrics ?? (tk && tk.fin.roe ? tk.fin : null);
       const seed = tk?.seed ?? 1;
@@ -546,19 +469,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         pmax += pSpan * 0.1;
 
         const fx = (i: number) => PAD_L + (i / (finData.length - 1)) * finW;
-        const fyL = (v: number) =>
-          finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
-        const fyR = (v: number) =>
-          finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
+        const fyL = (v: number) => finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
+        const fyR = (v: number) => finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
 
         ctx.fillStyle = COLORS.muted;
-        ctx.textAlign = "right";
-        ctx.fillText(rmax.toFixed(1) + "%", PAD_L + finW + 56, finY + 12);
-        ctx.fillText(
-          rmin.toFixed(1) + "%",
-          PAD_L + finW + 56,
-          finY + FIN_H - 8,
-        );
+        ctx.textAlign = 'right';
+        ctx.fillText(rmax.toFixed(1) + '%', PAD_L + finW + 56, finY + 12);
+        ctx.fillText(rmin.toFixed(1) + '%', PAD_L + finW + 56, finY + FIN_H - 8);
 
         const drawFin = (ys: number[], color: string, dash?: number[]) => {
           ctx.strokeStyle = color;
@@ -574,13 +491,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.setLineDash([]);
           ctx.fillStyle = color;
           ctx.beginPath();
-          ctx.arc(
-            fx(finData.length - 1),
-            ys[ys.length - 1],
-            2.5,
-            0,
-            Math.PI * 2,
-          );
+          ctx.arc(fx(finData.length - 1), ys[ys.length - 1], 2.5, 0, Math.PI * 2);
           ctx.fill();
         };
         if (state.financial.roe)
@@ -601,15 +512,15 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           );
       } else {
         ctx.fillStyle = COLORS.muted;
-        ctx.textAlign = "center";
-        ctx.fillText("No data available", PAD_L + finW / 2, finY + FIN_H / 2);
+        ctx.textAlign = 'center';
+        ctx.fillText('No data available', PAD_L + finW / 2, finY + FIN_H / 2);
       }
     }
 
     // X axis labels
     const xAxisY = FIN_H > 0 ? finY0 - 9 : size.h - X_AXIS_H / 2;
     ctx.fillStyle = COLORS.muted;
-    ctx.textAlign = "center";
+    ctx.textAlign = 'center';
     for (let i = view.start; i < safeEnd; i += tickStep) {
       ctx.fillText(fmtDate(primaryData[i].t, tf), xScale(i), xAxisY);
     }
@@ -641,19 +552,16 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   // Overlay: crosshair, drawings
   const [hover, setHover] = useState<{ sx: number; sy: number } | null>(null);
   const [dragging, setDragging] = useState<{
-    type: "pan" | "drawing";
+    type: 'pan' | 'drawing';
     startX?: number;
     startView?: typeof view;
   } | null>(null);
-  const [tempDrawing, setTempDrawing] = useState<
-    (typeof state.drawings)[0] | null
-  >(null);
+  const [tempDrawing, setTempDrawing] = useState<(typeof state.drawings)[0] | null>(null);
 
   const screenToData = useCallback(
     (sx: number, sy: number) => {
       const idx = view.start + (sx - PAD_L) / bw;
-      const v =
-        yRange.max - ((sy - PAD_T) / priceH) * (yRange.max - yRange.min);
+      const v = yRange.max - ((sy - PAD_T) / priceH) * (yRange.max - yRange.min);
       return { idx, v };
     },
     [view, bw, yRange, priceH],
@@ -672,22 +580,19 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const dpr = window.devicePixelRatio || 1;
     cvs.width = size.w * dpr;
     cvs.height = size.h * dpr;
-    cvs.style.width = size.w + "px";
-    cvs.style.height = size.h + "px";
-    const ctx = cvs.getContext("2d")!;
+    cvs.style.width = size.w + 'px';
+    cvs.style.height = size.h + 'px';
+    const ctx = cvs.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    const allDrawings = [
-      ...(state.drawings || []),
-      ...(tempDrawing ? [tempDrawing] : []),
-    ];
+    const allDrawings = [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])];
     allDrawings.forEach((d) => {
       if (d.ticker && d.ticker !== primary) return;
       ctx.strokeStyle = d.color || COLORS.accent;
       ctx.fillStyle = d.color || COLORS.accent;
       ctx.lineWidth = 1.5;
-      if (d.type === "hline" && d.v != null) {
+      if (d.type === 'hline' && d.v != null) {
         const y = yScale(d.v);
         ctx.setLineDash([5, 3]);
         ctx.beginPath();
@@ -697,8 +602,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.setLineDash([]);
         ctx.font = '10px "JetBrains Mono", monospace';
         const tk = tickers.find((t) => t.code === primary);
-        ctx.fillText(fmtPrice(d.v, tk?.currency || "$"), PAD_L + 4, y - 4);
-      } else if (d.type === "vline" && d.idx != null) {
+        ctx.fillText(fmtPrice(d.v, tk?.currency || '$'), PAD_L + 4, y - 4);
+      } else if (d.type === 'vline' && d.idx != null) {
         const x = xScale(d.idx);
         ctx.setLineDash([5, 3]);
         ctx.beginPath();
@@ -707,7 +612,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.stroke();
         ctx.setLineDash([]);
       } else if (
-        (d.type === "trend" || d.type === "rect" || d.type === "ellipse") &&
+        (d.type === 'trend' || d.type === 'rect' || d.type === 'ellipse') &&
         d.i1 != null &&
         d.v1 != null &&
         d.i2 != null &&
@@ -715,7 +620,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ) {
         const p1 = dataToScreen(d.i1, d.v1);
         const p2 = dataToScreen(d.i2, d.v2);
-        if (d.type === "trend") {
+        if (d.type === 'trend') {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
@@ -726,8 +631,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.beginPath();
           ctx.arc(p2.x, p2.y, 3, 0, Math.PI * 2);
           ctx.fill();
-        } else if (d.type === "rect") {
-          ctx.fillStyle = (d.color || COLORS.accent).replace(")", " / 0.12)");
+        } else if (d.type === 'rect') {
+          ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.12)');
           ctx.fillRect(
             Math.min(p1.x, p2.x),
             Math.min(p1.y, p2.y),
@@ -741,7 +646,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
             Math.abs(p2.x - p1.x),
             Math.abs(p2.y - p1.y),
           );
-        } else if (d.type === "ellipse") {
+        } else if (d.type === 'ellipse') {
           const cx = (p1.x + p2.x) / 2,
             cy = (p1.y + p2.y) / 2;
           const rx = Math.abs(p2.x - p1.x) / 2,
@@ -750,13 +655,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-      } else if (d.type === "text" && d.idx != null && d.v != null) {
+      } else if (d.type === 'text' && d.idx != null && d.v != null) {
         const p = dataToScreen(d.idx, d.v);
         ctx.fillStyle = d.color || COLORS.accent;
         ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(d.text || "…", p.x + 6, p.y);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(d.text || '…', p.x + 6, p.y);
         ctx.beginPath();
         ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
         ctx.fill();
@@ -768,10 +673,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
       ctx.moveTo(Math.round(hover.sx) + 0.5, PAD_T);
-      ctx.lineTo(
-        Math.round(hover.sx) + 0.5,
-        FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H,
-      );
+      ctx.lineTo(Math.round(hover.sx) + 0.5, FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H);
       ctx.stroke();
       if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
         ctx.beginPath();
@@ -782,23 +684,17 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.setLineDash([]);
 
       if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
-        const v =
-          yRange.max -
-          ((hover.sy - PAD_T) / priceH) * (yRange.max - yRange.min);
+        const v = yRange.max - ((hover.sy - PAD_T) / priceH) * (yRange.max - yRange.min);
         ctx.fillStyle = COLORS.panel;
         ctx.fillRect(PAD_L + priceW, hover.sy - 9, PAD_R - 2, 18);
         ctx.strokeStyle = COLORS.accent;
         ctx.strokeRect(PAD_L + priceW + 0.5, hover.sy - 9 + 0.5, PAD_R - 3, 17);
         ctx.fillStyle = COLORS.accent;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
         const tk = tickers.find((t) => t.code === primary);
         ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillText(
-          fmtPrice(v, tk?.currency || "$"),
-          PAD_L + priceW + 6,
-          hover.sy,
-        );
+        ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, hover.sy);
       }
 
       const idx = Math.round(view.start + (hover.sx - PAD_L) / bw);
@@ -809,14 +705,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.strokeStyle = COLORS.accent;
         ctx.strokeRect(hover.sx - 58 + 0.5, xAxisY - 9 + 0.5, 115, 17);
         ctx.fillStyle = COLORS.accent;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillText(
-          fmtDate(primaryData[idx].t, state.timeframe),
-          hover.sx,
-          xAxisY,
-        );
+        ctx.fillText(fmtDate(primaryData[idx].t, state.timeframe), hover.sx, xAxisY);
       }
     }
   }, [
@@ -839,42 +731,42 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const sy = e.clientY - rect.top;
     const { idx, v } = screenToData(sx, sy);
     const tool = state.activeTool;
-    if (tool === "pan" || !tool) {
-      setDragging({ type: "pan", startX: sx, startView: { ...view } });
+    if (tool === 'pan' || !tool) {
+      setDragging({ type: 'pan', startX: sx, startView: { ...view } });
       e.currentTarget.setPointerCapture(e.pointerId);
-    } else if (tool === "hline") {
+    } else if (tool === 'hline') {
       setState((s) => ({
         ...s,
         drawings: [
           ...s.drawings,
           {
-            type: "hline",
+            type: 'hline',
             v,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
           },
         ],
-        activeTool: "pan",
+        activeTool: 'pan',
       }));
-    } else if (tool === "vline") {
+    } else if (tool === 'vline') {
       setState((s) => ({
         ...s,
         drawings: [
           ...s.drawings,
           {
-            type: "vline",
+            type: 'vline',
             idx,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
           },
         ],
-        activeTool: "pan",
+        activeTool: 'pan',
       }));
-    } else if (tool === "trend" || tool === "rect" || tool === "ellipse") {
+    } else if (tool === 'trend' || tool === 'rect' || tool === 'ellipse') {
       setTempDrawing({
-        type: tool as (typeof state.drawings)[0]["type"],
+        type: tool as (typeof state.drawings)[0]['type'],
         i1: idx,
         v1: v,
         i2: idx,
@@ -883,17 +775,17 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ticker: primary,
         id: Math.random(),
       });
-      setDragging({ type: "drawing" });
+      setDragging({ type: 'drawing' });
       e.currentTarget.setPointerCapture(e.pointerId);
-    } else if (tool === "text") {
-      const txt = prompt("Annotation text:");
+    } else if (tool === 'text') {
+      const txt = prompt('Annotation text:');
       if (txt) {
         setState((s) => ({
           ...s,
           drawings: [
             ...s.drawings,
             {
-              type: "text",
+              type: 'text',
               idx,
               v,
               text: txt,
@@ -902,10 +794,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
               id: Math.random(),
             },
           ],
-          activeTool: "pan",
+          activeTool: 'pan',
         }));
       } else {
-        setState((s) => ({ ...s, activeTool: "pan" }));
+        setState((s) => ({ ...s, activeTool: 'pan' }));
       }
     }
   };
@@ -915,11 +807,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     setHover({ sx, sy });
-    if (
-      dragging?.type === "pan" &&
-      dragging.startX != null &&
-      dragging.startView
-    ) {
+    if (dragging?.type === 'pan' && dragging.startX != null && dragging.startView) {
       const dx = sx - dragging.startX;
       const shift = Math.round(-dx / bw);
       let ns = dragging.startView.start + shift;
@@ -934,18 +822,18 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ne -= d2;
       }
       setView({ start: ns, end: ne });
-    } else if (dragging?.type === "drawing" && tempDrawing) {
+    } else if (dragging?.type === 'drawing' && tempDrawing) {
       const { idx, v } = screenToData(sx, sy);
       setTempDrawing({ ...tempDrawing, i2: idx, v2: v });
     }
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (dragging?.type === "drawing" && tempDrawing) {
+    if (dragging?.type === 'drawing' && tempDrawing) {
       setState((s) => ({
         ...s,
         drawings: [...s.drawings, tempDrawing],
-        activeTool: "pan",
+        activeTool: 'pan',
       }));
       setTempDrawing(null);
     }
@@ -972,7 +860,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const centerFrac = (sx - PAD_L) / pw;
       const scale = e.deltaY > 0 ? 1.15 : 0.87;
       const len = v.end - v.start;
-      let newLen = Math.max(30, Math.min(pd.length, Math.round(len * scale)));
+      const newLen = Math.max(30, Math.min(pd.length, Math.round(len * scale)));
       const center = v.start + centerFrac * len;
       let ns = Math.round(center - centerFrac * newLen);
       let ne = ns + newLen;
@@ -987,13 +875,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
       setView({ start: ns, end: ne });
     };
-    cvs.addEventListener("wheel", handler, { passive: false });
-    return () => cvs.removeEventListener("wheel", handler);
+    cvs.addEventListener('wheel', handler, { passive: false });
+    return () => cvs.removeEventListener('wheel', handler);
   }, []);
 
-  const hoverIdx = hover
-    ? Math.round(view.start + (hover.sx - PAD_L) / bw)
-    : safeEnd - 1;
+  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : safeEnd - 1;
   const hoverBar = primaryData && primaryData[hoverIdx];
 
   return (
@@ -1001,21 +887,21 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ref={wrapRef}
       className="chart-wrap"
       style={{
-        position: "relative",
-        width: "100%",
-        height: "100%",
+        position: 'relative',
+        width: '100%',
+        height: '100%',
         cursor:
-          state.activeTool && state.activeTool !== "pan"
-            ? "crosshair"
-            : dragging?.type === "pan"
-              ? "grabbing"
-              : "crosshair",
+          state.activeTool && state.activeTool !== 'pan'
+            ? 'crosshair'
+            : dragging?.type === 'pan'
+              ? 'grabbing'
+              : 'crosshair',
       }}
     >
-      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0 }} />
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
       <canvas
         ref={overlayRef}
-        style={{ position: "absolute", inset: 0 }}
+        style={{ position: 'absolute', inset: 0 }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -1073,35 +959,35 @@ function ChartLegend({
   const i = hoverIdx;
   if (state.indicators.sma5)
     indRows.push({
-      label: "MA5",
+      label: 'MA5',
       v: SMA(data[primary], 5)[i],
-      c: "var(--amber)",
+      c: 'var(--amber)',
     });
   if (state.indicators.sma25)
     indRows.push({
-      label: "MA25",
+      label: 'MA25',
       v: SMA(data[primary], 25)[i],
-      c: "var(--accent)",
+      c: 'var(--accent)',
     });
   if (state.indicators.sma75)
     indRows.push({
-      label: "MA75",
+      label: 'MA75',
       v: SMA(data[primary], 75)[i],
-      c: "var(--magenta)",
+      c: 'var(--magenta)',
     });
   if (state.indicators.ema20)
     indRows.push({
-      label: "EMA20",
+      label: 'EMA20',
       v: EMA(data[primary], 20)[i],
-      c: "var(--lime)",
+      c: 'var(--lime)',
     });
   if (state.indicators.boll) {
     const b = BOLL(data[primary], 20, 2);
     indRows.push({
-      label: "BB",
+      label: 'BB',
       v: b.mid[i],
       extra: ` · U ${fmtPrice(b.upper[i], tk.currency)} · L ${fmtPrice(b.lower[i], tk.currency)}`,
-      c: "oklch(0.75 0.07 220)",
+      c: 'oklch(0.75 0.07 220)',
     });
   }
   if (state.indicators.macd && indi.macd) {
@@ -1111,8 +997,8 @@ function ChartLegend({
     indRows.push({
       label: `MACD ${p.fast},${p.slow},${p.signal}`,
       v: m,
-      c: "var(--accent)",
-      extra: s != null ? ` · S ${s.toFixed(3)}` : "",
+      c: 'var(--accent)',
+      extra: s != null ? ` · S ${s.toFixed(3)}` : '',
       fmt: (v) => v.toFixed(3),
     });
   }
@@ -1121,7 +1007,7 @@ function ChartLegend({
     indRows.push({
       label: `RSI ${p.period}`,
       v: indi.rsi[i],
-      c: "var(--lime)",
+      c: 'var(--lime)',
       fmt: (v) => v.toFixed(1),
     });
   }
@@ -1141,12 +1027,10 @@ function ChartLegend({
         <span>L</span>
         <b>{fmtPrice(last.l, tk.currency)}</b>
         <span>C</span>
-        <b style={{ color: up ? "var(--bull)" : "var(--bear)" }}>
-          {fmtPrice(last.c, tk.currency)}
-        </b>
-        <span style={{ color: up ? "var(--bull)" : "var(--bear)" }}>
-          {up ? "+" : ""}
-          {chg.toFixed(2)} ({up ? "+" : ""}
+        <b style={{ color: up ? 'var(--bull)' : 'var(--bear)' }}>{fmtPrice(last.c, tk.currency)}</b>
+        <span style={{ color: up ? 'var(--bull)' : 'var(--bear)' }}>
+          {up ? '+' : ''}
+          {chg.toFixed(2)} ({up ? '+' : ''}
           {chgPct.toFixed(2)}%)
         </span>
         <span>V</span>
@@ -1157,13 +1041,8 @@ function ChartLegend({
           {indRows.map((r, k) => (
             <span key={k} className="ind-pill">
               <i style={{ background: r.c }} />
-              {r.label}{" "}
-              {r.v != null
-                ? r.fmt
-                  ? r.fmt(r.v)
-                  : fmtPrice(r.v, tk.currency)
-                : "—"}
-              {r.extra || ""}
+              {r.label} {r.v != null ? (r.fmt ? r.fmt(r.v) : fmtPrice(r.v, tk.currency)) : '—'}
+              {r.extra || ''}
             </span>
           ))}
         </div>
@@ -1177,8 +1056,7 @@ function ChartLegend({
               <span key={code} className="ind-pill">
                 <i
                   style={{
-                    background:
-                      COMPARE_COLORS[(idx + 1) % COMPARE_COLORS.length],
+                    background: COMPARE_COLORS[(idx + 1) % COMPARE_COLORS.length],
                   }}
                 />
                 {tk2.code}

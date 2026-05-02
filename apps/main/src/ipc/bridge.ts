@@ -1,5 +1,5 @@
-import { ipcMain, shell, app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { getBackendUrl, getSidecarStatus } from '../sidecar/pythonSidecar.js';
 import { IPC_CHANNELS } from './channels.js';
 

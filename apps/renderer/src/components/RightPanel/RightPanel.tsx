@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
+import { fetchFundamentals } from '../../lib/api';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
-import { fetchFundamentals } from '../../lib/api';
-import { WatchlistSelector } from './WatchlistSelector';
+import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
 import { AddSymbolForm } from './AddSymbolForm';
+import { WatchlistSelector } from './WatchlistSelector';
 
 interface WatchlistController {
   status: 'loading' | 'ready' | 'offline';
@@ -32,7 +32,9 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
   return (
     <div className="metric">
       <div className="m-label">{label}</div>
-      <div className="m-value" style={color ? { color } : {}}>{value}</div>
+      <div className="m-value" style={color ? { color } : {}}>
+        {value}
+      </div>
     </div>
   );
 }
@@ -46,34 +48,47 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   // Source list for the visible watchlist rows (the active list's members)
   const visibleTickers = useMemo(() => {
     const ql = q.toLowerCase().trim();
-    return tickers.filter(t => {
+    return tickers.filter((t) => {
       if (marketFilter !== 'ALL' && t.market !== marketFilter) return false;
       if (!ql) return true;
-      return t.code.toLowerCase().includes(ql) || t.name.toLowerCase().includes(ql) || (t.sector || '').toLowerCase().includes(ql);
+      return (
+        t.code.toLowerCase().includes(ql) ||
+        t.name.toLowerCase().includes(ql) ||
+        (t.sector || '').toLowerCase().includes(ql)
+      );
     });
   }, [tickers, q, marketFilter]);
 
-  const memberSymbols = useMemo(() => new Set(tickers.map(t => t.code)), [tickers]);
+  const memberSymbols = useMemo(() => new Set(tickers.map((t) => t.code)), [tickers]);
 
   // Auto-exit editing mode if backend goes offline
   useEffect(() => {
     if (watchlist.status !== 'ready') setEditing(false);
   }, [watchlist.status]);
 
-  const primaryTicker = tickers.find(t => t.code === state.selected[0]);
+  const primaryTicker = tickers.find((t) => t.code === state.selected[0]);
   useEffect(() => {
-    if (!primaryTicker) { setFetchedFin(null); return; }
+    if (!primaryTicker) {
+      setFetchedFin(null);
+      return;
+    }
     let cancelled = false;
     fetchFundamentals(primaryTicker.code)
-      .then(fin => { if (!cancelled) setFetchedFin(fin); })
-      .catch(() => { if (!cancelled) setFetchedFin(null); });
-    return () => { cancelled = true; };
+      .then((fin) => {
+        if (!cancelled) setFetchedFin(fin);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedFin(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [primaryTicker?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (code: string) => {
-    setState(s => {
+    setState((s) => {
       const sel = s.selected.includes(code)
-        ? s.selected.filter(c => c !== code)
+        ? s.selected.filter((c) => c !== code)
         : [...s.selected, code];
       if (sel.length === 0) return s;
       if (sel.length > 6) sel.shift();
@@ -82,15 +97,15 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   };
 
   const makePrimary = (code: string) => {
-    setState(s => {
-      const rest = s.selected.filter(c => c !== code);
+    setState((s) => {
+      const rest = s.selected.filter((c) => c !== code);
       return { ...s, selected: [code, ...rest] };
     });
   };
 
   const handleRemoveSymbol = async (code: string) => {
     await watchlist.removeItem(code);
-    setState(s => ({ ...s, selected: s.selected.filter(c => c !== code) }));
+    setState((s) => ({ ...s, selected: s.selected.filter((c) => c !== code) }));
   };
 
   const primary = state.selected[0];
@@ -115,14 +130,14 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
           onCreate={watchlist.create}
           onRename={watchlist.rename}
           onDelete={watchlist.remove}
-          onToggleEdit={() => setEditing(e => !e)}
+          onToggleEdit={() => setEditing((e) => !e)}
         />
         <div className="search-row">
           <input
             className="search-input"
             placeholder="Search code or name…"
             value={q}
-            onChange={e => setQ(e.target.value)}
+            onChange={(e) => setQ(e.target.value)}
           />
         </div>
         {editing && (
@@ -133,12 +148,14 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
             disabled={watchlist.status !== 'ready'}
           />
         )}
-        {editing && watchlist.error && (
-          <div className="watchlist-error">{watchlist.error}</div>
-        )}
+        {editing && watchlist.error && <div className="watchlist-error">{watchlist.error}</div>}
         <div className="market-tabs">
-          {['ALL', 'JP', 'US'].map(m => (
-            <button key={m} className={`mkt-tab${marketFilter === m ? ' active' : ''}`} onClick={() => setMarketFilter(m)}>
+          {['ALL', 'JP', 'US'].map((m) => (
+            <button
+              key={m}
+              className={`mkt-tab${marketFilter === m ? ' active' : ''}`}
+              onClick={() => setMarketFilter(m)}
+            >
               {m}
             </button>
           ))}
@@ -146,26 +163,33 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
       </div>
 
       <div className="ticker-list">
-        {visibleTickers.map(t => {
+        {visibleTickers.map((t) => {
           const series = data[t.code];
           if (!series || series.length < 2) return null;
           const ll = series[series.length - 1];
           const pp = series[series.length - 2];
           const c = ll.c - pp.c;
-          const cp = c / pp.c * 100;
+          const cp = (c / pp.c) * 100;
           const selIdx = state.selected.indexOf(t.code);
           const selected = selIdx >= 0;
           const isPrimary = selIdx === 0;
-          const color = selected && !isPrimary ? COMPARE_COLORS[selIdx % COMPARE_COLORS.length] : null;
+          const color =
+            selected && !isPrimary ? COMPARE_COLORS[selIdx % COMPARE_COLORS.length] : null;
 
           const spark = series.slice(-40);
-          let min = Infinity, max = -Infinity;
-          spark.forEach(b => { if (b.c < min) min = b.c; if (b.c > max) max = b.c; });
-          const pts = spark.map((b, i) => {
-            const x = (i / (spark.length - 1)) * 52;
-            const y = 14 - ((b.c - min) / (max - min + 1e-9)) * 12;
-            return x.toFixed(1) + ',' + y.toFixed(1);
-          }).join(' ');
+          let min = Infinity,
+            max = -Infinity;
+          spark.forEach((b) => {
+            if (b.c < min) min = b.c;
+            if (b.c > max) max = b.c;
+          });
+          const pts = spark
+            .map((b, i) => {
+              const x = (i / (spark.length - 1)) * 52;
+              const y = 14 - ((b.c - min) / (max - min + 1e-9)) * 12;
+              return x.toFixed(1) + ',' + y.toFixed(1);
+            })
+            .join(' ');
 
           return (
             <div
@@ -175,29 +199,44 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
               onDoubleClick={() => makePrimary(t.code)}
             >
               <div className="tick-left">
-                <div className="tick-chk" style={selected && color ? { background: color, borderColor: color } : {}}>
-                  {isPrimary ? '●' : (selected ? selIdx + 1 : '')}
+                <div
+                  className="tick-chk"
+                  style={selected && color ? { background: color, borderColor: color } : {}}
+                >
+                  {isPrimary ? '●' : selected ? selIdx + 1 : ''}
                 </div>
                 <div className="tick-meta">
                   <div className="tick-code">
-                    {t.code}<span className="tick-mkt">{t.market}</span>
+                    {t.code}
+                    <span className="tick-mkt">{t.market}</span>
                   </div>
                   <div className="tick-name">{t.name}</div>
                 </div>
               </div>
               <div className="tick-mid">
                 <svg width={54} height={16} viewBox="0 0 52 14" className="spark">
-                  <polyline points={pts} fill="none" stroke={c >= 0 ? 'var(--bull)' : 'var(--bear)'} strokeWidth={1} />
+                  <polyline
+                    points={pts}
+                    fill="none"
+                    stroke={c >= 0 ? 'var(--bull)' : 'var(--bear)'}
+                    strokeWidth={1}
+                  />
                 </svg>
               </div>
               <div className="tick-right">
                 <div className="tick-price">{fmtPrice(ll.c, t.currency)}</div>
-                <div className={`tick-chg ${c >= 0 ? 'up' : 'down'}`}>{c >= 0 ? '+' : ''}{cp.toFixed(2)}%</div>
+                <div className={`tick-chg ${c >= 0 ? 'up' : 'down'}`}>
+                  {c >= 0 ? '+' : ''}
+                  {cp.toFixed(2)}%
+                </div>
               </div>
               {editing && (
                 <button
                   className="tick-remove"
-                  onClick={e => { e.stopPropagation(); handleRemoveSymbol(t.code); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveSymbol(t.code);
+                  }}
                   title="リストから削除"
                 >
                   ×
@@ -207,7 +246,6 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
           );
         })}
       </div>
-
 
       {primaryTicker && last && prev && displayFin && (
         <div className="section fundamentals">

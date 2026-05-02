@@ -20,6 +20,11 @@ export function drawVolume(pane: SubPaneContext, bars: OHLCBar[], volMax: number
     const x = xScale(i);
     const bodyW = Math.max(1, bw * 0.72);
     const hh = (b.v / volMax) * height;
-    ctx.fillRect(Math.round(x - bodyW / 2), Math.round(y0 + height - hh + 4), Math.round(bodyW), Math.round(hh));
+    ctx.fillRect(
+      Math.round(x - bodyW / 2),
+      Math.round(y0 + height - hh + 4),
+      Math.round(bodyW),
+      Math.round(hh),
+    );
   }
 }

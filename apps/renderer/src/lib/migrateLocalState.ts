@@ -28,7 +28,11 @@ function isMigrated(): boolean {
 }
 
 function markMigrated() {
-  try { localStorage.setItem(MIGRATION_FLAG, '1'); } catch { /* noop */ }
+  try {
+    localStorage.setItem(MIGRATION_FLAG, '1');
+  } catch {
+    /* noop */
+  }
 }
 
 function inferMarket(symbol: string): string {
@@ -42,7 +46,7 @@ export async function migrateLegacyWatchlist(existing: Watchlist[]): Promise<Wat
     markMigrated();
     return null;
   }
-  if (existing.some(w => w.name === 'Migrated from local')) {
+  if (existing.some((w) => w.name === 'Migrated from local')) {
     markMigrated();
     return null;
   }

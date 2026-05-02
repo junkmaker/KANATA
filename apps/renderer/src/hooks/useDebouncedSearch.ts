@@ -34,7 +34,7 @@ export function useDebouncedSearch(query: string): DebouncedSearchState & { clea
       return;
     }
 
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     timerRef.current = setTimeout(async () => {
       const controller = new AbortController();

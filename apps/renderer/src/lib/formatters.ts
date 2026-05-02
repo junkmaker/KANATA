@@ -14,7 +14,13 @@ export function fmtVol(v: number): string {
 export function fmtDate(t: number, tf: string): string {
   const d = new Date(t);
   if (tf === '5m' || tf === '15m' || tf === '60m') {
-    return d.toLocaleString('en-GB', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+    return d.toLocaleString('en-GB', {
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
   }
   return d.toLocaleDateString('en-GB', { year: '2-digit', month: 'short', day: '2-digit' });
 }

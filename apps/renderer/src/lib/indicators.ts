@@ -1,6 +1,10 @@
-import type { OHLCBar, BOLLResult, STOCHResult, ICHIResult, MACDResult } from '../types';
+import type { BOLLResult, ICHIResult, MACDResult, OHLCBar, STOCHResult } from '../types';
 
-export function SMA(data: OHLCBar[], period: number, field: keyof OHLCBar = 'c'): (number | null)[] {
+export function SMA(
+  data: OHLCBar[],
+  period: number,
+  field: keyof OHLCBar = 'c',
+): (number | null)[] {
   const out: (number | null)[] = new Array(data.length).fill(null);
   let sum = 0;
   for (let i = 0; i < data.length; i++) {
@@ -11,7 +15,11 @@ export function SMA(data: OHLCBar[], period: number, field: keyof OHLCBar = 'c')
   return out;
 }
 
-export function EMA(data: OHLCBar[], period: number, field: keyof OHLCBar = 'c'): (number | null)[] {
+export function EMA(
+  data: OHLCBar[],
+  period: number,
+  field: keyof OHLCBar = 'c',
+): (number | null)[] {
   const out: (number | null)[] = new Array(data.length).fill(null);
   const k = 2 / (period + 1);
   let prev: number | null = null;
@@ -39,7 +47,7 @@ export function BOLL(data: OHLCBar[], period = 20, mult = 2): BOLLResult {
   for (let i = period - 1; i < data.length; i++) {
     let s = 0;
     const m = mid[i]!;
-    for (let j = i - period + 1; j <= i; j++) s += Math.pow(data[j].c - m, 2);
+    for (let j = i - period + 1; j <= i; j++) s += (data[j].c - m) ** 2;
     const sd = Math.sqrt(s / period);
     upper[i] = m + mult * sd;
     lower[i] = m - mult * sd;
@@ -50,19 +58,24 @@ export function BOLL(data: OHLCBar[], period = 20, mult = 2): BOLLResult {
 export function STOCH(data: OHLCBar[], kPeriod = 14, dPeriod = 3, slowing = 3): STOCHResult {
   const rawK: (number | null)[] = new Array(data.length).fill(null);
   for (let i = kPeriod - 1; i < data.length; i++) {
-    let hh = -Infinity, ll = Infinity;
+    let hh = -Infinity,
+      ll = Infinity;
     for (let j = i - kPeriod + 1; j <= i; j++) {
       if (data[j].h > hh) hh = data[j].h;
       if (data[j].l < ll) ll = data[j].l;
     }
-    rawK[i] = (data[i].c - ll) / (hh - ll + 1e-9) * 100;
+    rawK[i] = ((data[i].c - ll) / (hh - ll + 1e-9)) * 100;
   }
   const k: (number | null)[] = new Array(data.length).fill(null);
   for (let i = 0; i < data.length; i++) {
     if (i >= kPeriod - 1 + slowing - 1) {
-      let s = 0, n = 0;
+      let s = 0,
+        n = 0;
       for (let j = i - slowing + 1; j <= i; j++) {
-        if (rawK[j] != null) { s += rawK[j]!; n++; }
+        if (rawK[j] != null) {
+          s += rawK[j]!;
+          n++;
+        }
       }
       if (n === slowing) k[i] = s / slowing;
     }
@@ -92,16 +105,28 @@ export function PSAR(data: OHLCBar[], step = 0.02, maxStep = 0.2): (number | nul
     if (uptrend) {
       sar = Math.min(sar, data[i - 1].l, i >= 2 ? data[i - 2].l : data[i - 1].l);
       if (bar.l < sar) {
-        uptrend = false; sar = ep; ep = bar.l; af = step;
+        uptrend = false;
+        sar = ep;
+        ep = bar.l;
+        af = step;
       } else {
-        if (bar.h > ep) { ep = bar.h; af = Math.min(maxStep, af + step); }
+        if (bar.h > ep) {
+          ep = bar.h;
+          af = Math.min(maxStep, af + step);
+        }
       }
     } else {
       sar = Math.max(sar, data[i - 1].h, i >= 2 ? data[i - 2].h : data[i - 1].h);
       if (bar.h > sar) {
-        uptrend = true; sar = ep; ep = bar.h; af = step;
+        uptrend = true;
+        sar = ep;
+        ep = bar.h;
+        af = step;
       } else {
-        if (bar.l < ep) { ep = bar.l; af = Math.min(maxStep, af + step); }
+        if (bar.l < ep) {
+          ep = bar.l;
+          af = Math.min(maxStep, af + step);
+        }
       }
     }
     out[i] = sar;
@@ -120,9 +145,13 @@ function emaFromArray(values: (number | null)[], period: number): (number | null
     count++;
     if (count < period) continue;
     if (count === period) {
-      let sum = 0, n = 0;
+      let sum = 0,
+        n = 0;
       for (let j = i; j >= 0 && n < period; j--) {
-        if (values[j] != null) { sum += values[j]!; n++; }
+        if (values[j] != null) {
+          sum += values[j]!;
+          n++;
+        }
       }
       prev = sum / period;
       out[i] = prev;
@@ -152,10 +181,12 @@ export function MACD(data: OHLCBar[], fast = 12, slow = 26, signal = 9): MACDRes
 export function RSI(data: OHLCBar[], period = 14): (number | null)[] {
   const out: (number | null)[] = new Array(data.length).fill(null);
   if (data.length < period + 1) return out;
-  let avgGain = 0, avgLoss = 0;
+  let avgGain = 0,
+    avgLoss = 0;
   for (let i = 1; i <= period; i++) {
     const change = data[i].c - data[i - 1].c;
-    if (change > 0) avgGain += change; else avgLoss += Math.abs(change);
+    if (change > 0) avgGain += change;
+    else avgLoss += Math.abs(change);
   }
   avgGain /= period;
   avgLoss /= period;
@@ -169,10 +200,24 @@ export function RSI(data: OHLCBar[], period = 14): (number | null)[] {
   return out;
 }
 
-export function ICHI(data: OHLCBar[], tenkanP = 9, kijunP = 26, senkouBP = 52, disp = 26): ICHIResult {
+export function ICHI(
+  data: OHLCBar[],
+  tenkanP = 9,
+  kijunP = 26,
+  senkouBP = 52,
+  disp = 26,
+): ICHIResult {
   const n = data.length;
-  const hh = (i: number, p: number) => { let h = -Infinity; for (let j = i - p + 1; j <= i; j++) if (data[j].h > h) h = data[j].h; return h; };
-  const ll = (i: number, p: number) => { let l = Infinity; for (let j = i - p + 1; j <= i; j++) if (data[j].l < l) l = data[j].l; return l; };
+  const hh = (i: number, p: number) => {
+    let h = -Infinity;
+    for (let j = i - p + 1; j <= i; j++) if (data[j].h > h) h = data[j].h;
+    return h;
+  };
+  const ll = (i: number, p: number) => {
+    let l = Infinity;
+    for (let j = i - p + 1; j <= i; j++) if (data[j].l < l) l = data[j].l;
+    return l;
+  };
   const tenkan: (number | null)[] = new Array(n).fill(null);
   const kijun: (number | null)[] = new Array(n).fill(null);
   const senkouA: (number | null)[] = new Array(n + disp).fill(null);
