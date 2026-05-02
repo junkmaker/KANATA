@@ -32,6 +32,10 @@ export function drawRsi(pane: SubPaneContext, rsi: (number | null)[], params: RS
   });
   ctx.setLineDash([]);
 
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, y0, priceW, height);
+  ctx.clip();
   drawLine(
     ctx,
     xScale,
@@ -39,4 +43,5 @@ export function drawRsi(pane: SubPaneContext, rsi: (number | null)[], params: RS
     COLORS.lime,
     1.25,
   );
+  ctx.restore();
 }

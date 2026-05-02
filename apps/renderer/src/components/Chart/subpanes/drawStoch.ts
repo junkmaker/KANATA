@@ -25,6 +25,10 @@ export function drawStoch(pane: SubPaneContext, stoch: STOCHResult): void {
   });
   ctx.setLineDash([]);
 
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, y0, priceW, height);
+  ctx.clip();
   const { k, d } = stoch;
   drawLine(
     ctx,
@@ -41,4 +45,5 @@ export function drawStoch(pane: SubPaneContext, stoch: STOCHResult): void {
     1.25,
     [3, 2],
   );
+  ctx.restore();
 }
