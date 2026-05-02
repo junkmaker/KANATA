@@ -207,6 +207,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.stroke();
     }
 
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD_L, PAD_T, priceW, priceH);
+    ctx.clip();
+
     // Ichimoku cloud (behind candles)
     if (state.indicators.ichi && indi.ichi) {
       const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
@@ -244,10 +249,6 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     }
 
     // Candles
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(PAD_L, PAD_T, priceW, priceH);
-    ctx.clip();
     for (let i = view.start; i < safeEnd; i++) {
       const b = primaryData[i];
       const x = xScale(i);

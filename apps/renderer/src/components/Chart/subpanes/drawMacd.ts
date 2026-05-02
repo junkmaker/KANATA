@@ -64,6 +64,10 @@ export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDPar
     ctx.fillRect(Math.round(x - bodyW / 2), Math.round(yTop), Math.round(bodyW), Math.round(barH));
   }
 
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, y0, priceW, height);
+  ctx.clip();
   drawLine(
     ctx,
     xScale,
@@ -79,4 +83,5 @@ export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDPar
     1.25,
     [3, 2],
   );
+  ctx.restore();
 }
