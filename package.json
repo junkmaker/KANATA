@@ -19,7 +19,13 @@
     "test:renderer": "vitest run --config apps/renderer/vitest.config.ts",
     "test:backend": "cd backend && python -m pytest -v",
     "test:e2e": "playwright test",
-    "test": "npm run test:main && npm run test:renderer && npm run test:backend"
+    "test": "npm run test:main && npm run test:renderer && npm run test:backend",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "build": {
     "appId": "com.kanata.terminal",
@@ -82,6 +88,8 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
+    "@biomejs/cli-win32-x64": "^2.4.14",
     "@playwright/test": "^1.52.0",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
