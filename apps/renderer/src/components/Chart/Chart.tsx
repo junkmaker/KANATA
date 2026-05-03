@@ -497,9 +497,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(fx(finData.length - 1), ys[ys.length - 1], 2.5, 0, Math.PI * 2);
-          ctx.fill();
+          ys.forEach((y, i) => {
+            ctx.beginPath();
+            ctx.arc(fx(i), y, i === ys.length - 1 ? 2.5 : 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          });
         };
         if (state.financial.roe)
           drawFin(

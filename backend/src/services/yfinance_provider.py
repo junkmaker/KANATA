@@ -62,14 +62,14 @@ def _safe_float_val(v: object) -> float | None:
         return None
 
 
-def _bs_series(bs: object, date_str: str) -> dict[str, float]:
-    """Return {row_key: value} for the balance sheet column nearest to date_str (±90 days)."""
+def _bs_series(bs: object, date_str: str, max_delta_days: int = 91) -> dict[str, float]:
+    """Return {row_key: value} for the balance sheet column nearest to date_str."""
     import pandas as pd
     if bs is None or not hasattr(bs, "empty") or bs.empty:  # type: ignore[union-attr]
         return {}
     target = datetime.strptime(date_str, "%Y-%m-%d")
     best_col = None
-    best_delta = 91
+    best_delta = max_delta_days
     for col in bs.columns:  # type: ignore[union-attr]
         try:
             col_str = str(col)[:10]
@@ -98,7 +98,9 @@ def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
     try:
         ticker = yf.Ticker(yf_symbol)
         fin = ticker.quarterly_financials
-        bs = ticker.quarterly_balance_sheet
+        bs_q = ticker.quarterly_balance_sheet
+        use_annual_bs = bs_q is None or not hasattr(bs_q, "empty") or bs_q.empty
+        bs = ticker.balance_sheet if use_annual_bs else bs_q
         info = ticker.info
     except Exception:
         return None
@@ -131,7 +133,7 @@ def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
 
             net_income = _safe_float_val(fin.loc["Net Income", dt]) if "Net Income" in fin.index else None
 
-            bs_row = _bs_series(bs, date_str)
+            bs_row = _bs_series(bs, date_str, max_delta_days=200 if use_annual_bs else 91)
 
             equity_f = None
             for key in equity_candidates:
