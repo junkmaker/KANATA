@@ -165,31 +165,33 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
       <div className="ticker-list">
         {visibleTickers.map((t) => {
           const series = data[t.code];
-          if (!series || series.length < 2) return null;
-          const ll = series[series.length - 1];
-          const pp = series[series.length - 2];
-          const c = ll.c - pp.c;
-          const cp = (c / pp.c) * 100;
+          const ll = series && series.length >= 1 ? series[series.length - 1] : null;
+          const pp = series && series.length >= 2 ? series[series.length - 2] : null;
+          const c = ll && pp ? ll.c - pp.c : 0;
+          const cp = ll && pp ? (c / pp.c) * 100 : 0;
           const selIdx = state.selected.indexOf(t.code);
           const selected = selIdx >= 0;
           const isPrimary = selIdx === 0;
           const color =
             selected && !isPrimary ? COMPARE_COLORS[selIdx % COMPARE_COLORS.length] : null;
 
-          const spark = series.slice(-40);
-          let min = Infinity,
-            max = -Infinity;
-          spark.forEach((b) => {
-            if (b.c < min) min = b.c;
-            if (b.c > max) max = b.c;
-          });
-          const pts = spark
-            .map((b, i) => {
-              const x = (i / (spark.length - 1)) * 52;
-              const y = 14 - ((b.c - min) / (max - min + 1e-9)) * 12;
-              return x.toFixed(1) + ',' + y.toFixed(1);
-            })
-            .join(' ');
+          const spark = series && series.length >= 2 ? series.slice(-40) : [];
+          let pts = '';
+          if (spark.length >= 2) {
+            let min = Infinity,
+              max = -Infinity;
+            spark.forEach((b) => {
+              if (b.c < min) min = b.c;
+              if (b.c > max) max = b.c;
+            });
+            pts = spark
+              .map((b, i) => {
+                const x = (i / (spark.length - 1)) * 52;
+                const y = 14 - ((b.c - min) / (max - min + 1e-9)) * 12;
+                return x.toFixed(1) + ',' + y.toFixed(1);
+              })
+              .join(' ');
+          }
 
           return (
             <div
@@ -215,19 +217,20 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
               </div>
               <div className="tick-mid">
                 <svg width={54} height={16} viewBox="0 0 52 14" className="spark">
-                  <polyline
-                    points={pts}
-                    fill="none"
-                    stroke={c >= 0 ? 'var(--bull)' : 'var(--bear)'}
-                    strokeWidth={1}
-                  />
+                  {pts && (
+                    <polyline
+                      points={pts}
+                      fill="none"
+                      stroke={c >= 0 ? 'var(--bull)' : 'var(--bear)'}
+                      strokeWidth={1}
+                    />
+                  )}
                 </svg>
               </div>
               <div className="tick-right">
-                <div className="tick-price">{fmtPrice(ll.c, t.currency)}</div>
-                <div className={`tick-chg ${c >= 0 ? 'up' : 'down'}`}>
-                  {c >= 0 ? '+' : ''}
-                  {cp.toFixed(2)}%
+                <div className="tick-price">{ll ? fmtPrice(ll.c, t.currency) : '—'}</div>
+                <div className={`tick-chg ${ll && pp ? (c >= 0 ? 'up' : 'down') : ''}`}>
+                  {ll && pp ? `${c >= 0 ? '+' : ''}${cp.toFixed(2)}%` : '—'}
                 </div>
               </div>
               {editing && (

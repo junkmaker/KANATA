@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 import yfinance as yf
 
 # Map frontend timeframe → (yfinance interval, yfinance period, cache TTL seconds)
@@ -49,6 +50,121 @@ def fetch_ohlcv(symbol: str, timeframe: str) -> list[dict]:
 
 def get_ttl(timeframe: str) -> int:
     return INTERVAL_MAP.get(timeframe, ("", "", 3600))[2]
+
+
+def _safe_float_val(v: object) -> float | None:
+    if v is None:
+        return None
+    try:
+        f = float(v)  # type: ignore[arg-type]
+        return None if math.isnan(f) else f
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _bs_series(bs: object, date_str: str, max_delta_days: int = 91) -> dict[str, float]:
+    """Return {row_key: value} for the balance sheet column nearest to date_str."""
+    import pandas as pd
+    if bs is None or not hasattr(bs, "empty") or bs.empty:  # type: ignore[union-attr]
+        return {}
+    target = datetime.strptime(date_str, "%Y-%m-%d")
+    best_col = None
+    best_delta = max_delta_days
+    for col in bs.columns:  # type: ignore[union-attr]
+        try:
+            col_str = str(col)[:10]
+            delta = abs((datetime.strptime(col_str, "%Y-%m-%d") - target).days)
+            if delta < best_delta:
+                best_delta = delta
+                best_col = col
+        except Exception:
+            continue
+    if best_col is None:
+        return {}
+    result = {}
+    for key in bs.index:  # type: ignore[union-attr]
+        v = _safe_float_val(bs.loc[key, best_col])  # type: ignore[index]
+        if v is not None:
+            result[str(key)] = v
+    return result
+
+
+def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
+    if not symbol.isascii():
+        return None
+
+    yf_symbol = to_yf_symbol(symbol)
+
+    try:
+        ticker = yf.Ticker(yf_symbol)
+        fin = ticker.quarterly_financials
+        bs_q = ticker.quarterly_balance_sheet
+        use_annual_bs = bs_q is None or not hasattr(bs_q, "empty") or bs_q.empty
+        bs = ticker.balance_sheet if use_annual_bs else bs_q
+        info = ticker.info
+    except Exception:
+        return None
+
+    if fin is None or fin.empty:
+        return None
+
+    per_const = 0.0
+    if isinstance(info, dict):
+        trailing_pe = info.get("trailingPE")
+        if trailing_pe is not None and isinstance(trailing_pe, (int, float)):
+            try:
+                f = float(trailing_pe)
+                per_const = 0.0 if math.isnan(f) else round(f, 1)
+            except (ValueError, OverflowError):
+                per_const = 0.0
+
+    equity_candidates = [
+        "Stockholders Equity",
+        "Common Stock Equity",
+        "Total Stockholder Equity",
+        "Total Equity Gross Minority Interest",
+    ]
+
+    results = []
+    for dt in fin.columns:
+        try:
+            t_ms = int(dt.timestamp() * 1000)
+            date_str = str(dt)[:10]
+
+            net_income = _safe_float_val(fin.loc["Net Income", dt]) if "Net Income" in fin.index else None
+
+            bs_row = _bs_series(bs, date_str, max_delta_days=200 if use_annual_bs else 91)
+
+            equity_f = None
+            for key in equity_candidates:
+                if key in bs_row:
+                    equity_f = bs_row[key]
+                    break
+            if equity_f is None:
+                for k, v in bs_row.items():
+                    if "equity" in k.lower() and "minority" not in k.lower():
+                        equity_f = v
+                        break
+
+            assets_f = bs_row.get("Total Assets")
+
+            roe = 0.0
+            if equity_f is not None and equity_f != 0 and net_income is not None:
+                roe = round(net_income / abs(equity_f) * 100, 1)
+
+            roic = 0.0
+            if assets_f is not None and assets_f != 0 and net_income is not None:
+                roic = round(net_income / abs(assets_f) * 100, 1)
+
+            results.append({"t": t_ms, "roe": roe, "roic": roic, "per": per_const})
+        except Exception:
+            continue
+
+    if not results:
+        return None
+
+    results.sort(key=lambda x: x["t"])
+    return results[-20:]
 
 
 def fetch_fundamentals(symbol: str) -> dict | None:

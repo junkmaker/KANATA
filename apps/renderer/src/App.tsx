@@ -7,10 +7,9 @@ import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
-import { retime, TF } from './lib/data';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
-import { syntheticSeriesForTicker, watchlistToTickers } from './lib/watchlistTickers';
-import type { AppState, OHLCBar } from './types';
+import { watchlistToTickers } from './lib/watchlistTickers';
+import type { AppState } from './types';
 import './styles/globals.css';
 
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
@@ -127,28 +126,11 @@ export function App() {
     return watchlistToTickers(activeList);
   }, [wl.status, activeList]);
 
-  // Synthetic OHLC for displayed tickers (sparklines / fallback)
-  const syntheticData = useMemo(() => {
-    const tfMs = TF[state.timeframe] || TF['1D'];
-    const d: Record<string, OHLCBar[]> = {};
-    displayTickers.forEach((t) => {
-      const series = syntheticSeriesForTicker(t);
-      d[t.code] = retime(series, tfMs);
-    });
-    return d;
-  }, [state.timeframe, displayTickers]);
-
   // Real data for all watchlist tickers from backend (keeps prices consistent regardless of selection)
   const allSymbols = useMemo(() => displayTickers.map((t) => t.code), [displayTickers]);
   const { realData, status } = useChartData(allSymbols, state.timeframe);
 
-  const data = useMemo(() => {
-    const merged = { ...syntheticData };
-    Object.keys(realData).forEach((sym) => {
-      if (realData[sym]?.length) merged[sym] = realData[sym];
-    });
-    return merged;
-  }, [syntheticData, realData]);
+  const data = realData;
 
   useEffect(() => {
     try {
@@ -248,8 +230,8 @@ export function App() {
     );
   }
 
-  // Watchlist loaded but empty — render shell so user can add tickers
-  if (!last) {
+  // Watchlist loaded but has no tickers — render shell so user can add tickers
+  if (displayTickers.length === 0) {
     return (
       <div className="app">
         <div className="main-grid">

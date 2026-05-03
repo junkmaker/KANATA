@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchFundamentals } from '../../lib/api';
+import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
-import { genFin } from '../../lib/data';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AppState, FinMetrics, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import type { AppState, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -51,18 +50,20 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     setView({ start, end });
   }, [primary, primaryData?.length]);
 
-  const [finMetrics, setFinMetrics] = useState<FinMetrics | null>(null);
+  const [finHistory, setFinHistory] = useState<FinBar[] | null>(null);
   useEffect(() => {
     if (!state.showFinancial) {
-      setFinMetrics(null);
+      setFinHistory(null);
       return;
     }
     let cancelled = false;
-    fetchFundamentals(primary)
-      .then((m) => {
-        if (!cancelled) setFinMetrics(m);
+    fetchQuarterlyFin(primary)
+      .then((bars) => {
+        if (!cancelled) setFinHistory(bars.length > 0 ? bars : null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setFinHistory(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -419,7 +420,6 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     // Financial pane
     if (state.showFinancial) {
-      const tk = tickers.find((t) => t.code === primary);
       const finW = priceW;
       const finY = finY0;
       ctx.strokeStyle = COLORS.grid;
@@ -431,9 +431,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.textAlign = 'left';
       ctx.fillText('FUNDAMENTALS · last 20 quarters', PAD_L, finY + 8);
 
-      const src = finMetrics ?? (tk && tk.fin.roe ? tk.fin : null);
-      const seed = tk?.seed ?? 1;
-      const finData = src ? genFin(seed, src.roe, src.roic, src.per) : null;
+      const finData = finHistory;
 
       if (finData) {
         let rmin = Infinity,
@@ -469,7 +467,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         pmin -= pSpan * 0.1;
         pmax += pSpan * 0.1;
 
-        const fx = (i: number) => PAD_L + (i / (finData.length - 1)) * finW;
+        const fx = (i: number) =>
+          finData.length < 2 ? PAD_L + finW / 2 : PAD_L + (i / (finData.length - 1)) * finW;
         const fyL = (v: number) => finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
         const fyR = (v: number) => finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
 
@@ -498,9 +497,11 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(fx(finData.length - 1), ys[ys.length - 1], 2.5, 0, Math.PI * 2);
-          ctx.fill();
+          ys.forEach((y, i) => {
+            ctx.beginPath();
+            ctx.arc(fx(i), y, i === ys.length - 1 ? 2.5 : 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          });
         };
         if (state.financial.roe)
           drawFin(
@@ -554,7 +555,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     FIN_H,
     volMax,
     params,
-    finMetrics,
+    finHistory,
   ]);
 
   // Overlay: crosshair, drawings
@@ -753,7 +754,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
 
       const idx = Math.round(view.start + (hover.sx - PAD_L) / bw);
-      if (idx >= view.start && idx < view.end && primaryData[idx]) {
+      if (idx >= view.start && idx < view.end && primaryData?.[idx]) {
         const xAxisY = FIN_H > 0 ? finY0 - 9 : size.h - X_AXIS_H / 2;
         ctx.fillStyle = COLORS.panel;
         ctx.fillRect(hover.sx - 58, xAxisY - 9, 116, 18);
