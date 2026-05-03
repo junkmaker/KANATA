@@ -51,6 +51,79 @@ def get_ttl(timeframe: str) -> int:
     return INTERVAL_MAP.get(timeframe, ("", "", 3600))[2]
 
 
+def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
+    if not symbol.isascii():
+        return None
+
+    yf_symbol = to_yf_symbol(symbol)
+
+    try:
+        ticker = yf.Ticker(yf_symbol)
+        fin = ticker.quarterly_financials
+        bs = ticker.quarterly_balance_sheet
+        info = ticker.info
+    except Exception:
+        return None
+
+    if fin is None or fin.empty or bs is None or bs.empty:
+        return None
+
+    per_const = 0.0
+    if isinstance(info, dict):
+        trailing_pe = info.get("trailingPE")
+        if trailing_pe is not None and isinstance(trailing_pe, (int, float)):
+            try:
+                f = float(trailing_pe)
+                per_const = 0.0 if math.isnan(f) else round(f, 1)
+            except (ValueError, OverflowError):
+                per_const = 0.0
+
+    equity_keys = ["Stockholders Equity", "Common Stock Equity", "Total Stockholder Equity"]
+    net_income_key = "Net Income"
+    assets_keys = ["Total Assets"]
+
+    results = []
+    for dt in fin.columns:
+        try:
+            t_ms = int(dt.timestamp() * 1000)
+
+            net_income = None
+            if net_income_key in fin.index:
+                v = fin.loc[net_income_key, dt]
+                if v is not None and not (isinstance(v, float) and math.isnan(v)):
+                    net_income = float(v)
+
+            roe = 0.0
+            for key in equity_keys:
+                if key in bs.index and dt in bs.columns:
+                    equity_v = bs.loc[key, dt]
+                    if equity_v is not None and not (isinstance(equity_v, float) and math.isnan(equity_v)):
+                        equity_f = float(equity_v)
+                        if equity_f != 0 and net_income is not None:
+                            roe = round(net_income / abs(equity_f) * 100, 1)
+                    break
+
+            roic = 0.0
+            for key in assets_keys:
+                if key in bs.index and dt in bs.columns:
+                    assets_v = bs.loc[key, dt]
+                    if assets_v is not None and not (isinstance(assets_v, float) and math.isnan(assets_v)):
+                        assets_f = float(assets_v)
+                        if assets_f != 0 and net_income is not None:
+                            roic = round(net_income / abs(assets_f) * 100, 1)
+                    break
+
+            results.append({"t": t_ms, "roe": roe, "roic": roic, "per": per_const})
+        except Exception:
+            continue
+
+    if not results:
+        return None
+
+    results.sort(key=lambda x: x["t"])
+    return results[-20:]
+
+
 def fetch_fundamentals(symbol: str) -> dict | None:
     if not symbol.isascii():
         return None

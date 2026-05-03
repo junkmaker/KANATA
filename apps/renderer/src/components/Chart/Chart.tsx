@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchFundamentals } from '../../lib/api';
+import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
-import { genFin } from '../../lib/data';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AppState, FinMetrics, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import type { AppState, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -51,18 +50,20 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     setView({ start, end });
   }, [primary, primaryData?.length]);
 
-  const [finMetrics, setFinMetrics] = useState<FinMetrics | null>(null);
+  const [finHistory, setFinHistory] = useState<FinBar[] | null>(null);
   useEffect(() => {
     if (!state.showFinancial) {
-      setFinMetrics(null);
+      setFinHistory(null);
       return;
     }
     let cancelled = false;
-    fetchFundamentals(primary)
-      .then((m) => {
-        if (!cancelled) setFinMetrics(m);
+    fetchQuarterlyFin(primary)
+      .then((bars) => {
+        if (!cancelled) setFinHistory(bars.length > 0 ? bars : null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setFinHistory(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -419,7 +420,6 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     // Financial pane
     if (state.showFinancial) {
-      const tk = tickers.find((t) => t.code === primary);
       const finW = priceW;
       const finY = finY0;
       ctx.strokeStyle = COLORS.grid;
@@ -431,9 +431,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.textAlign = 'left';
       ctx.fillText('FUNDAMENTALS · last 20 quarters', PAD_L, finY + 8);
 
-      const src = finMetrics ?? (tk && tk.fin.roe ? tk.fin : null);
-      const seed = tk?.seed ?? 1;
-      const finData = src ? genFin(seed, src.roe, src.roic, src.per) : null;
+      const finData = finHistory;
 
       if (finData) {
         let rmin = Infinity,
@@ -554,7 +552,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     FIN_H,
     volMax,
     params,
-    finMetrics,
+    finHistory,
   ]);
 
   // Overlay: crosshair, drawings

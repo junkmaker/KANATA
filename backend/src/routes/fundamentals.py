@@ -1,8 +1,23 @@
 from fastapi import APIRouter, HTTPException
 from ..services.cache import cache
-from ..services.yfinance_provider import fetch_fundamentals
+from ..services.yfinance_provider import fetch_fundamentals, fetch_quarterly_fin
 
 router = APIRouter()
+
+
+@router.get("/fundamentals/{symbol}/quarterly")
+def get_quarterly_fundamentals(symbol: str):
+    cache_key = f"fundamentals:quarterly:{symbol}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = fetch_quarterly_fin(symbol)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No quarterly fundamentals for {symbol}")
+
+    cache.set(cache_key, result, 3600)
+    return result
 
 
 @router.get("/fundamentals/{symbol}")
