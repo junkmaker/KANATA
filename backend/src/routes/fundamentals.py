@@ -13,11 +13,9 @@ def get_quarterly_fundamentals(symbol: str):
         return cached
 
     result = fetch_quarterly_fin(symbol)
-    if result is None:
-        raise HTTPException(status_code=404, detail=f"No quarterly fundamentals for {symbol}")
-
-    cache.set(cache_key, result, 3600)
-    return result
+    data: list = result if result is not None else []
+    cache.set(cache_key, data, 3600)
+    return data
 
 
 @router.get("/fundamentals/{symbol}")
