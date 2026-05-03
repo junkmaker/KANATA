@@ -23,13 +23,15 @@ KANATA/
 │   │   │   └── channels.ts # IPC チャンネル定数
 │   │   ├── sidecar/
 │   │   │   └── pythonSidecar.ts  # Python サブプロセス管理
-│   │   └── db/
-│   │       └── database.ts       # better-sqlite3 (Phase 2.7 で削除予定)
+│   │   ├── lib/
+│   │   │   └── logger.ts         # mainLogger / sidecarLogger
+│   │   └── _unused/
+│   │       └── database.ts       # 未使用（better-sqlite3 削除済み）
 │   └── renderer/src/      # React フロントエンド
 │       ├── App.tsx
 │       ├── components/
 │       │   └── Chart/
-│       │       ├── Chart.tsx            # Canvas 描画 (702 行)
+│       │       ├── Chart.tsx            # Canvas 描画 (1368 行)
 │       │       └── subpanes/
 │       │           ├── drawVolume.ts
 │       │           ├── drawStoch.ts
@@ -82,18 +84,15 @@ cd backend && pytest
 yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timeframe=X
                                                        ↓ fetch (動的ポート)
                                                renderer useChartData フック
-                                                       ↓ merge
-                                               App.tsx: realData で syntheticData を上書き
+                                                       ↓
+                                               App.tsx: realData をそのまま Chart へ渡す
                                                        ↓ props
                                                Chart.tsx (Canvas 描画)
 ```
 
-ポイントは **合成データと実データの二層構造**：
-
-- `lib/data.ts` が 15 銘柄分の合成 OHLC を生成（ウォッチリストのスパークライン、API 失敗時フォールバック、比較表示に常時使用）
-- `useChartData` が `state.selected` の銘柄だけをバックエンドから取得
-- `App.tsx` で `realData[sym]` があれば `syntheticData[sym]` を上書きしてマージ
-- この設計のため、サイドカー停止中もフロントは壊れない
+- `useChartData` がウォッチリストの全銘柄をバックエンドから取得
+- `lib/data.ts` の `genSeries` はウォッチリストに存在するが yfinance 未登録の銘柄のプレースホルダー OHLC 生成にのみ使用
+- 合成データの事前生成・マージは廃止済み
 
 ### Electron メインプロセス (`apps/main/src/`)
 
@@ -101,6 +100,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `preload.ts` — **CJS ビルド**（`out/preload/index.js`）。`contextBridge.exposeInMainWorld('kanata', api)` で `window.kanata` を公開。`getBackendUrl / platform / appVersion` を提供
 - `ipc/channels.ts` — `kanata:backend-url` チャンネル定数
 - `ipc/bridge.ts` — `ipcMain.handle('kanata:backend-url', () => getBackendUrl())`
+- `lib/logger.ts` — `mainLogger` / `sidecarLogger` を提供。ファイル出力（`userData/logs/`）+ コンソール出力の二重ログ
 
 ### Python サイドカー (`apps/main/src/sidecar/pythonSidecar.ts`)
 
@@ -115,6 +115,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `main.py` — FastAPI エントリ。`lifespan` で `init_db()` 実行。CORS 許可オリジン: `localhost:3000` / `localhost:5173`（Vite dev）/ `file://.*`（Electron prod）
 - `routes/quotes.py` — `GET /api/quotes/{symbol}?timeframe=...` TTL キャッシュ経由
 - `routes/search.py` — `GET /api/search?q=...` プリセット 15 銘柄 → 不一致時に yfinance.Search へフォールバック
+- `routes/fundamentals.py` — `GET /api/fundamentals/{symbol}/quarterly` で四半期財務データ（売上・利益・ROE/ROIC 等）を返す。`fetch_quarterly_fin` 経由。年次 BS が空の場合は年次にフォールバック
 - `routes/watchlists.py` — `/api/watchlists*` 8 エンドポイント（CRUD + 並び替え + アイテム追加削除）。全レスポンスは `{success, data, error}` エンベロープ。ユーザは `USER_ID = "local"` 固定。最後の 1 件は削除不可（400）、`is_default` トグルで他のデフォルトを解除
 - `services/yfinance_provider.py` — **タイムフレーム変換の要所**。`INTERVAL_MAP` で renderer の `5m/15m/60m/1D/1W/1M` を yfinance の `interval/period/cache TTL` に対応付ける。数字のみの JP 銘柄には `.T` サフィックスを自動付与（`to_yf_symbol`）
 - `services/cache.py` — プロセス内メモリの TTLCache（Redis 等は未使用）
@@ -132,10 +133,10 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `lib/watchlistApi.ts` — 8 本の fetch ラッパ。`{success, data, error}` エンベロープを剥がす
 - `lib/watchlistTickers.ts` — `Watchlist.items` を表示用 `Ticker` に変換し、未知銘柄は `genSeries` で合成 OHLC を生成
 - `lib/migrateLocalState.ts` — 既存 `kanata.state.selected` を「Migrated from local」リストに一度だけ移行（フラグ: `kanata.migrated.v1`）
-- `components/Chart/Chart.tsx` — **702 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール、クロスヘア、パン・ズームを扱う。サブペイン描画は `subpanes/` に切り出し済み
+- `components/Chart/Chart.tsx` — **1368 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール（選択・移動・削除含む）、クロスヘア、パン・ズームを扱う。サブペイン描画は `subpanes/` に切り出し済み
 - `components/Chart/subpanes/` — `drawVolume / drawStoch / drawMacd / drawRsi / drawUtils / types` に分割済み
 - `lib/indicators.ts` — SMA/EMA/BOLL/STOCH/PSAR/Ichimoku をクライアント側で計算
-- `lib/data.ts` — 合成 OHLC 生成 + `retime()` でタイムフレーム変換
+- `lib/data.ts` — `genSeries`（未知銘柄向けプレースホルダー OHLC）+ `retime()` でタイムフレーム変換。15 銘柄の事前生成は廃止済み
 - `hooks/useChartData.ts` — `symbols.join(',')` を useEffect 依存にして配列の参照等価性問題を回避している
 - `styles/globals.css` — 4 種カラーテーマ (`data-aesthetic`) + 2 種密度 (`data-density`) を CSS カスタムプロパティで切替
 
@@ -147,7 +148,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 
 ### 型定義 (`apps/renderer/src/types.ts`)
 
-`OHLCBar` / `Ticker` / `AppState` / 各インジケーター結果型が集中管理されている。新しい描画ツールやインジケーターを追加する際はここを起点に変更する。
+`OHLCBar` / `Ticker` / `AppState` / `DrawingObject` / 各インジケーター結果型が集中管理されている。`AppState` は `drawings: DrawingObject[]` と `selectedDrawingId: number | null` を持つ。新しい描画ツールやインジケーターを追加する際はここを起点に変更する。
 
 ## 実装上の注意点
 
