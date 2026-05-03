@@ -3,7 +3,7 @@ import type { AppState, OHLCBar, Ticker } from '../types';
 interface StatusBarProps {
   state: AppState;
   primaryTicker: Ticker | undefined;
-  last: OHLCBar;
+  last: OHLCBar | undefined;
 }
 
 export function StatusBar({ state }: StatusBarProps) {

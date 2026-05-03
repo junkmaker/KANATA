@@ -7,7 +7,7 @@ interface TopBarProps {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   primaryTicker: Ticker | undefined;
-  last: OHLCBar;
+  last: OHLCBar | undefined;
   chg: number;
   chgPct: number;
   up: boolean;
@@ -57,13 +57,12 @@ export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: Top
           </div>
           <div className="tt-name">{primaryTicker.name}</div>
           <div className={`tt-price ${up ? 'up' : 'down'}`}>
-            {fmtPrice(last.c, primaryTicker.currency)}
+            {last ? fmtPrice(last.c, primaryTicker.currency) : '—'}
           </div>
-          <div className={`tt-chg ${up ? 'up' : 'down'}`}>
-            {up ? '▲ ' : '▼ '}
-            {up ? '+' : ''}
-            {chg.toFixed(2)} ({up ? '+' : ''}
-            {chgPct.toFixed(2)}%)
+          <div className={`tt-chg ${last ? (up ? 'up' : 'down') : ''}`}>
+            {last
+              ? `${up ? '▲ ' : '▼ '}${up ? '+' : ''}${chg.toFixed(2)} (${up ? '+' : ''}${chgPct.toFixed(2)}%)`
+              : '—'}
           </div>
         </div>
       )}

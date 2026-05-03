@@ -753,7 +753,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
 
       const idx = Math.round(view.start + (hover.sx - PAD_L) / bw);
-      if (idx >= view.start && idx < view.end && primaryData[idx]) {
+      if (idx >= view.start && idx < view.end && primaryData?.[idx]) {
         const xAxisY = FIN_H > 0 ? finY0 - 9 : size.h - X_AXIS_H / 2;
         ctx.fillStyle = COLORS.panel;
         ctx.fillRect(hover.sx - 58, xAxisY - 9, 116, 18);
