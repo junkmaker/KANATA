@@ -163,6 +163,47 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - **Chart サブペインの Y 座標チェーン**（[Chart.tsx:70-74](apps/renderer/src/components/Chart/Chart.tsx#L70-L74)）に手を入れない。ペインの高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する
 - **ウォッチリスト API のテスト**：`backend/tests/` に pytest 実装済み（`test_models.py` 5 件 + `test_watchlists_api.py` 10 件）。`conftest.py` は tempfile SQLite + `app.dependency_overrides[get_db]` でテスト分離
 
+## CI/CD
+
+ワークフローは `.github/workflows/` に 2 本ある。
+
+### リリースフロー
+
+```
+package.json の version を変更して main に push
+        ↓
+tag-on-version-change.yml
+  └─ v{version} タグを自動生成・push（GH_PAT 使用）
+        ↓
+release.yml（タグ push をトリガー）
+  ├─ npm ci
+  ├─ Python リソースキャッシュ（resources-py3.12.9-{hash}）
+  ├─ npm run build（electron-vite）
+  ├─ electron-builder --win nsis（NSIS インストーラ生成）
+  ├─ リリースノート生成（前タグからのコミット差分）
+  └─ GitHub Release 作成 + .exe アタッチ
+```
+
+### ワークフロー詳細
+
+| ファイル | トリガー | 実行環境 | 役割 |
+|---|---|---|---|
+| `tag-on-version-change.yml` | `main` への `package.json` 変更 push | ubuntu-latest | `v{version}` タグを生成 |
+| `release.yml` | `v*.*.*` タグ push | windows-latest | ビルド・パッケージ・GitHub Release 作成 |
+
+### Secrets
+
+| 名前 | 用途 |
+|---|---|
+| `GH_PAT` | タグ push（`GITHUB_TOKEN` で push したタグは他 WF をトリガーしないため必須） |
+| `WIN_CSC_LINK` | Authenticode コード署名証明書（未設定時は署名スキップ） |
+| `WIN_CSC_KEY_PASSWORD` | 上記証明書のパスワード |
+
+### バージョン更新手順
+
+1. `package.json` の `"version"` を変更
+2. `main` に push → タグ自動生成 → リリース自動実行
+
 ## ブランディング
 
 「KAIROS /TERMINAL」→「KANATA /TERMINAL」にリネーム済み。localStorage キーも `kanata.*` に統一済み。これから追加するキー・表示名も `KANATA` ブランドで揃える。
