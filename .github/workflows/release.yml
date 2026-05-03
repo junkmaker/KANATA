@@ -70,19 +70,43 @@ jobs:
           echo "path=$($file.FullName)" >> $env:GITHUB_OUTPUT
           echo "name=$($file.Name)" >> $env:GITHUB_OUTPUT
 
+      - name: Generate release notes
+        shell: pwsh
+        run: |
+          $prevTag = git describe --tags --abbrev=0 "HEAD^" 2>$null
+          $installerName = "${{ steps.installer.outputs.name }}"
+
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add("### 変更内容")
+          $lines.Add("")
+
+          if ($prevTag) {
+            $commits = git log "$prevTag..HEAD" --pretty=format:"- %s" --no-merges
+          } else {
+            $commits = git log --pretty=format:"- %s" --no-merges
+          }
+
+          if ($commits) {
+            foreach ($c in $commits) { $lines.Add($c) }
+          } else {
+            $lines.Add("- その他の改善・修正")
+          }
+
+          $lines.Add("")
+          $lines.Add("### インストール方法")
+          $lines.Add("1. ``$installerName`` をダウンロード")
+          $lines.Add("2. インストーラを実行してセットアップを完了")
+          $lines.Add("3. デスクトップまたはスタートメニューの「KANATA Terminal」から起動")
+          $lines.Add("")
+          $lines.Add("> Windows Defender SmartScreen の警告が表示される場合は「詳細情報」→「実行」を選択してください（コード署名証明書が設定されていない場合）")
+
+          $lines -join "`n" | Out-File -FilePath release-notes.md -Encoding utf8
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "KANATA Terminal v${{ steps.version.outputs.version }}"
-          body: |
-            ## KANATA Terminal v${{ steps.version.outputs.version }}
-
-            ### インストール方法
-            1. `${{ steps.installer.outputs.name }}` をダウンロード
-            2. インストーラを実行してセットアップを完了
-            3. デスクトップまたはスタートメニューの「KANATA Terminal」から起動
-
-            > Windows Defender SmartScreen の警告が表示される場合は「詳細情報」→「実行」を選択してください（コード署名証明書が設定されていない場合）
+          body_path: release-notes.md
           files: ${{ steps.installer.outputs.path }}
           fail_on_unmatched_files: true
         env:
