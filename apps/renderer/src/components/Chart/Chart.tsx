@@ -3,7 +3,7 @@ import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AppState, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import type { AppState, DrawingObject, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -561,9 +561,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   // Overlay: crosshair, drawings
   const [hover, setHover] = useState<{ sx: number; sy: number } | null>(null);
   const [dragging, setDragging] = useState<{
-    type: 'pan' | 'drawing';
+    type: 'pan' | 'drawing' | 'move-drawing';
     startX?: number;
+    startY?: number;
     startView?: typeof view;
+    startIdx?: number;
+    startV?: number;
+    snapshot?: DrawingObject;
   } | null>(null);
   const [tempDrawing, setTempDrawing] = useState<(typeof state.drawings)[0] | null>(null);
   const [textInput, setTextInput] = useState<{
@@ -630,6 +634,68 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     [view, bw, yRange, priceH],
   );
 
+  const hitTest = useCallback(
+    (sx: number, sy: number): number | null => {
+      const TOL = 5;
+      const drawings = state.drawings || [];
+      for (let i = drawings.length - 1; i >= 0; i--) {
+        const d = drawings[i];
+        if (d.ticker && d.ticker !== primary) continue;
+        if (d.type === 'hline' && d.v != null) {
+          if (Math.abs(sy - yScale(d.v)) <= TOL) return d.id;
+        } else if (d.type === 'vline' && d.idx != null) {
+          if (Math.abs(sx - xScale(d.idx)) <= TOL) return d.id;
+        } else if (d.type === 'trend' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+          const p1 = dataToScreen(d.i1, d.v1);
+          const p2 = dataToScreen(d.i2, d.v2);
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len2 = dx * dx + dy * dy;
+          if (len2 < 1e-6) continue;
+          const t = ((sx - p1.x) * dx + (sy - p1.y) * dy) / len2;
+          if (t < 0 || t > 1) continue;
+          const px = p1.x + t * dx;
+          const py = p1.y + t * dy;
+          const dist = Math.hypot(sx - px, sy - py);
+          if (dist <= TOL) return d.id;
+        } else if (d.type === 'rect' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+          const p1 = dataToScreen(d.i1, d.v1);
+          const p2 = dataToScreen(d.i2, d.v2);
+          const xMin = Math.min(p1.x, p2.x);
+          const xMax = Math.max(p1.x, p2.x);
+          const yMin = Math.min(p1.y, p2.y);
+          const yMax = Math.max(p1.y, p2.y);
+          if (sx >= xMin - TOL && sx <= xMax + TOL && sy >= yMin - TOL && sy <= yMax + TOL) {
+            return d.id;
+          }
+        } else if (d.type === 'ellipse' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+          const p1 = dataToScreen(d.i1, d.v1);
+          const p2 = dataToScreen(d.i2, d.v2);
+          const cx = (p1.x + p2.x) / 2;
+          const cy = (p1.y + p2.y) / 2;
+          const rx = Math.abs(p2.x - p1.x) / 2;
+          const ry = Math.abs(p2.y - p1.y) / 2;
+          if (rx < 1 || ry < 1) continue;
+          const nx = (sx - cx) / rx;
+          const ny = (sy - cy) / ry;
+          const norm = nx * nx + ny * ny;
+          const avgR = (rx + ry) / 2;
+          if (Math.abs(norm - 1) <= TOL / avgR) return d.id;
+          if (norm <= 1) return d.id;
+        } else if (d.type === 'text' && d.idx != null && d.v != null) {
+          const p = dataToScreen(d.idx, d.v);
+          const w = (d.text?.length ?? 1) * 7 + 16;
+          const h = 14;
+          if (sx >= p.x - 4 && sx <= p.x + w && sy >= p.y - h / 2 && sy <= p.y + h / 2) {
+            return d.id;
+          }
+        }
+      }
+      return null;
+    },
+    [state.drawings, primary, dataToScreen, xScale, yScale],
+  );
+
   useEffect(() => {
     const cvs = overlayRef.current;
     if (!cvs) return;
@@ -643,11 +709,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     ctx.clearRect(0, 0, size.w, size.h);
 
     const allDrawings = [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])];
+    const HANDLE_COLOR = '#fff';
     allDrawings.forEach((d) => {
       if (d.ticker && d.ticker !== primary) return;
+      const isSelected = d.id === state.selectedDrawingId;
       ctx.strokeStyle = d.color || COLORS.accent;
       ctx.fillStyle = d.color || COLORS.accent;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
       if (d.type === 'hline' && d.v != null) {
         const y = yScale(d.v);
         ctx.setLineDash([5, 3]);
@@ -659,6 +727,16 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.font = '10px "JetBrains Mono", monospace';
         const tk = tickers.find((t) => t.code === primary);
         ctx.fillText(fmtPrice(d.v, tk?.currency || '$'), PAD_L + 4, y - 4);
+        if (isSelected) {
+          const cx = PAD_L + priceW / 2;
+          ctx.fillStyle = HANDLE_COLOR;
+          ctx.beginPath();
+          ctx.arc(cx, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = d.color || COLORS.accent;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
       } else if (d.type === 'vline' && d.idx != null) {
         const x = xScale(d.idx);
         ctx.setLineDash([5, 3]);
@@ -667,6 +745,16 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.lineTo(x, PAD_T + priceH);
         ctx.stroke();
         ctx.setLineDash([]);
+        if (isSelected) {
+          const cy = PAD_T + priceH / 2;
+          ctx.fillStyle = HANDLE_COLOR;
+          ctx.beginPath();
+          ctx.arc(x, cy, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = d.color || COLORS.accent;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
       } else if (
         (d.type === 'trend' || d.type === 'rect' || d.type === 'ellipse') &&
         d.i1 != null &&
@@ -681,27 +769,49 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
+          const handleR = isSelected ? 5 : 3;
+          ctx.fillStyle = isSelected ? HANDLE_COLOR : d.color || COLORS.accent;
           ctx.beginPath();
-          ctx.arc(p1.x, p1.y, 3, 0, Math.PI * 2);
+          ctx.arc(p1.x, p1.y, handleR, 0, Math.PI * 2);
           ctx.fill();
           ctx.beginPath();
-          ctx.arc(p2.x, p2.y, 3, 0, Math.PI * 2);
+          ctx.arc(p2.x, p2.y, handleR, 0, Math.PI * 2);
           ctx.fill();
+          if (isSelected) {
+            ctx.strokeStyle = d.color || COLORS.accent;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(p1.x, p1.y, handleR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(p2.x, p2.y, handleR, 0, Math.PI * 2);
+            ctx.stroke();
+          }
         } else if (d.type === 'rect') {
+          const x = Math.min(p1.x, p2.x);
+          const y = Math.min(p1.y, p2.y);
+          const w = Math.abs(p2.x - p1.x);
+          const h = Math.abs(p2.y - p1.y);
           ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.12)');
-          ctx.fillRect(
-            Math.min(p1.x, p2.x),
-            Math.min(p1.y, p2.y),
-            Math.abs(p2.x - p1.x),
-            Math.abs(p2.y - p1.y),
-          );
+          ctx.fillRect(x, y, w, h);
           ctx.strokeStyle = d.color || COLORS.accent;
-          ctx.strokeRect(
-            Math.min(p1.x, p2.x),
-            Math.min(p1.y, p2.y),
-            Math.abs(p2.x - p1.x),
-            Math.abs(p2.y - p1.y),
-          );
+          ctx.lineWidth = isSelected ? 2.5 : 1.5;
+          ctx.strokeRect(x, y, w, h);
+          if (isSelected) {
+            const corners = [
+              [x, y],
+              [x + w, y],
+              [x, y + h],
+              [x + w, y + h],
+            ];
+            ctx.fillStyle = HANDLE_COLOR;
+            ctx.lineWidth = 1.5;
+            corners.forEach(([cx, cy]) => {
+              ctx.fillRect(cx - 3, cy - 3, 6, 6);
+              ctx.strokeStyle = d.color || COLORS.accent;
+              ctx.strokeRect(cx - 3, cy - 3, 6, 6);
+            });
+          }
         } else if (d.type === 'ellipse') {
           const cx = (p1.x + p2.x) / 2,
             cy = (p1.y + p2.y) / 2;
@@ -710,16 +820,36 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           ctx.beginPath();
           ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
+          if (isSelected) {
+            const corners = [
+              [cx - rx, cy],
+              [cx + rx, cy],
+              [cx, cy - ry],
+              [cx, cy + ry],
+            ];
+            ctx.fillStyle = HANDLE_COLOR;
+            ctx.lineWidth = 1.5;
+            corners.forEach(([hx, hy]) => {
+              ctx.fillRect(hx - 3, hy - 3, 6, 6);
+              ctx.strokeStyle = d.color || COLORS.accent;
+              ctx.strokeRect(hx - 3, hy - 3, 6, 6);
+            });
+          }
         }
       } else if (d.type === 'text' && d.idx != null && d.v != null) {
         const p = dataToScreen(d.idx, d.v);
+        if (isSelected) {
+          const w = (d.text?.length ?? 1) * 7 + 12;
+          ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.18)');
+          ctx.fillRect(p.x + 2, p.y - 8, w, 16);
+        }
         ctx.fillStyle = d.color || COLORS.accent;
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(d.text || '…', p.x + 6, p.y);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, isSelected ? 4 : 3, 0, Math.PI * 2);
         ctx.fill();
       }
     });
@@ -770,6 +900,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   }, [
     hover,
     state.drawings,
+    state.selectedDrawingId,
     tempDrawing,
     yRange,
     view,
@@ -788,6 +919,26 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const { idx, v } = screenToData(sx, sy);
     const tool = state.activeTool;
     if (tool === 'pan' || !tool) {
+      const hitId = hitTest(sx, sy);
+      if (hitId != null) {
+        const d = state.drawings.find((x) => x.id === hitId);
+        if (d) {
+          setState((s) => ({ ...s, selectedDrawingId: hitId }));
+          setDragging({
+            type: 'move-drawing',
+            startX: sx,
+            startY: sy,
+            startIdx: idx,
+            startV: v,
+            snapshot: d,
+          });
+          e.currentTarget.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
+      if (state.selectedDrawingId != null) {
+        setState((s) => ({ ...s, selectedDrawingId: null }));
+      }
       setDragging({ type: 'pan', startX: sx, startView: { ...view } });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'hline') {
@@ -864,6 +1015,47 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     } else if (dragging?.type === 'drawing' && tempDrawing) {
       const { idx, v } = screenToData(sx, sy);
       setTempDrawing({ ...tempDrawing, i2: idx, v2: v });
+    } else if (
+      dragging?.type === 'move-drawing' &&
+      dragging.snapshot &&
+      dragging.startIdx != null &&
+      dragging.startV != null
+    ) {
+      const { idx, v } = screenToData(sx, sy);
+      const dIdx = idx - dragging.startIdx;
+      const dV = v - dragging.startV;
+      const snap = dragging.snapshot;
+      setState((s) => ({
+        ...s,
+        drawings: s.drawings.map((d) => {
+          if (d.id !== snap.id) return d;
+          if (d.type === 'hline' && snap.v != null) {
+            return { ...d, v: snap.v + dV };
+          }
+          if (d.type === 'vline' && snap.idx != null) {
+            return { ...d, idx: snap.idx + dIdx };
+          }
+          if (
+            (d.type === 'trend' || d.type === 'rect' || d.type === 'ellipse') &&
+            snap.i1 != null &&
+            snap.v1 != null &&
+            snap.i2 != null &&
+            snap.v2 != null
+          ) {
+            return {
+              ...d,
+              i1: snap.i1 + dIdx,
+              v1: snap.v1 + dV,
+              i2: snap.i2 + dIdx,
+              v2: snap.v2 + dV,
+            };
+          }
+          if (d.type === 'text' && snap.idx != null && snap.v != null) {
+            return { ...d, idx: snap.idx + dIdx, v: snap.v + dV };
+          }
+          return d;
+        }),
+      }));
     }
   };
 
@@ -875,6 +1067,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         activeTool: 'pan',
       }));
       setTempDrawing(null);
+    } else if (dragging?.type === 'move-drawing') {
+      // Move complete — drawings already mutated incrementally during pointer move.
     }
     setDragging(null);
     try {
@@ -917,6 +1111,36 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     cvs.addEventListener('wheel', handler, { passive: false });
     return () => cvs.removeEventListener('wheel', handler);
   }, []);
+
+  useEffect(() => {
+    if (state.activeTool !== 'pan') {
+      setState((s) => ({ ...s, selectedDrawingId: null }));
+    }
+  }, [state.activeTool, setState]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (textInput) return;
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      )
+        return;
+      setState((s) => {
+        if (s.selectedDrawingId == null) return s;
+        return {
+          ...s,
+          drawings: s.drawings.filter((d) => d.id !== s.selectedDrawingId),
+          selectedDrawingId: null,
+        };
+      });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [textInput, setState]);
 
   const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : safeEnd - 1;
   const hoverBar = primaryData && primaryData[hoverIdx];

@@ -20,6 +20,7 @@ const DEFAULT_STATE: AppState = {
   compareMode: 'percent',
   activeTool: 'pan',
   drawings: [],
+  selectedDrawingId: null,
   showVolume: true,
   showFinancial: true,
   indicators: {

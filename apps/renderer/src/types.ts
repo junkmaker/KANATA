@@ -101,6 +101,7 @@ export interface AppState {
   compareMode: string;
   activeTool: string;
   drawings: DrawingObject[];
+  selectedDrawingId: number | null;
   showVolume: boolean;
   showFinancial: boolean;
   indicators: IndicatorState;

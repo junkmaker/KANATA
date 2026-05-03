@@ -130,7 +130,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
   ];
 
   const timeframes = ['5m', '15m', '60m', '1D', '1W', '1M'];
-  const clearDrawings = () => setState((s) => ({ ...s, drawings: [] }));
+  const clearDrawings = () => setState((s) => ({ ...s, drawings: [], selectedDrawingId: null }));
 
   return (
     <aside className="panel panel-left">
