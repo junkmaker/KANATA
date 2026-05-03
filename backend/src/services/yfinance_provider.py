@@ -1,4 +1,5 @@
 import math
+from datetime import datetime
 import yfinance as yf
 
 # Map frontend timeframe → (yfinance interval, yfinance period, cache TTL seconds)
@@ -51,6 +52,43 @@ def get_ttl(timeframe: str) -> int:
     return INTERVAL_MAP.get(timeframe, ("", "", 3600))[2]
 
 
+def _safe_float_val(v: object) -> float | None:
+    if v is None:
+        return None
+    try:
+        f = float(v)  # type: ignore[arg-type]
+        return None if math.isnan(f) else f
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _bs_series(bs: object, date_str: str) -> dict[str, float]:
+    """Return {row_key: value} for the balance sheet column nearest to date_str (±90 days)."""
+    import pandas as pd
+    if bs is None or not hasattr(bs, "empty") or bs.empty:  # type: ignore[union-attr]
+        return {}
+    target = datetime.strptime(date_str, "%Y-%m-%d")
+    best_col = None
+    best_delta = 91
+    for col in bs.columns:  # type: ignore[union-attr]
+        try:
+            col_str = str(col)[:10]
+            delta = abs((datetime.strptime(col_str, "%Y-%m-%d") - target).days)
+            if delta < best_delta:
+                best_delta = delta
+                best_col = col
+        except Exception:
+            continue
+    if best_col is None:
+        return {}
+    result = {}
+    for key in bs.index:  # type: ignore[union-attr]
+        v = _safe_float_val(bs.loc[key, best_col])  # type: ignore[index]
+        if v is not None:
+            result[str(key)] = v
+    return result
+
+
 def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
     if not symbol.isascii():
         return None
@@ -65,7 +103,7 @@ def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
     except Exception:
         return None
 
-    if fin is None or fin.empty or bs is None or bs.empty:
+    if fin is None or fin.empty:
         return None
 
     per_const = 0.0
@@ -78,40 +116,43 @@ def fetch_quarterly_fin(symbol: str) -> list[dict] | None:
             except (ValueError, OverflowError):
                 per_const = 0.0
 
-    equity_keys = ["Stockholders Equity", "Common Stock Equity", "Total Stockholder Equity"]
-    net_income_key = "Net Income"
-    assets_keys = ["Total Assets"]
+    equity_candidates = [
+        "Stockholders Equity",
+        "Common Stock Equity",
+        "Total Stockholder Equity",
+        "Total Equity Gross Minority Interest",
+    ]
 
     results = []
     for dt in fin.columns:
         try:
             t_ms = int(dt.timestamp() * 1000)
+            date_str = str(dt)[:10]
 
-            net_income = None
-            if net_income_key in fin.index:
-                v = fin.loc[net_income_key, dt]
-                if v is not None and not (isinstance(v, float) and math.isnan(v)):
-                    net_income = float(v)
+            net_income = _safe_float_val(fin.loc["Net Income", dt]) if "Net Income" in fin.index else None
+
+            bs_row = _bs_series(bs, date_str)
+
+            equity_f = None
+            for key in equity_candidates:
+                if key in bs_row:
+                    equity_f = bs_row[key]
+                    break
+            if equity_f is None:
+                for k, v in bs_row.items():
+                    if "equity" in k.lower() and "minority" not in k.lower():
+                        equity_f = v
+                        break
+
+            assets_f = bs_row.get("Total Assets")
 
             roe = 0.0
-            for key in equity_keys:
-                if key in bs.index and dt in bs.columns:
-                    equity_v = bs.loc[key, dt]
-                    if equity_v is not None and not (isinstance(equity_v, float) and math.isnan(equity_v)):
-                        equity_f = float(equity_v)
-                        if equity_f != 0 and net_income is not None:
-                            roe = round(net_income / abs(equity_f) * 100, 1)
-                    break
+            if equity_f is not None and equity_f != 0 and net_income is not None:
+                roe = round(net_income / abs(equity_f) * 100, 1)
 
             roic = 0.0
-            for key in assets_keys:
-                if key in bs.index and dt in bs.columns:
-                    assets_v = bs.loc[key, dt]
-                    if assets_v is not None and not (isinstance(assets_v, float) and math.isnan(assets_v)):
-                        assets_f = float(assets_v)
-                        if assets_f != 0 and net_income is not None:
-                            roic = round(net_income / abs(assets_f) * 100, 1)
-                    break
+            if assets_f is not None and assets_f != 0 and net_income is not None:
+                roic = round(net_income / abs(assets_f) * 100, 1)
 
             results.append({"t": t_ms, "roe": roe, "roic": roic, "per": per_const})
         except Exception:

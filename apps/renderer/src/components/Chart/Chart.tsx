@@ -467,7 +467,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         pmin -= pSpan * 0.1;
         pmax += pSpan * 0.1;
 
-        const fx = (i: number) => PAD_L + (i / (finData.length - 1)) * finW;
+        const fx = (i: number) =>
+          finData.length < 2 ? PAD_L + finW / 2 : PAD_L + (i / (finData.length - 1)) * finW;
         const fyL = (v: number) => finY + 8 + (1 - (v - rmin) / (rmax - rmin)) * (FIN_H - 20);
         const fyR = (v: number) => finY + 8 + (1 - (v - pmin) / (pmax - pmin)) * (FIN_H - 20);
 
