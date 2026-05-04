@@ -6,9 +6,9 @@
 graph TB
     subgraph Electron["Electron App (Windows)"]
         subgraph MAIN["Main Process"]
-            IDX["index.ts\nBrowserWindow"]
+            IDX["index.ts\nBrowserWindow (frameless)"]
             SIDECAR["pythonSidecar.ts\nサブプロセス管理"]
-            IPC["ipc/bridge.ts\nipcMain handler"]
+            IPC["ipc/bridge.ts\nipcMain handler (9チャンネル)"]
             PRE["preload.ts\ncontextBridge"]
         end
         subgraph RENDERER["Renderer Process"]
@@ -26,6 +26,7 @@ graph TB
     IDX -- "register" --> IPC
     PRE -- "contextBridge" --> VITE
     VITE -- "IPC getBackendUrl()" --> IPC
+    VITE -- "IPC ウィンドウ操作" --> IPC
     VITE -- "HTTP fetch\n動的ポート" --> UVICORN
     UVICORN -- "SQLAlchemy 2.x" --> SQLITE
     UVICORN -- "pip request" --> EXT
@@ -63,7 +64,6 @@ sequenceDiagram
     BE-->>API: OHLCBar[]
     API-->>HK: OHLCBar[]
     HK-->>FE: realData 更新
-    FE->>FE: realData で syntheticData を上書き
     FE->>B: Chart 再描画
 ```
 
@@ -80,15 +80,17 @@ graph TD
     APP --> STATUSBAR["StatusBar\nTF / ツール / 描画数"]
     APP --> TWEAKS["TweaksPanel\nテーマ / 密度 / 比較モード"]
 
+    TOPBAR --> WC["WindowControls\n最小化 / 最大化 / 閉じる"]
+
     MAIN --> LP["LeftPanel\nTF選択 / 描画ツール\nインジケータ トグル"]
-    MAIN --> CHART["Chart.tsx\nCanvas 2D (717行)"]
+    MAIN --> CHART["Chart.tsx\nCanvas 2D (1368行)"]
     MAIN --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
 
     CHART --> CANDLE["ローソク足\nグリッド / 価格軸"]
     CHART --> OVERLAY["オーバーレイ指標\nSMA / EMA / BOLL / PSAR / 一目"]
     CHART --> COMPARE["比較ライン\n複数シンボル % change"]
     CHART --> SUB["サブパネル"]
-    CHART --> DRAWING["描画ツール\nトレンドライン / 水平線 等"]
+    CHART --> DRAWING["描画ツール\nhline / vline / trend / rect / ellipse / text"]
 
     SUB --> VOL["drawVolume.ts"]
     SUB --> STOCH["drawStoch.ts"]
@@ -108,7 +110,7 @@ graph TD
 ```mermaid
 graph LR
     subgraph APP["App.tsx (単一ソース)"]
-        STATE["AppState\nselected[]\ntimeframe\nactiveTool\ndrawings[]\nindicators{}\nindicatorParams{}"]
+        STATE["AppState\nselected[]\ntimeframe\nactiveTool\ndrawings[]\nselectedDrawingId\nindicators{}\nindicatorParams{}\nshowVolume\nshowFinancial\nfinancial{}"]
         AES["Aesthetic\ndark-blue / neutral\namber-crt / midnight"]
         DEN["Density\ncompact / comfortable"]
         AWL["activeWatchlistId"]
@@ -147,6 +149,7 @@ graph TB
         QR["quotes.py\nGET /api/quotes/{symbol}"]
         SR["search.py\nGET /api/search"]
         WR["watchlists.py\n8 エンドポイント"]
+        FR["fundamentals.py\nGET /api/fundamentals/{symbol}/quarterly"]
         HR["/api/health"]
     end
 
@@ -169,6 +172,7 @@ graph TB
     QR --> YFP
     QR --> CACHE
     SR --> YFP
+    FR --> YFP
     WR --> WSCH
     WR --> DBMOD
     DBMOD --> DBCONN
@@ -207,36 +211,21 @@ erDiagram
 
 ---
 
-## 7. データ二層構造（合成 vs リアル）
+## 7. IPC チャンネル一覧
 
-```mermaid
-graph LR
-    subgraph SYNTH["合成データ層 (常時)"]
-        GEN["lib/data.ts\ngenSeries()\n15銘柄分 OHLC\n(GBM + seed乱数)"]
-    end
+| チャンネル定数 | チャンネル名 | 方向 | 用途 |
+|---|---|---|---|
+| `BACKEND_URL` | `kanata:backend-url` | invoke | FastAPI の動的ポート URL 取得 |
+| `BACKEND_STATUS` | `kanata:backend-status` | invoke | サイドカー状態取得 (`SidecarStatus`) |
+| `OPEN_LOGS` | `kanata:open-logs` | invoke | ログディレクトリを OS で開く |
+| `APP_VERSION` | `kanata:app-version` | invoke | アプリバージョン取得 |
+| `WINDOW_MINIMIZE` | `kanata:window-minimize` | invoke | ウィンドウ最小化 |
+| `WINDOW_MAXIMIZE` | `kanata:window-maximize` | invoke | 最大化 / 元に戻す トグル |
+| `WINDOW_CLOSE` | `kanata:window-close` | invoke | ウィンドウ閉じる |
+| `WINDOW_IS_MAXIMIZED` | `kanata:window-is-maximized` | invoke | 最大化状態を取得 |
+| `WINDOW_MAXIMIZE_CHANGED` | `kanata:window-maximize-changed` | push | 最大化状態変化イベント |
 
-    subgraph REAL["リアルデータ層 (selected銘柄のみ)"]
-        HK["useChartData\n→ /api/quotes/{symbol}"]
-    end
-
-    subgraph MERGE["App.tsx でマージ"]
-        APP["realData[sym] があれば\nsyntheticData[sym] を上書き"]
-    end
-
-    subgraph USES["用途"]
-        U1["ウォッチリスト スパークライン\n(全銘柄)"]
-        U2["バックエンド停止時\nフォールバック"]
-        U3["非選択銘柄の\n比較チャート"]
-        U4["選択銘柄の\nメインチャート"]
-    end
-
-    GEN --> APP
-    HK --> APP
-    APP --> U1
-    APP --> U2
-    APP --> U3
-    APP --> U4
-```
+`PreloadApi` (`packages/shared-types`) が全チャンネルの型を定義し、`window.kanata` 経由でレンダラーに公開。
 
 ---
 
@@ -258,7 +247,7 @@ graph LR
 
 | 項目 | 値 |
 |------|-----|
-| Electron | v28 / Windows ネイティブアプリ |
+| Electron | v40 / Windows ネイティブアプリ（frameless window）|
 | Frontend | React 18 + TypeScript + Vite / Node 20（Renderer Process）|
 | Backend | FastAPI + SQLAlchemy 2.x / Python 3.12（Sidecar subprocess）|
 | DB | SQLite（`%APPDATA%/kanata/kanata.db`）|
