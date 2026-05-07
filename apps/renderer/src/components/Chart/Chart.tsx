@@ -1088,6 +1088,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       const { view: v, bw: b, primaryData: pd, priceW: pw } = wheelRef.current;
+      if (!pd) return;
       const rect = cvs.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const centerFrac = (sx - PAD_L) / pw;

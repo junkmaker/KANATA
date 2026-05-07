@@ -1,4 +1,5 @@
 import math
+import re
 from datetime import datetime
 import yfinance as yf
 
@@ -12,9 +13,11 @@ INTERVAL_MAP: dict[str, tuple[str, str, int]] = {
     "1M":  ("1mo", "max",  86400),
 }
 
+_JP_TICKER_RE = re.compile(r'^\d{4}$|^\d{3}[A-Z]$')
+
 def to_yf_symbol(symbol: str) -> str:
-    """Append .T suffix for numeric JP tickers."""
-    return f"{symbol}.T" if symbol.isdigit() else symbol
+    """Append .T suffix for JP tickers (4-digit or 3-digit+letter format)."""
+    return f"{symbol}.T" if _JP_TICKER_RE.match(symbol) else symbol
 
 
 def fetch_ohlcv(symbol: str, timeframe: str) -> list[dict]:
