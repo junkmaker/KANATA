@@ -24,3 +24,5 @@ resources/backend/
 # Debug / temporary
 package_debug.json
 
+# Office documents
+docs/*.docx
