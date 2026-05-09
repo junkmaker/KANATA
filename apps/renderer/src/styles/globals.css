@@ -365,6 +365,33 @@ input { font: inherit; color: inherit; }
 .ws-btn-danger { color: var(--bear); border-color: var(--bear); }
 .ws-btn-danger:hover:not(:disabled) { background: var(--bear); color: var(--bg); }
 
+/* ── Drag & Drop ── */
+.drag-handle {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: -3px;
+  cursor: grab;
+  padding: 0 6px 0 0;
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+  opacity: 0.6;
+}
+.drag-handle:active { cursor: grabbing; }
+
+.ticker-row.dragging {
+  opacity: 0.45;
+  background: color-mix(in oklch, var(--accent) 8%, var(--panel));
+}
+
+.ticker-row.drag-over-top {
+  border-top: 2px solid var(--accent);
+}
+
+.ticker-row.drag-over-bottom {
+  border-bottom: 2px solid var(--accent);
+}
+
 .tick-remove {
   margin-left: 6px;
   width: 18px; height: 18px;

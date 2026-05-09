@@ -209,6 +209,10 @@ export function App() {
         if (!activeList) return;
         await wl.removeItem(activeList.id, symbol);
       },
+      reorderItems: async (symbols: string[]) => {
+        if (!activeList) return;
+        await wl.reorderItems(activeList.id, symbols);
+      },
     }),
     [wl, activeList, activeListId],
   );

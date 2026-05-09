@@ -16,6 +16,7 @@ interface WatchlistController {
   remove: (id: number) => Promise<void>;
   addItem: (symbol: string, market: string, displayName?: string) => Promise<void>;
   removeItem: (symbol: string) => Promise<void>;
+  reorderItems: (symbols: string[]) => Promise<void>;
   error: string | null;
   clearError: () => void;
 }
@@ -44,6 +45,9 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [editing, setEditing] = useState(false);
   const [fetchedFin, setFetchedFin] = useState<FinMetrics | null>(null);
+  const [draggedCode, setDraggedCode] = useState<string | null>(null);
+  const [dragOverCode, setDragOverCode] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<'top' | 'bottom'>('bottom');
 
   // Source list for the visible watchlist rows (the active list's members)
   const visibleTickers = useMemo(() => {
@@ -58,6 +62,8 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
       );
     });
   }, [tickers, q, marketFilter]);
+
+  const isDraggable = editing && q === '' && marketFilter === 'ALL';
 
   const memberSymbols = useMemo(() => new Set(tickers.map((t) => t.code)), [tickers]);
 
@@ -108,6 +114,66 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
     setState((s) => ({ ...s, selected: s.selected.filter((c) => c !== code) }));
   };
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, code: string) => {
+    setDraggedCode(code);
+    e.dataTransfer.effectAllowed = 'move';
+    const el = e.currentTarget;
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.cssText = [
+      'position:fixed',
+      'top:-9999px',
+      'left:-9999px',
+      `width:${el.offsetWidth}px`,
+      'transform:scale(1.04)',
+      'transform-origin:left top',
+      'border:1px solid var(--accent)',
+      'border-radius:2px',
+      'box-shadow:0 8px 24px rgba(0,0,0,0.5)',
+    ].join(';');
+    document.body.appendChild(clone);
+    e.dataTransfer.setDragImage(clone, 20, el.offsetHeight / 2);
+    setTimeout(() => document.body.removeChild(clone), 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, code: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (code === draggedCode) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDragPosition(e.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom');
+    setDragOverCode(code);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragOverCode(null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetCode: string) => {
+    e.preventDefault();
+    if (!draggedCode || draggedCode === targetCode) {
+      setDraggedCode(null);
+      setDragOverCode(null);
+      return;
+    }
+    const codes = tickers.map((t) => t.code);
+    const from = codes.indexOf(draggedCode);
+    const to = codes.indexOf(targetCode);
+    if (from === -1 || to === -1) return;
+    const next = [...codes];
+    next.splice(from, 1);
+    const insertIdx = dragPosition === 'top' ? (from < to ? to - 1 : to) : from < to ? to : to + 1;
+    next.splice(insertIdx, 0, draggedCode);
+    watchlist.reorderItems(next);
+    setDraggedCode(null);
+    setDragOverCode(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCode(null);
+    setDragOverCode(null);
+  };
+
   const primary = state.selected[0];
   const primarySeries = data[primary];
   const last = primarySeries?.[primarySeries.length - 1];
@@ -150,11 +216,13 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
         )}
         {editing && watchlist.error && <div className="watchlist-error">{watchlist.error}</div>}
         <div className="market-tabs">
-          {([
-            { id: 'ALL', label: '全て' },
-            { id: 'JP', label: 'JP' },
-            { id: 'US', label: 'US' },
-          ] as const).map((m) => (
+          {(
+            [
+              { id: 'ALL', label: '全て' },
+              { id: 'JP', label: 'JP' },
+              { id: 'US', label: 'US' },
+            ] as const
+          ).map((m) => (
             <button
               key={m.id}
               type="button"
@@ -201,11 +269,35 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
           return (
             <div
               key={t.code}
-              className={`ticker-row${selected ? ' selected' : ''}${isPrimary ? ' primary' : ''}`}
+              className={[
+                'ticker-row',
+                selected ? 'selected' : '',
+                isPrimary ? 'primary' : '',
+                isDraggable && draggedCode === t.code ? 'dragging' : '',
+                isDraggable && dragOverCode === t.code && dragPosition === 'top'
+                  ? 'drag-over-top'
+                  : '',
+                isDraggable && dragOverCode === t.code && dragPosition === 'bottom'
+                  ? 'drag-over-bottom'
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              draggable={isDraggable}
+              onDragStart={isDraggable ? (e) => handleDragStart(e, t.code) : undefined}
+              onDragOver={isDraggable ? (e) => handleDragOver(e, t.code) : undefined}
+              onDragLeave={isDraggable ? handleDragLeave : undefined}
+              onDrop={isDraggable ? (e) => handleDrop(e, t.code) : undefined}
+              onDragEnd={isDraggable ? handleDragEnd : undefined}
               onClick={() => toggle(t.code)}
               onDoubleClick={() => makePrimary(t.code)}
             >
               <div className="tick-left">
+                {isDraggable && (
+                  <div className="drag-handle" title="ドラッグして並び替え">
+                    &#8942;&#8942;
+                  </div>
+                )}
                 <div
                   className="tick-chk"
                   style={selected && color ? { background: color, borderColor: color } : {}}
