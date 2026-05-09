@@ -162,34 +162,32 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
           ))}
         </div>
         {state.drawings.length > 0 && (
-          <div className="drawing-count">
-            チャートに {state.drawings.length} 個の描画
-          </div>
+          <div className="drawing-count">チャートに {state.drawings.length} 個の描画</div>
         )}
       </Section>
 
       <Section title="テクニカル分析">
         <div className="subheader">移動平均</div>
         <Toggle
-          label="SMA 5"
+          label="単純移動平均線 5期間"
           value={state.indicators.sma5}
           onChange={(v) => setInd('sma5', v)}
           color="var(--amber)"
         />
         <Toggle
-          label="SMA 25"
+          label="単純移動平均線 25期間"
           value={state.indicators.sma25}
           onChange={(v) => setInd('sma25', v)}
           color="var(--accent)"
         />
         <Toggle
-          label="SMA 75"
+          label="単純移動平均線 75期間"
           value={state.indicators.sma75}
           onChange={(v) => setInd('sma75', v)}
           color="var(--magenta)"
         />
         <Toggle
-          label="EMA 20"
+          label="指数平滑移動平均線 20期間"
           value={state.indicators.ema20}
           onChange={(v) => setInd('ema20', v)}
           color="var(--lime)"
