@@ -226,7 +226,7 @@ export function App() {
   if (wl.status === 'loading') {
     return (
       <div className="app">
-        <div style={{ padding: 24 }}>Loading…</div>
+        <div style={{ padding: 24 }}>読み込み中…</div>
       </div>
     );
   }

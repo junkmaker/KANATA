@@ -118,8 +118,8 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
     <aside className="panel panel-right">
       <div className="section">
         <div className="section-head">
-          <span>WATCHLIST</span>
-          <span className="hint">{state.selected.length} selected</span>
+          <span>ウォッチリスト</span>
+          <span className="hint">{state.selected.length} 件選択中</span>
         </div>
         <WatchlistSelector
           watchlists={watchlist.watchlists}
@@ -135,7 +135,7 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
         <div className="search-row">
           <input
             className="search-input"
-            placeholder="Search code or name…"
+            placeholder="コード・銘柄名で検索…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -150,13 +150,18 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
         )}
         {editing && watchlist.error && <div className="watchlist-error">{watchlist.error}</div>}
         <div className="market-tabs">
-          {['ALL', 'JP', 'US'].map((m) => (
+          {([
+            { id: 'ALL', label: '全て' },
+            { id: 'JP', label: 'JP' },
+            { id: 'US', label: 'US' },
+          ] as const).map((m) => (
             <button
-              key={m}
-              className={`mkt-tab${marketFilter === m ? ' active' : ''}`}
-              onClick={() => setMarketFilter(m)}
+              key={m.id}
+              type="button"
+              className={`mkt-tab${marketFilter === m.id ? ' active' : ''}`}
+              onClick={() => setMarketFilter(m.id)}
             >
-              {m}
+              {m.label}
             </button>
           ))}
         </div>
@@ -253,7 +258,7 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
       {primaryTicker && last && prev && displayFin && (
         <div className="section fundamentals">
           <div className="section-head">
-            <span>FUNDAMENTALS</span>
+            <span>ファンダメンタルズ</span>
             <span className="hint">{primaryTicker.code}</span>
           </div>
           <div className="fund-grid">
@@ -265,7 +270,7 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
             <Metric label="MCAP" value={displayFin.mcap} />
           </div>
           <div className="sector">
-            <span className="label">SECTOR</span>
+            <span className="label">セクター</span>
             <span>{primaryTicker.sector}</span>
           </div>
         </div>

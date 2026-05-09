@@ -94,37 +94,37 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
   const tools = [
     {
       id: 'pan',
-      label: 'Pan / select',
+      label: 'パン / 選択',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 8h10M8 3v10"/></svg>',
     },
     {
       id: 'trend',
-      label: 'Trendline',
+      label: 'トレンドライン',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 13L14 3"/><circle cx="2" cy="13" r="1.4" fill="currentColor"/><circle cx="14" cy="3" r="1.4" fill="currentColor"/></svg>',
     },
     {
       id: 'hline',
-      label: 'Horizontal',
+      label: '水平線',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 2"><path d="M1 8h14"/></svg>',
     },
     {
       id: 'vline',
-      label: 'Vertical',
+      label: '垂直線',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2 2"><path d="M8 1v14"/></svg>',
     },
     {
       id: 'rect',
-      label: 'Rectangle',
+      label: '長方形',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="4" width="12" height="8"/></svg>',
     },
     {
       id: 'ellipse',
-      label: 'Ellipse',
+      label: '楕円',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><ellipse cx="8" cy="8" rx="6" ry="4"/></svg>',
     },
     {
       id: 'text',
-      label: 'Text note',
+      label: 'テキスト',
       icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 4h10M8 4v9M6 13h4"/></svg>',
     },
   ];
@@ -134,7 +134,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
 
   return (
     <aside className="panel panel-left">
-      <Section title="TIMEFRAME">
+      <Section title="タイムフレーム">
         <div className="tf-grid">
           {timeframes.map((tf) => (
             <button
@@ -149,10 +149,10 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
       </Section>
 
       <Section
-        title="DRAWING TOOLS"
+        title="描画ツール"
         right={
-          <button className="link-btn" onClick={clearDrawings} title="Clear all drawings">
-            CLEAR
+          <button type="button" className="link-btn" onClick={clearDrawings} title="描画を全て消す">
+            全消去
           </button>
         }
       >
@@ -163,13 +163,13 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         </div>
         {state.drawings.length > 0 && (
           <div className="drawing-count">
-            {state.drawings.length} object{state.drawings.length === 1 ? '' : 's'} on chart
+            チャートに {state.drawings.length} 個の描画
           </div>
         )}
       </Section>
 
-      <Section title="TECHNICAL ANALYSIS">
-        <div className="subheader">Moving averages</div>
+      <Section title="テクニカル分析">
+        <div className="subheader">移動平均</div>
         <Toggle
           label="SMA 5"
           value={state.indicators.sma5}
@@ -194,28 +194,28 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
           onChange={(v) => setInd('ema20', v)}
           color="var(--lime)"
         />
-        <div className="subheader">Overlays</div>
+        <div className="subheader">オーバーレイ</div>
         <Toggle
-          label="Bollinger Bands 20,2"
+          label="ボリンジャーバンド 20,2"
           value={state.indicators.boll}
           onChange={(v) => setInd('boll', v)}
           color="oklch(0.75 0.07 220)"
         />
         <Toggle
-          label="Parabolic SAR"
+          label="パラボリック SAR"
           value={state.indicators.psar}
           onChange={(v) => setInd('psar', v)}
           color="oklch(0.78 0.20 350)"
         />
         <Toggle
-          label="Ichimoku (一目均衡表)"
+          label="一目均衡表"
           value={state.indicators.ichi}
           onChange={(v) => setInd('ichi', v)}
           color="var(--magenta)"
         />
-        <div className="subheader">Oscillator</div>
+        <div className="subheader">オシレーター</div>
         <Toggle
-          label="Stochastics 14,3,3"
+          label="ストキャスティクス 14,3,3"
           value={state.indicators.stoch}
           onChange={(v) => setInd('stoch', v)}
           color="var(--accent)"
@@ -229,7 +229,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         {state.indicators.macd && (
           <div className="param-row">
             <label>
-              Fast
+              短期
               <input
                 type="number"
                 min={1}
@@ -247,7 +247,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
               />
             </label>
             <label>
-              Slow
+              長期
               <input
                 type="number"
                 min={1}
@@ -265,7 +265,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
               />
             </label>
             <label>
-              Sig
+              シグナル
               <input
                 type="number"
                 min={1}
@@ -293,7 +293,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         {state.indicators.rsi && (
           <div className="param-row">
             <label>
-              Period
+              期間
               <input
                 type="number"
                 min={2}
@@ -350,9 +350,9 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         )}
       </Section>
 
-      <Section title="FUNDAMENTALS">
+      <Section title="ファンダメンタルズ">
         <Toggle
-          label="Show fundamentals pane"
+          label="ファンダメンタルズを表示"
           value={state.showFinancial}
           onChange={(v) => setState((s) => ({ ...s, showFinancial: v }))}
           color="var(--lime)"
@@ -381,9 +381,9 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         )}
       </Section>
 
-      <Section title="VOLUME">
+      <Section title="出来高">
         <Toggle
-          label="Show volume"
+          label="出来高を表示"
           value={state.showVolume}
           onChange={(v) => setState((s) => ({ ...s, showVolume: v }))}
           color="var(--muted)"
