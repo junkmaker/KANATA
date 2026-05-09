@@ -33,6 +33,14 @@ function useSize(ref: React.RefObject<HTMLElement | null>) {
   return size;
 }
 
+const SNAP_PX = 14;
+type SnapMode = 'highlow' | 'time' | 'high';
+function getSnapMode(tool: string): SnapMode {
+  if (tool === 'vline') return 'time';
+  if (tool === 'hline') return 'high';
+  return 'highlow';
+}
+
 export function Chart({ state, setState, tickers, data }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -627,6 +635,27 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     [view, bw, yRange, priceH],
   );
 
+  const snapPoint = (sx: number, sy: number, mode: SnapMode): { idx: number; v: number } => {
+    const { idx: rawIdx, v: rawV } = screenToData(sx, sy);
+    if (!primaryData?.length) return { idx: rawIdx, v: rawV };
+    const ci = Math.max(0, Math.min(primaryData.length - 1, Math.round(rawIdx)));
+    const bar = primaryData[ci];
+    if (!bar) return { idx: rawIdx, v: rawV };
+    const snappedIdx = mode === 'high' ? rawIdx : ci;
+    const highY = yScale(bar.h);
+    const lowY = yScale(bar.l);
+    let snappedV = rawV;
+    if (mode === 'high') {
+      if (Math.abs(sy - highY) <= SNAP_PX) snappedV = bar.h;
+    } else if (mode !== 'time') {
+      const dH = Math.abs(sy - highY);
+      const dL = Math.abs(sy - lowY);
+      if (dH <= SNAP_PX && dH <= dL) snappedV = bar.h;
+      else if (dL <= SNAP_PX) snappedV = bar.l;
+    }
+    return { idx: snappedIdx, v: snappedV };
+  };
+
   const dataToScreen = useCallback(
     (idx: number, v: number) => {
       return { x: xScale(idx), y: yScale(v) };
@@ -869,6 +898,45 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
       ctx.setLineDash([]);
 
+      // スナップインジケーター
+      if (state.activeTool !== 'pan' && state.activeTool !== 'text' && primaryData?.length) {
+        const mode = getSnapMode(state.activeTool);
+        const rawData = screenToData(hover.sx, hover.sy);
+        const ci = Math.max(0, Math.min(primaryData.length - 1, Math.round(rawData.idx)));
+        const bar = primaryData[ci];
+        if (bar) {
+          let snapX = hover.sx;
+          let snapY = hover.sy;
+          if (mode === 'time') {
+            snapX = xScale(ci);
+          } else if (mode === 'high') {
+            const highY = yScale(bar.h);
+            if (Math.abs(hover.sy - highY) <= SNAP_PX) snapY = highY;
+          } else {
+            snapX = xScale(ci);
+            const highY = yScale(bar.h);
+            const lowY = yScale(bar.l);
+            const dH = Math.abs(hover.sy - highY);
+            const dL = Math.abs(hover.sy - lowY);
+            if (dH <= SNAP_PX && dH <= dL) snapY = highY;
+            else if (dL <= SNAP_PX) snapY = lowY;
+          }
+          const didSnap = Math.abs(snapX - hover.sx) > 0.5 || Math.abs(snapY - hover.sy) > 0.5;
+          if (didSnap && snapX >= PAD_L && snapX <= PAD_L + priceW && snapY >= PAD_T && snapY <= PAD_T + priceH) {
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.arc(snapX, snapY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+
       if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
         const v = yRange.max - ((hover.sy - PAD_T) / priceH) * (yRange.max - yRange.min);
         ctx.fillStyle = COLORS.panel;
@@ -901,14 +969,17 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     hover,
     state.drawings,
     state.selectedDrawingId,
+    state.activeTool,
     tempDrawing,
     yRange,
     view,
     primary,
+    primaryData,
     size,
     priceH,
     priceW,
     dataToScreen,
+    screenToData,
   ]);
 
   // Pointer handlers
@@ -942,13 +1013,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       setDragging({ type: 'pan', startX: sx, startView: { ...view } });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'hline') {
+      const { v: sv } = snapPoint(sx, sy, 'high');
       setState((s) => ({
         ...s,
         drawings: [
           ...s.drawings,
           {
             type: 'hline',
-            v,
+            v: sv,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
@@ -957,13 +1029,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         activeTool: 'pan',
       }));
     } else if (tool === 'vline') {
+      const { idx: si } = snapPoint(sx, sy, 'time');
       setState((s) => ({
         ...s,
         drawings: [
           ...s.drawings,
           {
             type: 'vline',
-            idx,
+            idx: si,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
@@ -972,12 +1045,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         activeTool: 'pan',
       }));
     } else if (tool === 'trend' || tool === 'rect' || tool === 'ellipse') {
+      const { idx: si, v: sv } = snapPoint(sx, sy, 'highlow');
       setTempDrawing({
         type: tool as (typeof state.drawings)[0]['type'],
-        i1: idx,
-        v1: v,
-        i2: idx,
-        v2: v,
+        i1: si,
+        v1: sv,
+        i2: si,
+        v2: sv,
         color: COLORS.accent,
         ticker: primary,
         id: Math.random(),
@@ -985,10 +1059,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       setDragging({ type: 'drawing' });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'text') {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      setTextInput({ x: sx, y: sy, idx, v });
+      const { idx: si, v: sv } = snapPoint(sx, sy, 'highlow');
+      setTextInput({ x: sx, y: sy, idx: si, v: sv });
     }
   };
 
@@ -1013,8 +1085,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
       setView({ start: ns, end: ne });
     } else if (dragging?.type === 'drawing' && tempDrawing) {
-      const { idx, v } = screenToData(sx, sy);
-      setTempDrawing({ ...tempDrawing, i2: idx, v2: v });
+      const { idx: si, v: sv } = snapPoint(sx, sy, getSnapMode(tempDrawing.type));
+      setTempDrawing({ ...tempDrawing, i2: si, v2: sv });
     } else if (
       dragging?.type === 'move-drawing' &&
       dragging.snapshot &&
