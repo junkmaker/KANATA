@@ -429,7 +429,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.stroke();
       ctx.fillStyle = COLORS.muted;
       ctx.textAlign = 'left';
-      ctx.fillText('FUNDAMENTALS · last 20 quarters', PAD_L, finY + 8);
+      ctx.fillText('ファンダメンタルズ · 直近20四半期', PAD_L, finY + 8);
 
       const finData = finHistory;
 
@@ -522,7 +522,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       } else {
         ctx.fillStyle = COLORS.muted;
         ctx.textAlign = 'center';
-        ctx.fillText('No data available', PAD_L + finW / 2, finY + FIN_H / 2);
+        ctx.fillText('データなし', PAD_L + finW / 2, finY + FIN_H / 2);
       }
     }
 

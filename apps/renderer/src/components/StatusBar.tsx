@@ -22,7 +22,7 @@ export function StatusBar({ state }: StatusBarProps) {
         DRAW <b>{state.drawings.length}</b>
       </span>
       <span style={{ marginLeft: 'auto' }}>
-        Drag to pan · scroll to zoom · double-click row to set primary
+        ドラッグでパン · スクロールでズーム · 行をダブルクリックでメインに設定
       </span>
     </footer>
   );

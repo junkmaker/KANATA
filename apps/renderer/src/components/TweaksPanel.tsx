@@ -22,21 +22,21 @@ export function TweaksPanel({
   return (
     <div className="tweaks-panel">
       <div className="tweaks-head">
-        <span>TWEAKS</span>
+        <span>設定</span>
         <button className="link-btn" onClick={onClose}>
-          CLOSE
+          閉じる
         </button>
       </div>
 
       <div className="tweaks-row">
-        <div className="tweak-label">Color theme</div>
+        <div className="tweak-label">カラーテーマ</div>
         <div className="tweak-chips">
           {(
             [
-              ['dark-blue', 'Dark Blue'],
-              ['dark-neutral', 'Neutral'],
-              ['dark-amber', 'Amber CRT'],
-              ['midnight', 'Midnight'],
+              ['dark-blue', 'ダークブルー'],
+              ['dark-neutral', 'ニュートラル'],
+              ['dark-amber', 'アンバーCRT'],
+              ['midnight', 'ミッドナイト'],
             ] as [string, string][]
           ).map(([id, label]) => (
             <button
@@ -51,27 +51,27 @@ export function TweaksPanel({
       </div>
 
       <div className="tweaks-row">
-        <div className="tweak-label">Density</div>
+        <div className="tweak-label">表示密度</div>
         <div className="tweak-chips">
-          {(['compact', 'comfortable'] as string[]).map((d) => (
+          {([['compact', 'コンパクト'], ['comfortable', 'ゆったり']] as [string, string][]).map(([id, label]) => (
             <button
-              key={d}
-              className={`chip${density === d ? ' on' : ''}`}
-              onClick={() => setDensity(d)}
+              key={id}
+              className={`chip${density === id ? ' on' : ''}`}
+              onClick={() => setDensity(id)}
             >
-              {d}
+              {label}
             </button>
           ))}
         </div>
       </div>
 
       <div className="tweaks-row">
-        <div className="tweak-label">Compare mode</div>
+        <div className="tweak-label">比較モード</div>
         <div className="tweak-chips">
           {(
             [
-              ['percent', '% change'],
-              ['none', 'Hide compares'],
+              ['percent', '変化率'],
+              ['none', '比較を非表示'],
             ] as [string, string][]
           ).map(([id, label]) => (
             <button
@@ -86,7 +86,7 @@ export function TweaksPanel({
       </div>
 
       <div className="tweaks-row">
-        <div className="tweak-label">Quick presets</div>
+        <div className="tweak-label">クイックプリセット</div>
         <div className="tweak-chips">
           <button
             className="chip"
@@ -107,7 +107,7 @@ export function TweaksPanel({
               }))
             }
           >
-            Swing trader
+            スイング
           </button>
           <button
             className="chip"
@@ -128,7 +128,7 @@ export function TweaksPanel({
               }))
             }
           >
-            Day trader
+            デイトレ
           </button>
           <button
             className="chip"
@@ -149,7 +149,7 @@ export function TweaksPanel({
               }))
             }
           >
-            Ichimoku
+            一目
           </button>
           <button
             className="chip"
@@ -170,7 +170,7 @@ export function TweaksPanel({
               }))
             }
           >
-            Clean
+            全解除
           </button>
         </div>
       </div>

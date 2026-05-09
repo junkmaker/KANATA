@@ -68,8 +68,8 @@ export function WatchlistSelector({
           onChange={(e) => onSelect(Number(e.target.value))}
           disabled={status !== 'ready' || watchlists.length === 0}
         >
-          {status === 'loading' && <option value="">Loading…</option>}
-          {status === 'offline' && <option value="">Offline</option>}
+          {status === 'loading' && <option value="">読み込み中…</option>}
+          {status === 'offline' && <option value="">オフライン</option>}
           {watchlists.map((w) => (
             <option key={w.id} value={w.id}>
               {w.name} ({w.items.length})
@@ -82,7 +82,7 @@ export function WatchlistSelector({
           disabled={status !== 'ready'}
           title="編集モード"
         >
-          {editing ? 'Done' : 'Edit'}
+          {editing ? '完了' : '編集'}
         </button>
         <button
           className="ws-btn"
@@ -152,14 +152,14 @@ export function WatchlistSelector({
                   setRenameDraft(active.name);
                 }}
               >
-                Rename
+                名前変更
               </button>
               <button
                 className="ws-btn ws-btn-danger"
                 onClick={() => handleDelete(active.id)}
                 disabled={watchlists.length <= 1}
               >
-                Delete
+                削除
               </button>
             </>
           )}
