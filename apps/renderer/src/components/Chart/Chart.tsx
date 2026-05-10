@@ -9,6 +9,11 @@ import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
 import { drawLine } from './subpanes/drawUtils';
 import { drawVolume } from './subpanes/drawVolume';
+import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers';
+import { buildSqEventMap } from '../../lib/sqEvents';
+import type { SqEvent } from '../../lib/sqEvents';
+
+const SQ_TIMEFRAMES = new Set(['1D', '1W', '1M']);
 
 interface ChartProps {
   state: AppState;
@@ -136,6 +141,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     params.rsi.period,
   ]);
 
+  const sqEventMap = useMemo(() => {
+    if (!state.showSqMarkers || !primaryData || !SQ_TIMEFRAMES.has(state.timeframe)) {
+      return new Map<number, SqEvent[]>();
+    }
+    const market = (tickers.find((t) => t.code === primary)?.market === 'JP' ? 'JP' : 'US') as 'JP' | 'US';
+    return buildSqEventMap(primaryData, state.timeframe, market);
+  }, [primaryData, state.timeframe, state.showSqMarkers, tickers, primary]);
+
   const safeEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
 
   const yRange = useMemo<YRange>(() => {
@@ -214,6 +227,19 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       ctx.moveTo(Math.round(x) + 0.5, PAD_T);
       ctx.lineTo(Math.round(x) + 0.5, xAxisGridBottom);
       ctx.stroke();
+    }
+
+    // SQ/witching marker lines (drawn before clip so they span all subpanes)
+    if (sqEventMap.size > 0) {
+      drawSqMarkerLines({
+        ctx,
+        xScale,
+        eventsByBar: sqEventMap,
+        viewStart: view.start,
+        viewEnd: safeEnd,
+        padT: PAD_T,
+        drawBottom: xAxisGridBottom,
+      });
     }
 
     ctx.save();
@@ -303,6 +329,18 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
     }
     ctx.restore();
+
+    // SQ/witching short labels at top of price pane
+    if (sqEventMap.size > 0) {
+      drawSqMarkerLabels({
+        ctx,
+        xScale,
+        eventsByBar: sqEventMap,
+        viewStart: view.start,
+        viewEnd: safeEnd,
+        labelY: PAD_T + 2,
+      });
+    }
 
     // Comparison lines
     if (state.selected.length > 1 && state.compareMode === 'percent') {
@@ -564,6 +602,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     volMax,
     params,
     finHistory,
+    sqEventMap,
   ]);
 
   // Overlay: crosshair, drawings
@@ -963,6 +1002,27 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.textBaseline = 'middle';
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.fillText(fmtDate(primaryData[idx].t, state.timeframe), hover.sx, xAxisY);
+
+        // SQ/witching event tooltip above the date box
+        if (state.showSqMarkers && sqEventMap.size > 0) {
+          const sqEvs = sqEventMap.get(idx);
+          if (sqEvs && sqEvs.length > 0) {
+            const topEv = sqEvs.find((e) => e.severity === 'major') ?? sqEvs[0];
+            const isMajor = topEv.severity === 'major';
+            const tooltipW = 144;
+            const clampedX = Math.max(PAD_L + tooltipW / 2, Math.min(hover.sx, PAD_L + priceW - tooltipW / 2));
+            const ttY = xAxisY - 28;
+            ctx.fillStyle = COLORS.panel;
+            ctx.fillRect(clampedX - tooltipW / 2, ttY - 9, tooltipW, 18);
+            ctx.strokeStyle = isMajor ? COLORS.sqMajor : COLORS.sqMinor;
+            ctx.strokeRect(clampedX - tooltipW / 2 + 0.5, ttY - 9 + 0.5, tooltipW - 1, 17);
+            ctx.fillStyle = isMajor ? COLORS.sqMajor : COLORS.sqMinor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '10px "JetBrains Mono", monospace';
+            ctx.fillText(topEv.label, clampedX, ttY);
+          }
+        }
       }
     }
   }, [
@@ -970,6 +1030,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     state.drawings,
     state.selectedDrawingId,
     state.activeTool,
+    state.showSqMarkers,
     tempDrawing,
     yRange,
     view,
@@ -980,6 +1041,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     priceW,
     dataToScreen,
     screenToData,
+    sqEventMap,
   ]);
 
   // Pointer handlers
