@@ -23,6 +23,7 @@ const DEFAULT_STATE: AppState = {
   selectedDrawingId: null,
   showVolume: true,
   showFinancial: true,
+  showSqMarkers: true,
   indicators: {
     sma5: false,
     sma25: true,

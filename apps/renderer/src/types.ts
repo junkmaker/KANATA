@@ -104,6 +104,7 @@ export interface AppState {
   selectedDrawingId: number | null;
   showVolume: boolean;
   showFinancial: boolean;
+  showSqMarkers: boolean;
   indicators: IndicatorState;
   financial: FinancialState;
   indicatorParams: IndicatorParams;

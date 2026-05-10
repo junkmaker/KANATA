@@ -15,6 +15,8 @@ export const COLORS = {
   teal: 'oklch(0.76 0.11 180)',
   cloudGreen: 'oklch(0.82 0.13 150 / 0.20)',
   cloudRed: 'oklch(0.78 0.15 22 / 0.20)',
+  sqMinor: 'oklch(0.65 0.08 260 / 0.45)',
+  sqMajor: 'oklch(0.78 0.15 60 / 0.80)',
 };
 
 export const COMPARE_COLORS = [

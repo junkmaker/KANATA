@@ -66,6 +66,21 @@ export function TweaksPanel({
       </div>
 
       <div className="tweaks-row">
+        <div className="tweak-label">SQ・ウィッチング</div>
+        <div className="tweak-chips">
+          {([['true', '表示'], ['false', '非表示']] as [string, string][]).map(([id, label]) => (
+            <button
+              key={id}
+              className={`chip${String(state.showSqMarkers) === id ? ' on' : ''}`}
+              onClick={() => setState((s) => ({ ...s, showSqMarkers: id === 'true' }))}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="tweaks-row">
         <div className="tweak-label">比較モード</div>
         <div className="tweak-chips">
           {(
