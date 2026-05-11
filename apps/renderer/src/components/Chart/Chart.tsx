@@ -14,7 +14,8 @@ import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers'
 import { buildSqEventMap } from '../../lib/sqEvents';
 import type { SqEvent } from '../../lib/sqEvents';
 
-const SQ_TIMEFRAMES = new Set(['1D', '1W', '1M']);
+// SQマーカーは日足のときだけ表示する
+const SQ_TIMEFRAMES = new Set(['1D']);
 
 interface ChartProps {
   state: AppState;
