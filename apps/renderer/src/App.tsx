@@ -5,6 +5,7 @@ import { RightPanel } from './components/RightPanel/RightPanel';
 import { StatusBar } from './components/StatusBar';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
+import { useAlertCheck } from './hooks/useAlertCheck';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
@@ -131,6 +132,7 @@ export function App() {
   // Real data for all watchlist tickers from backend (keeps prices consistent regardless of selection)
   const allSymbols = useMemo(() => displayTickers.map((t) => t.code), [displayTickers]);
   const { realData, status } = useChartData(allSymbols, state.timeframe);
+  useAlertCheck(state.drawings, realData, status);
 
   const data = realData;
 
