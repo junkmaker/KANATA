@@ -147,6 +147,17 @@ export interface IndiData {
   rsi?: (number | null)[];
 }
 
+export type AlertDirection = 'below' | 'above';
+
+export interface AlertObject {
+  id: string;
+  drawingId: number;
+  symbol: string;
+  direction: AlertDirection;
+  triggered: boolean;
+  createdAt: number;
+}
+
 export interface SearchResult {
   code: string;
   name: string;

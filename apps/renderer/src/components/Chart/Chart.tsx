@@ -3,7 +3,8 @@ import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AppState, DrawingObject, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import { addAlert } from '../../lib/alertStorage';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -625,6 +626,46 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   } | null>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const textInputReadyRef = useRef(false);
+
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; drawingId: number } | null>(null);
+  const [alertForm, setAlertForm] = useState<{ x: number; y: number; drawingId: number } | null>(null);
+  const [alertDir, setAlertDir] = useState<AlertDirection>('below');
+
+  const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const hitId = hitTest(sx, sy);
+    if (hitId != null) {
+      setState((s) => ({ ...s, selectedDrawingId: hitId }));
+      setCtxMenu({ x: e.clientX, y: e.clientY, drawingId: hitId });
+    }
+  };
+
+  const deleteDrawingById = (id: number) => {
+    setState((s) => ({
+      ...s,
+      drawings: s.drawings.filter((d) => d.id !== id),
+      selectedDrawingId: null,
+    }));
+    setCtxMenu(null);
+  };
+
+  const handleSaveAlert = () => {
+    if (!alertForm) return;
+    const drawing = state.drawings.find((d) => d.id === alertForm.drawingId);
+    if (!drawing) return;
+    addAlert({
+      id: String(Math.random()),
+      drawingId: alertForm.drawingId,
+      symbol: drawing.ticker || primary,
+      direction: alertDir,
+      triggered: false,
+      createdAt: Date.now(),
+    });
+    setAlertForm(null);
+  };
 
   useEffect(() => {
     if (!textInput) {
@@ -1304,6 +1345,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={() => setHover(null)}
+        onContextMenu={onContextMenu}
       />
       {textInput && (
         <input
@@ -1340,6 +1382,127 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           }}
         />
       )}
+      {(ctxMenu || alertForm) && (
+        <button
+          type="button"
+          aria-label="メニューを閉じる"
+          style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent', border: 'none', cursor: 'default', padding: 0 }}
+          onMouseDown={() => { setCtxMenu(null); setAlertForm(null); }}
+        />
+      )}
+
+      {ctxMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            left: ctxMenu.x,
+            top: ctxMenu.y,
+            zIndex: 100,
+            background: 'var(--panel-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            padding: '4px 0',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            minWidth: 148,
+            fontFamily: 'var(--font-ui)',
+            fontSize: 12,
+          }}
+        >
+          <button
+            type="button"
+            style={{ display: 'block', width: '100%', padding: '6px 14px', textAlign: 'left', color: 'var(--text)' }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              setAlertForm({ x: ctxMenu.x, y: ctxMenu.y, drawingId: ctxMenu.drawingId });
+              setCtxMenu(null);
+            }}
+          >
+            アラートを設定
+          </button>
+          <button
+            type="button"
+            style={{ display: 'block', width: '100%', padding: '6px 14px', textAlign: 'left', color: 'var(--bear)' }}
+            onMouseDown={(e) => { e.stopPropagation(); deleteDrawingById(ctxMenu.drawingId); }}
+          >
+            削除
+          </button>
+        </div>
+      )}
+
+      {alertForm && (
+        <div
+          style={{
+            position: 'fixed',
+            left: alertForm.x,
+            top: alertForm.y,
+            zIndex: 100,
+            background: 'var(--panel-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '12px 14px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            minWidth: 180,
+            fontFamily: 'var(--font-ui)',
+            fontSize: 12,
+          }}
+        >
+          <div style={{ color: 'var(--text-soft)', marginBottom: 10, fontWeight: 500 }}>アラートを設定</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {(['below', 'above'] as AlertDirection[]).map((d) => (
+              <button
+                type="button"
+                key={d}
+                onMouseDown={(e) => { e.stopPropagation(); setAlertDir(d); }}
+                style={{
+                  flex: 1,
+                  padding: '5px 0',
+                  borderRadius: 3,
+                  border: `1px solid ${alertDir === d ? 'var(--accent)' : 'var(--border)'}`,
+                  background: alertDir === d ? 'var(--accent)' : 'transparent',
+                  color: alertDir === d ? 'var(--bg)' : 'var(--text)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                }}
+              >
+                {d === 'below' ? '下抜け' : '上抜け'}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onMouseDown={(e) => { e.stopPropagation(); handleSaveAlert(); }}
+              style={{
+                flex: 1,
+                padding: '5px 0',
+                borderRadius: 3,
+                background: 'var(--accent)',
+                color: 'var(--bg)',
+                fontSize: 11,
+                cursor: 'pointer',
+                border: 'none',
+              }}
+            >
+              設定
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => { e.stopPropagation(); setAlertForm(null); }}
+              style={{
+                flex: 1,
+                padding: '5px 0',
+                borderRadius: 3,
+                border: '1px solid var(--border)',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+            >
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+
       <ChartLegend
         state={state}
         hoverBar={hoverBar}
