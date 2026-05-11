@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { checkAlertCondition } from '../lib/alertChecker';
+import { loadAlerts, markAlertTriggered } from '../lib/alertStorage';
+import { fetchQuotes } from '../lib/api';
 import type { DrawingObject, OHLCBar } from '../types';
 import type { DataStatus } from './useChartData';
-import { loadAlerts, markAlertTriggered } from '../lib/alertStorage';
-import { checkAlertCondition } from '../lib/alertChecker';
 
 export function useAlertCheck(
   drawings: DrawingObject[],
@@ -24,8 +25,25 @@ export function useAlertCheck(
       }
       if (Notification.permission !== 'granted') return;
 
+      // Fetch price data for alert symbols not in the active watchlist
+      const missingSymbols = [
+        ...new Set(pending.map((a) => a.symbol).filter((s) => !data[s])),
+      ];
+      const extraData: Record<string, OHLCBar[]> = {};
+      await Promise.all(
+        missingSymbols.map(async (symbol) => {
+          try {
+            const bars = await fetchQuotes(symbol, '1D');
+            if (bars.length > 0) extraData[symbol] = bars;
+          } catch {
+            /* skip symbols that fail to fetch */
+          }
+        }),
+      );
+      const allData = { ...extraData, ...data };
+
       for (const alert of pending) {
-        if (!checkAlertCondition(alert, drawings, data)) continue;
+        if (!checkAlertCondition(alert, drawings, allData)) continue;
         const drawing = drawings.find((d) => d.id === alert.drawingId);
         const lineLabel = drawing?.type === 'hline' ? '水平線' : 'トレンドライン';
         const dirLabel = alert.direction === 'below' ? '下抜け' : '上抜け';
