@@ -13,9 +13,13 @@ import { drawVolume } from './subpanes/drawVolume';
 import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers';
 import { buildSqEventMap } from '../../lib/sqEvents';
 import type { SqEvent } from '../../lib/sqEvents';
+import { barTimestampAt } from '../../lib/futureBars';
 
 // SQマーカーは日足のときだけ表示する
 const SQ_TIMEFRAMES = new Set(['1D']);
+
+// 未来領域の最大バー数（パン・描画可能な上限）
+const MAX_FUTURE_BARS = 120;
 
 interface ChartProps {
   state: AppState;
@@ -151,7 +155,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return buildSqEventMap(primaryData, state.timeframe, market);
   }, [primaryData, state.timeframe, state.showSqMarkers, tickers, primary]);
 
-  const safeEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
+  // dataEnd: 実データ範囲の末尾（未来バーを含まない）
+  const dataEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
 
   const yRange = useMemo<YRange>(() => {
     if (!primaryData) return { min: 0, max: 1 };
@@ -175,7 +180,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return { min: min - pad, max: max + pad };
   }, [primaryData, view, state.indicators.boll, indi]);
 
-  const nVis = safeEnd - view.start;
+  // nVis はビューポート全体（未来バー含む）で計算することで bw を一定に保つ
+  const nVis = view.end - view.start;
   const bw = priceW / nVis;
   const xScale = (i: number) => PAD_L + (i - view.start) * bw + bw / 2;
   const yScale = (v: number) => {
@@ -184,7 +190,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   };
 
   let volMax = 1;
-  for (let i = view.start; i < safeEnd; i++)
+  for (let i = view.start; i < dataEnd; i++)
     if (primaryData && primaryData[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
 
   // Main canvas draw
@@ -223,7 +229,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'center';
     const tf = state.timeframe;
-    for (let i = view.start; i < safeEnd; i += tickStep) {
+    for (let i = view.start; i < view.end; i += tickStep) {
       const x = xScale(i);
       ctx.beginPath();
       ctx.moveTo(Math.round(x) + 0.5, PAD_T);
@@ -238,7 +244,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         xScale,
         eventsByBar: sqEventMap,
         viewStart: view.start,
-        viewEnd: safeEnd,
+        viewEnd: dataEnd,
         padT: PAD_T,
         drawBottom: xAxisGridBottom,
       });
@@ -254,7 +260,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
       ctx.beginPath();
       let first = true;
-      for (let i = view.start; i < safeEnd; i++) {
+      for (let i = view.start; i < dataEnd; i++) {
         if (senkouA[i] == null || senkouB[i] == null) continue;
         const x = xScale(i);
         if (first) {
@@ -262,12 +268,12 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           first = false;
         } else ctx.lineTo(x, yScale(senkouA[i]!));
       }
-      for (let i = safeEnd - 1; i >= view.start; i--) {
+      for (let i = dataEnd - 1; i >= view.start; i--) {
         if (senkouA[i] == null || senkouB[i] == null) continue;
         ctx.lineTo(xScale(i), yScale(senkouB[i]!));
       }
       ctx.closePath();
-      const midI = Math.floor((view.start + safeEnd) / 2);
+      const midI = Math.floor((view.start + dataEnd) / 2);
       const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
       ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
       ctx.fill();
@@ -286,7 +292,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     }
 
     // Candles
-    for (let i = view.start; i < safeEnd; i++) {
+    for (let i = view.start; i < dataEnd; i++) {
       const b = primaryData[i];
       const x = xScale(i);
       const up = b.c >= b.o;
@@ -321,7 +327,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
 
     if (state.indicators.psar && indi.psar) {
       ctx.fillStyle = 'oklch(0.78 0.20 350)';
-      for (let i = view.start; i < safeEnd; i++) {
+      for (let i = view.start; i < dataEnd; i++) {
         if (indi.psar[i] == null) continue;
         const x = xScale(i),
           y = yScale(indi.psar[i]!);
@@ -339,7 +345,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         xScale,
         eventsByBar: sqEventMap,
         viewStart: view.start,
-        viewEnd: safeEnd,
+        viewEnd: dataEnd,
         labelY: PAD_T + 2,
       });
     }
@@ -356,7 +362,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         if (!basePrice) continue;
         let pmin = Infinity,
           pmax = -Infinity;
-        for (let i = view.start; i < safeEnd; i++) {
+        for (let i = view.start; i < dataEnd; i++) {
           const bi = i + off;
           if (bi < 0 || bi >= arr.length) continue;
           const pct = (arr[bi].c / basePrice - 1) * 100;
@@ -364,7 +370,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           if (pct > pmax) pmax = pct;
         }
         const primBase = primaryData[view.start].c;
-        for (let i = view.start; i < safeEnd; i++) {
+        for (let i = view.start; i < dataEnd; i++) {
           const pct = (primaryData[i].c / primBase - 1) * 100;
           if (pct < pmin) pmin = pct;
           if (pct > pmax) pmax = pct;
@@ -399,7 +405,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           padL: PAD_L,
           priceW,
           viewStart: view.start,
-          viewEnd: safeEnd,
+          viewEnd: dataEnd,
           bw,
           xScale,
           y0: volY0,
@@ -418,7 +424,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           padL: PAD_L,
           priceW,
           viewStart: view.start,
-          viewEnd: safeEnd,
+          viewEnd: dataEnd,
           bw,
           xScale,
           y0: stochY0,
@@ -436,7 +442,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           padL: PAD_L,
           priceW,
           viewStart: view.start,
-          viewEnd: safeEnd,
+          viewEnd: dataEnd,
           bw,
           xScale,
           y0: macdY0,
@@ -455,7 +461,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           padL: PAD_L,
           priceW,
           viewStart: view.start,
-          viewEnd: safeEnd,
+          viewEnd: dataEnd,
           bw,
           xScale,
           y0: rsiY0,
@@ -574,12 +580,30 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
     }
 
-    // X axis labels
+    // X axis labels（未来バーは barTimestampAt で時刻計算）
     const xAxisY = FIN_H > 0 ? finY0 - 9 : size.h - X_AXIS_H / 2;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'center';
-    for (let i = view.start; i < safeEnd; i += tickStep) {
-      ctx.fillText(fmtDate(primaryData[i].t, tf), xScale(i), xAxisY);
+    for (let i = view.start; i < view.end; i += tickStep) {
+      const t = barTimestampAt(primaryData, i, tf);
+      ctx.fillText(fmtDate(t, tf), xScale(i), xAxisY);
+    }
+
+    // 未来領域の視覚表示（最後のデータバーより右を薄い背景と区切り線で示す）
+    if (view.end > primaryData.length) {
+      const futureX = Math.max(PAD_L, PAD_L + (primaryData.length - view.start) * bw);
+      const futureW = PAD_L + priceW - futureX;
+      if (futureW > 0) {
+        ctx.fillStyle = 'oklch(0.5 0 0 / 0.06)';
+        ctx.fillRect(futureX, PAD_T, futureW, priceH);
+        ctx.strokeStyle = COLORS.gridSoft;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(Math.round(futureX) + 0.5, PAD_T);
+        ctx.lineTo(Math.round(futureX) + 0.5, PAD_T + priceH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
   }, [
     size,
@@ -605,6 +629,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     params,
     finHistory,
     sqEventMap,
+    dataEnd,
   ]);
 
   // Overlay: crosshair, drawings
@@ -719,9 +744,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   const snapPoint = (sx: number, sy: number, mode: SnapMode): { idx: number; v: number } => {
     const { idx: rawIdx, v: rawV } = screenToData(sx, sy);
     if (!primaryData?.length) return { idx: rawIdx, v: rawV };
-    const ci = Math.max(0, Math.min(primaryData.length - 1, Math.round(rawIdx)));
-    const bar = primaryData[ci];
-    if (!bar) return { idx: rawIdx, v: rawV };
+    const ci = Math.max(0, Math.min(primaryData.length - 1 + MAX_FUTURE_BARS, Math.round(rawIdx)));
+    // 未来バーには価格データがないのでスナップ不可
+    const bar = ci < primaryData.length ? primaryData[ci] : undefined;
+    if (!bar) {
+      const snappedIdx = mode === 'high' ? rawIdx : ci;
+      return { idx: snappedIdx, v: rawV };
+    }
     const snappedIdx = mode === 'high' ? rawIdx : ci;
     const highY = yScale(bar.h);
     const lowY = yScale(bar.l);
@@ -1033,7 +1062,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
 
       const idx = Math.round(view.start + (hover.sx - PAD_L) / bw);
-      if (idx >= view.start && idx < view.end && primaryData?.[idx]) {
+      if (idx >= view.start && idx < view.end && primaryData) {
         const xAxisY = FIN_H > 0 ? finY0 - 9 : size.h - X_AXIS_H / 2;
         ctx.fillStyle = COLORS.panel;
         ctx.fillRect(hover.sx - 58, xAxisY - 9, 116, 18);
@@ -1043,7 +1072,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillText(fmtDate(primaryData[idx].t, state.timeframe), hover.sx, xAxisY);
+        const hoverT = barTimestampAt(primaryData, idx, state.timeframe);
+        ctx.fillText(fmtDate(hoverT, state.timeframe), hover.sx, xAxisY);
 
         // SQ/witching event tooltip above the date box
         if (state.showSqMarkers && sqEventMap.size > 0) {
@@ -1182,8 +1212,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ne -= ns;
         ns = 0;
       }
-      if (ne > primaryData.length) {
-        const d2 = ne - primaryData.length;
+      if (ne > primaryData.length + MAX_FUTURE_BARS) {
+        const d2 = ne - (primaryData.length + MAX_FUTURE_BARS);
         ns -= d2;
         ne -= d2;
       }
@@ -1278,8 +1308,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ne -= ns;
         ns = 0;
       }
-      if (ne > pd.length) {
-        const d2 = ne - pd.length;
+      if (ne > pd.length + MAX_FUTURE_BARS) {
+        const d2 = ne - (pd.length + MAX_FUTURE_BARS);
         ns -= d2;
         ne -= d2;
       }
@@ -1319,7 +1349,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [textInput, setState]);
 
-  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : safeEnd - 1;
+  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : dataEnd - 1;
   const hoverBar = primaryData && primaryData[hoverIdx];
 
   return (
