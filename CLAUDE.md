@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-KANATA (Karte for Analytical Navigation And Technical Analysis) は TradingView ライクな株式チャート **Windows ネイティブ Electron アプリ**。Docker/WSL2 構成から移行済み。Python FastAPI バックエンドをサイドカープロセスとして内包し、React + Vite レンダラーと IPC 経由で接続する。実装計画は [docs/electron.plan.md](docs/electron.plan.md) を参照（Phase 1 完了・Phase 2 進行中）。
+KANATA (Karte for Analytical Navigation And Technical Analysis) は TradingView ライクな株式チャート **Windows ネイティブ Electron アプリ**。Docker/WSL2 構成から移行済み。Python FastAPI バックエンドをサイドカープロセスとして内包し、React + Vite レンダラーと IPC 経由で接続する。実装計画は [docs/electron.plan.md](docs/electron.plan.md) を参照（Phase 1〜5 完了）。
 
 ## ディレクトリ構成
 
@@ -22,8 +22,9 @@ KANATA/
 │   │   │   ├── bridge.ts  # ipcMain ハンドラ登録
 │   │   │   └── channels.ts # IPC チャンネル定数
 │   │   ├── sidecar/
-│   │   │   └── pythonSidecar.ts  # Python サブプロセス管理
+│   │   │   └── pythonSidecar.ts  # Python サブプロセス管理（起動・ヘルスチェック・再起動・DB バックアップ）
 │   │   ├── lib/
+│   │   │   ├── port.ts           # reservePort()：動的ポート事前確保
 │   │   │   └── logger.ts         # mainLogger / sidecarLogger
 │   │   └── _unused/
 │   │       └── database.ts       # 未使用（better-sqlite3 削除済み）
@@ -31,14 +32,16 @@ KANATA/
 │       ├── App.tsx
 │       ├── components/
 │       │   └── Chart/
-│       │       ├── Chart.tsx            # Canvas 描画 (1368 行)
-│       │       └── subpanes/
-│       │           ├── drawVolume.ts
-│       │           ├── drawStoch.ts
-│       │           ├── drawMacd.ts
-│       │           ├── drawRsi.ts
-│       │           ├── drawUtils.ts
-│       │           └── types.ts
+│       │       ├── Chart.tsx            # Canvas 描画 (1697 行)
+│       │       ├── subpanes/
+│       │       │   ├── drawVolume.ts
+│       │       │   ├── drawStoch.ts
+│       │       │   ├── drawMacd.ts
+│       │       │   ├── drawRsi.ts
+│       │       │   ├── drawUtils.ts
+│       │       │   └── types.ts
+│       │       └── overlays/
+│       │           └── drawSqMarkers.ts # SQ/ウィッチング日マーカー描画
 │       ├── hooks/
 │       ├── lib/
 │       └── styles/
@@ -104,7 +107,10 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 
 ### Python サイドカー (`apps/main/src/sidecar/pythonSidecar.ts`)
 
-- `--port 0` で起動 → uvicorn ログから `Uvicorn running on http://127.0.0.1:(\d+)` を正規表現で検出してポートを取得
+- `lib/port.ts` の `reservePort()` で Node 側がポートを事前確保し、`--port <n>` でサイドカーに渡す（ログ正規表現依存なし）
+- 起動後 `GET /api/health` が 200 を返すまで最大 20 秒ヘルスチェック待機（500ms 間隔）
+- クラッシュ時は指数バックオフで最大 2 回自動再起動し、失敗時は `kanata:backend-status` で UI に通知
+- 起動時に SQLite DB を `backups/` へコピーし直近 7 世代を保持
 - `resolveBackendDir()` — パッケージ時は `process.resourcesPath/backend`、開発時は `app.getAppPath()/backend`（`KANATA_BACKEND_DIR` 環境変数で上書き可）
 - `resolvePythonExecutable()` — パッケージ時は `resources/python/python.exe`、開発時はシステム `python` / `python3`（`KANATA_PYTHON` 環境変数で上書き可）
 - `DATABASE_URL=sqlite:///<userData>/kanata.db` を環境変数として子プロセスに渡す
@@ -133,10 +139,12 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `lib/watchlistApi.ts` — 8 本の fetch ラッパ。`{success, data, error}` エンベロープを剥がす
 - `lib/watchlistTickers.ts` — `Watchlist.items` を表示用 `Ticker` に変換し、未知銘柄は `genSeries` で合成 OHLC を生成
 - `lib/migrateLocalState.ts` — 既存 `kanata.state.selected` を「Migrated from local」リストに一度だけ移行（フラグ: `kanata.migrated.v1`）
-- `components/Chart/Chart.tsx` — **1368 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール（選択・移動・削除含む）、クロスヘア、パン・ズームを扱う。サブペイン描画は `subpanes/` に切り出し済み
+- `components/Chart/Chart.tsx` — **1697 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール（選択・移動・削除含む）、クロスヘア、パン・ズームを扱う。サブペイン描画は `subpanes/` に切り出し済み
 - `components/Chart/subpanes/` — `drawVolume / drawStoch / drawMacd / drawRsi / drawUtils / types` に分割済み
+- `components/Chart/overlays/drawSqMarkers.ts` — SQ・ウィッチング日マーカーの縦線とラベルを描画。日足（1D）のみ有効
 - `lib/indicators.ts` — SMA/EMA/BOLL/STOCH/PSAR/Ichimoku をクライアント側で計算
 - `lib/data.ts` — `genSeries`（未知銘柄向けプレースホルダー OHLC）+ `retime()` でタイムフレーム変換。15 銘柄の事前生成は廃止済み
+- `lib/futureBars.ts` — 未来バーの時刻計算ヘルパ。`nextBarTimestamp(prevT, tf)` でタイムフレームごとの次バー時刻を返し、`barTimestampAt(data, idx, tf)` でデータ範囲外のインデックスにも安全に対応する
 - `hooks/useChartData.ts` — `symbols.join(',')` を useEffect 依存にして配列の参照等価性問題を回避している
 - `styles/globals.css` — 4 種カラーテーマ (`data-aesthetic`) + 2 種密度 (`data-density`) を CSS カスタムプロパティで切替
 
@@ -159,6 +167,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - **タイムフレーム文字列は前後で違う**。フロントは `5m/15m/60m/1D/1W/1M`、yfinance は `5m/15m/60m/1d/1wk/1mo`。変換は必ず `INTERVAL_MAP` 経由にする
 - **JP 銘柄コードは 4 桁数字**（例 `7203`）。yfinance に渡す前に `.T` を付ける処理が `to_yf_symbol` に集約されているので、新規ルートで yfinance を呼ぶ場合も同関数を使う
 - **描画ツールは OHLC インデックスと価格で保存**（`DrawingObject`）、座標ではない。タイムフレーム変更でも位置が維持される設計
+- **未来バーへの描画**: `Chart.tsx` の `MAX_FUTURE_BARS = 120` で最大 120 バー先の空白領域にパン・描画できる。未来インデックス（`idx >= data.length`）の時刻計算は `lib/futureBars.ts` の `barTimestampAt` に集約されており、新規でタイムスタンプが必要な場合も同関数を使う
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - **Chart サブペインの Y 座標チェーン**（[Chart.tsx:70-74](apps/renderer/src/components/Chart/Chart.tsx#L70-L74)）に手を入れない。ペインの高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する
 - **ウォッチリスト API のテスト**：`backend/tests/` に pytest 実装済み（`test_models.py` 5 件 + `test_watchlists_api.py` 10 件）。`conftest.py` は tempfile SQLite + `app.dependency_overrides[get_db]` でテスト分離
