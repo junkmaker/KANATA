@@ -152,7 +152,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       return new Map<number, SqEvent[]>();
     }
     const market = (tickers.find((t) => t.code === primary)?.market === 'JP' ? 'JP' : 'US') as 'JP' | 'US';
-    return buildSqEventMap(primaryData, state.timeframe, market);
+    return buildSqEventMap(primaryData, state.timeframe, market, MAX_FUTURE_BARS);
   }, [primaryData, state.timeframe, state.showSqMarkers, tickers, primary]);
 
   // dataEnd: 実データ範囲の末尾（未来バーを含まない）
@@ -244,7 +244,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         xScale,
         eventsByBar: sqEventMap,
         viewStart: view.start,
-        viewEnd: dataEnd,
+        viewEnd: view.end,
         padT: PAD_T,
         drawBottom: xAxisGridBottom,
       });
@@ -345,7 +345,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         xScale,
         eventsByBar: sqEventMap,
         viewStart: view.start,
-        viewEnd: dataEnd,
+        viewEnd: view.end,
         labelY: PAD_T + 2,
       });
     }
