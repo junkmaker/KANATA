@@ -1,4 +1,5 @@
 import type { OHLCBar } from '../types';
+import { barTimestampAt } from './futureBars';
 import { nthWeekdayOfMonth } from './sqCalendar';
 
 export type SqEventType = 'jp_sq' | 'jp_major_sq' | 'us_witching' | 'us_quad_witching';
@@ -100,20 +101,45 @@ function findBarIndexForEvent(bars: OHLCBar[], eventTs: number, timeframe: strin
   return -1;
 }
 
+// Finds the best-matching future bar index (>= bars.length) for a 1D event timestamp.
+function findFutureBarIndexForEvent(bars: OHLCBar[], eventTs: number, maxFutureBars: number): number {
+  let bestIdx = -1;
+  let bestDiff = Infinity;
+  for (let i = bars.length; i < bars.length + maxFutureBars; i++) {
+    const futureTs = barTimestampAt(bars, i, '1D');
+    const diff = Math.abs(futureTs - eventTs);
+    if (diff < DAILY_TOLERANCE_MS && diff < bestDiff) {
+      bestDiff = diff;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
 export function buildSqEventMap(
   bars: OHLCBar[],
   timeframe: string,
   market: 'JP' | 'US',
+  maxFutureBars: number = 0,
 ): Map<number, SqEvent[]> {
   if (!bars.length) return new Map();
 
+  const lastTs = bars[bars.length - 1].t;
+  const futureEndTs =
+    maxFutureBars > 0 && timeframe === '1D'
+      ? barTimestampAt(bars, bars.length + maxFutureBars - 1, '1D') + 40 * 86400000
+      : lastTs + 40 * 86400000;
+
   const from = new Date(bars[0].t - 40 * 86400000);
-  const to = new Date(bars[bars.length - 1].t + 40 * 86400000);
+  const to = new Date(futureEndTs);
   const events = getSqEventsInRange(from, to, market);
 
   const map = new Map<number, SqEvent[]>();
   for (const event of events) {
-    const idx = findBarIndexForEvent(bars, event.date.getTime(), timeframe);
+    let idx = findBarIndexForEvent(bars, event.date.getTime(), timeframe);
+    if (idx === -1 && maxFutureBars > 0 && timeframe === '1D') {
+      idx = findFutureBarIndexForEvent(bars, event.date.getTime(), maxFutureBars);
+    }
     if (idx !== -1) {
       const existing = map.get(idx);
       map.set(idx, existing ? [...existing, event] : [event]);
