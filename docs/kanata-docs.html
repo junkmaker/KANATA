@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KANATA / TERMINAL — Developer Docs</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         oklch(0.14 0.006 250);
+    --panel:      oklch(0.175 0.007 250);
+    --surface:    oklch(0.21 0.007 250);
+    --border:     oklch(0.28 0.008 250);
+    --text:       oklch(0.88 0.005 250);
+    --muted:      oklch(0.52 0.006 250);
+    --accent:     oklch(0.76 0.15 220);
+    --accent-dim: oklch(0.76 0.15 220 / 0.12);
+    --amber:      oklch(0.80 0.15 85);
+    --green:      oklch(0.80 0.13 150);
+    --red:        oklch(0.72 0.15 22);
+    --code-bg:    oklch(0.19 0.008 250);
+    --nav-w:      240px;
+    --font-mono:  "JetBrains Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+    --font-sans:  "Inter", "Noto Sans JP", system-ui, sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  /* ── Sidebar ── */
+  nav#sidebar {
+    width: var(--nav-w);
+    min-width: var(--nav-w);
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nav-brand {
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .nav-brand h1 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    font-family: var(--font-mono);
+  }
+
+  .nav-brand p {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin-top: 3px;
+  }
+
+  .nav-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .nav-tab {
+    flex: 1;
+    padding: 9px 6px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    color: var(--muted);
+    border: none;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: var(--font-sans);
+  }
+
+  .nav-tab:hover { color: var(--text); }
+  .nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .nav-links { padding: 10px 0 24px; overflow-y: auto; }
+
+  .nav-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    padding: 14px 16px 4px;
+    text-transform: uppercase;
+  }
+
+  .nav-link {
+    display: block;
+    padding: 5px 16px 5px 20px;
+    font-size: 12px;
+    color: oklch(0.65 0.006 250);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+    line-height: 1.4;
+  }
+
+  .nav-link:hover {
+    color: var(--text);
+    background: var(--accent-dim);
+    border-left-color: var(--accent);
+  }
+
+  .nav-link.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .nav-link-sub {
+    padding-left: 28px;
+    font-size: 11px;
+  }
+
+  /* ── Main ── */
+  main {
+    margin-left: var(--nav-w);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .doc-section {
+    display: none;
+    max-width: 900px;
+    padding: 52px 56px 96px;
+  }
+
+  .doc-section.active { display: block; }
+
+  /* ── Headings ── */
+  h1 {
+    font-size: 28px; font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+
+  h1 .subtitle {
+    font-size: 13px; color: var(--muted);
+    font-weight: 400; letter-spacing: 0;
+    display: block; margin-top: 5px;
+  }
+
+  h2 {
+    font-size: 17px; font-weight: 700;
+    color: var(--text);
+    margin: 52px 0 16px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--border);
+    scroll-margin-top: 24px;
+  }
+
+  h3 {
+    font-size: 14px; font-weight: 700;
+    color: var(--accent);
+    margin: 28px 0 10px;
+    scroll-margin-top: 24px;
+  }
+
+  h4 {
+    font-size: 13px; font-weight: 600;
+    color: oklch(0.70 0.10 220);
+    margin: 20px 0 8px;
+    scroll-margin-top: 24px;
+  }
+
+  p { margin-bottom: 12px; }
+  strong { color: var(--text); font-weight: 600; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+  ol, ul { padding-left: 22px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+
+  /* ── Inline code ── */
+  code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--code-bg);
+    color: oklch(0.80 0.12 200);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  /* ── Code blocks ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 10px 0 20px;
+    position: relative;
+  }
+
+  pre .lang-tag {
+    position: absolute;
+    top: 8px; right: 10px;
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    user-select: none;
+  }
+
+  pre code {
+    background: none; border: none; padding: 0;
+    font-size: 12.5px; color: var(--text); line-height: 1.65;
+  }
+
+  /* Syntax tokens */
+  .kw { color: oklch(0.76 0.15 280); }
+  .ty { color: oklch(0.80 0.13 200); }
+  .st { color: oklch(0.78 0.14 150); }
+  .cm { color: var(--muted); font-style: italic; }
+  .nb { color: oklch(0.76 0.13 60); }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 20px; font-size: 13px; }
+
+  th {
+    background: var(--surface);
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+  }
+
+  td {
+    padding: 7px 12px;
+    border-bottom: 1px solid oklch(0.21 0.007 250);
+    vertical-align: top;
+  }
+
+  tr:hover td { background: oklch(0.175 0.007 250 / 0.5); }
+
+  /* ── Endpoint badge strip ── */
+  .endpoint-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 24px 0 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 5px 5px 0;
+  }
+
+  .endpoint-path {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* HTTP method badges */
+  .method {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 3px;
+    letter-spacing: 0.04em; white-space: nowrap;
+  }
+  .GET    { background: oklch(0.38 0.10 200/0.30); color: oklch(0.78 0.12 200); border: 1px solid oklch(0.50 0.10 200/0.40); }
+  .POST   { background: oklch(0.38 0.10 150/0.30); color: oklch(0.78 0.12 150); border: 1px solid oklch(0.50 0.10 150/0.40); }
+  .PUT    { background: oklch(0.38 0.10 85 /0.30); color: oklch(0.78 0.12 85);  border: 1px solid oklch(0.50 0.10 85 /0.40); }
+  .PATCH  { background: oklch(0.38 0.10 60 /0.30); color: oklch(0.78 0.12 60);  border: 1px solid oklch(0.50 0.10 60 /0.40); }
+  .DELETE { background: oklch(0.38 0.10 22 /0.30); color: oklch(0.78 0.12 22);  border: 1px solid oklch(0.50 0.10 22 /0.40); }
+
+  /* Status code badges */
+  .status {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px; font-weight: 700;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .s200 { background: oklch(0.38 0.10 150/0.25); color: oklch(0.80 0.13 150); }
+  .s201 { background: oklch(0.38 0.10 200/0.25); color: oklch(0.78 0.14 200); }
+  .s400 { background: oklch(0.38 0.10 60 /0.25); color: oklch(0.80 0.15 60); }
+  .s404 { background: oklch(0.38 0.10 85 /0.25); color: oklch(0.80 0.15 85); }
+  .s409 { background: oklch(0.38 0.10 22 /0.25); color: oklch(0.78 0.15 22); }
+  .s502 { background: oklch(0.38 0.10 22 /0.25); color: oklch(0.78 0.15 22); }
+
+  /* Callouts */
+  .callout {
+    padding: 12px 16px; border-radius: 4px;
+    margin: 12px 0 20px; font-size: 13px;
+    border-left: 3px solid; line-height: 1.6;
+  }
+  .callout-note { background: oklch(0.21 0.008 220); border-color: var(--accent); color: oklch(0.80 0.08 220); }
+
+  /* ── Mermaid diagrams ── */
+  .mermaid-wrap {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 12px 0 24px;
+    overflow-x: auto;
+    text-align: center;
+  }
+
+  .mermaid-wrap svg { max-width: 100%; height: auto; }
+
+  /* ── Infra summary cards ── */
+  .infra-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 10px;
+    margin: 16px 0 24px;
+  }
+
+  .infra-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 12px 14px;
+  }
+
+  .infra-card .label {
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.10em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 5px;
+  }
+
+  .infra-card .value {
+    font-size: 12px; color: var(--text);
+    font-family: var(--font-mono); line-height: 1.5;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  @media print {
+    nav#sidebar { display: none; }
+    main { margin-left: 0; }
+    .doc-section { display: block !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ SIDEBAR ════════════════════ -->
+<nav id="sidebar">
+  <div class="nav-brand">
+    <h1>KANATA /TERMINAL</h1>
+    <p>Developer Documentation</p>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('api')">API Spec</button>
+    <button class="nav-tab"        onclick="switchTab('arch')">Architecture</button>
+  </div>
+
+  <!-- API nav -->
+  <div class="nav-links" id="nav-api">
+    <div class="nav-section-label">共通仕様</div>
+    <a class="nav-link" href="#api-common">ベースURL / エンベロープ</a>
+    <a class="nav-link" href="#api-cors">CORS 設定</a>
+
+    <div class="nav-section-label">エンドポイント</div>
+    <a class="nav-link" href="#ep-health">1. ヘルスチェック</a>
+    <a class="nav-link" href="#ep-watchlists">2. ウォッチリスト</a>
+    <a class="nav-link nav-link-sub" href="#ep-wl-get">2-1 全取得</a>
+    <a class="nav-link nav-link-sub" href="#ep-wl-post">2-2 作成</a>
+    <a class="nav-link nav-link-sub" href="#ep-wl-patch">2-3 更新</a>
+    <a class="nav-link nav-link-sub" href="#ep-wl-delete">2-4 削除</a>
+    <a class="nav-link nav-link-sub" href="#ep-wl-reorder">2-5 順序変更</a>
+    <a class="nav-link" href="#ep-items">3. アイテム</a>
+    <a class="nav-link nav-link-sub" href="#ep-item-add">3-1 追加</a>
+    <a class="nav-link nav-link-sub" href="#ep-item-del">3-2 削除</a>
+    <a class="nav-link nav-link-sub" href="#ep-item-reorder">3-3 順序変更</a>
+    <a class="nav-link" href="#ep-quotes">4. 相場データ (OHLCV)</a>
+    <a class="nav-link" href="#ep-fundamentals">5. ファンダメンタルズ</a>
+    <a class="nav-link nav-link-sub" href="#ep-fin-quarterly">5-1 四半期財務</a>
+    <a class="nav-link nav-link-sub" href="#ep-fin-summary">5-2 サマリー</a>
+    <a class="nav-link" href="#ep-search">6. シンボル検索</a>
+
+    <div class="nav-section-label">型 / 仕様</div>
+    <a class="nav-link" href="#api-types">型定義</a>
+    <a class="nav-link" href="#api-validation">バリデーション</a>
+    <a class="nav-link" href="#api-caching">キャッシング</a>
+    <a class="nav-link" href="#api-errors">エラーハンドリング</a>
+    <a class="nav-link" href="#api-files">関連ファイル</a>
+  </div>
+
+  <!-- Architecture nav -->
+  <div class="nav-links" id="nav-arch" style="display:none">
+    <div class="nav-section-label">システム設計</div>
+    <a class="nav-link" href="#arch-overview">1. システム全体図</a>
+    <a class="nav-link" href="#arch-dataflow">2. データフロー</a>
+    <a class="nav-link" href="#arch-components">3. コンポーネントツリー</a>
+    <a class="nav-link" href="#arch-state">4. 状態管理</a>
+    <a class="nav-link" href="#arch-backend">5. バックエンド構成</a>
+    <a class="nav-link" href="#arch-datamodel">6. データモデル</a>
+
+    <div class="nav-section-label">詳細仕様</div>
+    <a class="nav-link" href="#arch-ipc">7. IPC チャンネル</a>
+    <a class="nav-link" href="#arch-timeframe">8. タイムフレーム変換</a>
+    <a class="nav-link" href="#arch-libs">9. フロントエンドライブラリ</a>
+    <a class="nav-link" href="#arch-types">10. 主要型定義</a>
+    <a class="nav-link" href="#arch-infra">インフラサマリー</a>
+  </div>
+</nav>
+
+<!-- ════════════════════ MAIN ════════════════════ -->
+<main>
+
+<!-- ─────────────── API SPEC ─────────────── -->
+<section class="doc-section active" id="sec-api">
+
+  <h1>KANATA API Interface Specification
+    <span class="subtitle">Frontend ↔ Backend インターフェース仕様</span>
+  </h1>
+
+  <h2 id="api-common">共通仕様</h2>
+
+  <h3>ベースURL</h3>
+  <pre><code>http://localhost:8000   <span class="cm">// 開発</span>
+&lt;動的ポート&gt;             <span class="cm">// プロダクション（Electron sidecar）</span></code></pre>
+  <p>環境変数 <code>VITE_API_URL</code> で上書き可能。プロダクションでは <code>window.kanata.getBackendUrl()</code> IPC 経由で取得。</p>
+
+  <h3>レスポンスエンベロープ</h3>
+  <p>Watchlists / Search エンドポイントは共通エンベロープを返す。<strong>Quotes / Fundamentals はエンベロープなしで直接配列を返す</strong>（例外）。</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">ApiResponse</span>&lt;<span class="ty">T</span>&gt; {
+  success: <span class="kw">boolean</span>;
+  data: <span class="ty">T</span> | <span class="kw">null</span>;       <span class="cm">// 失敗時 null</span>
+  error: <span class="kw">string</span> | <span class="kw">null</span>;  <span class="cm">// 成功時 null</span>
+}</code></pre>
+
+  <h3 id="api-cors">CORS 設定</h3>
+  <table>
+    <tr><th>項目</th><th>値</th></tr>
+    <tr><td>Allow Origins</td><td><code>http://localhost:5173</code>, <code>http://127.0.0.1:5173</code>（<code>KANATA_ALLOWED_ORIGINS</code> 環境変数で追加可）</td></tr>
+    <tr><td>Allow Origin Regex</td><td><code>file://.*</code>（Electron プロダクション用）</td></tr>
+    <tr><td>Allow Methods</td><td><code>GET</code> <code>POST</code> <code>PUT</code> <code>PATCH</code> <code>DELETE</code></td></tr>
+    <tr><td>Allow Headers</td><td><code>*</code></td></tr>
+  </table>
+
+  <h3>認証</h3>
+  <p>認証なし。<code>user_id</code> は <code>"local"</code> 固定（シングルユーザー運用）。</p>
+
+  <hr>
+
+  <h2 id="ep-health">1. ヘルスチェック</h2>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/health</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span></p>
+  <pre><span class="lang-tag">json</span><code>{ <span class="st">"status"</span>: <span class="st">"ok"</span> }</code></pre>
+
+  <hr>
+
+  <h2 id="ep-watchlists">2. ウォッチリスト</h2>
+
+  <h3 id="ep-wl-get">2-1. 全取得</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/watchlists</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span></p>
+  <pre><span class="lang-tag">json</span><code>{ <span class="st">"success"</span>: <span class="nb">true</span>, <span class="st">"data"</span>: [Watchlist, ...], <span class="st">"error"</span>: <span class="kw">null</span> }</code></pre>
+
+  <h3 id="ep-wl-post">2-2. 作成</h3>
+  <div class="endpoint-title">
+    <span class="method POST">POST</span>
+    <span class="endpoint-path">/api/watchlists</span>
+  </div>
+  <pre><span class="lang-tag">typescript (body)</span><code>{ name: <span class="kw">string</span> }   <span class="cm">// 1〜128文字</span></code></pre>
+  <p><strong>レスポンス</strong> <span class="status s201">201</span></p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>"watchlist name already exists"</code></td><td>同名リストが既に存在</td></tr>
+  </table>
+
+  <h3 id="ep-wl-patch">2-3. 更新（名前変更 / デフォルト設定）</h3>
+  <div class="endpoint-title">
+    <span class="method PATCH">PATCH</span>
+    <span class="endpoint-path">/api/watchlists/{list_id}</span>
+  </div>
+  <pre><span class="lang-tag">typescript (body)</span><code>{
+  name?: <span class="kw">string</span>          <span class="cm">// 1〜128文字</span>
+  is_default?: <span class="kw">boolean</span>
+}</code></pre>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span> — 最新 Watchlist</p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"watchlist not found"</code></td><td>指定IDが存在しない</td></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>"watchlist name already exists"</code></td><td>同名リストが既に存在</td></tr>
+  </table>
+
+  <h3 id="ep-wl-delete">2-4. 削除</h3>
+  <div class="endpoint-title">
+    <span class="method DELETE">DELETE</span>
+    <span class="endpoint-path">/api/watchlists/{list_id}</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span> — <code>{ "id": 1 }</code></p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s400">400</span></td><td><code>"cannot delete the last watchlist"</code></td><td>最後の1件は削除不可</td></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"watchlist not found"</code></td><td>指定IDが存在しない</td></tr>
+  </table>
+
+  <h3 id="ep-wl-reorder">2-5. 順序変更</h3>
+  <div class="endpoint-title">
+    <span class="method PUT">PUT</span>
+    <span class="endpoint-path">/api/watchlists/reorder</span>
+  </div>
+  <pre><span class="lang-tag">typescript (body)</span><code>{ ids: <span class="kw">number</span>[] }   <span class="cm">// 全件必須・新順序</span></code></pre>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span> — <code>[Watchlist, ...]</code></p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s400">400</span></td><td><code>"ids must match existing watchlists exactly"</code></td><td>IDセットが既存と不一致</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="ep-items">3. ウォッチリストアイテム</h2>
+
+  <h3 id="ep-item-add">3-1. アイテム追加</h3>
+  <div class="endpoint-title">
+    <span class="method POST">POST</span>
+    <span class="endpoint-path">/api/watchlists/{list_id}/items</span>
+  </div>
+  <pre><span class="lang-tag">typescript (body)</span><code>{
+  symbol: <span class="kw">string</span>          <span class="cm">// 1〜32文字（大文字化される）</span>
+  market?: <span class="kw">string</span>         <span class="cm">// "US" | "JP"、デフォルト "US"（4桁数字は強制 "JP"）</span>
+  display_name?: <span class="kw">string</span>   <span class="cm">// 最大128文字、省略可</span>
+}</code></pre>
+  <p><strong>レスポンス</strong> <span class="status s201">201</span> — items を含む最新 Watchlist</p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"watchlist not found"</code></td><td>指定リストが存在しない</td></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>"symbol already in watchlist"</code></td><td>同シンボルが既に存在</td></tr>
+  </table>
+
+  <h3 id="ep-item-del">3-2. アイテム削除</h3>
+  <div class="endpoint-title">
+    <span class="method DELETE">DELETE</span>
+    <span class="endpoint-path">/api/watchlists/{list_id}/items/{symbol}</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span> — 最新 Watchlist</p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"item not found"</code></td><td>指定シンボルが存在しない</td></tr>
+  </table>
+
+  <h3 id="ep-item-reorder">3-3. アイテム順序変更</h3>
+  <div class="endpoint-title">
+    <span class="method PUT">PUT</span>
+    <span class="endpoint-path">/api/watchlists/{list_id}/items/reorder</span>
+  </div>
+  <pre><span class="lang-tag">typescript (body)</span><code>{ symbols: <span class="kw">string</span>[] }   <span class="cm">// 全件必須・新順序</span></code></pre>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span> — 最新 Watchlist</p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s400">400</span></td><td><code>"symbols must match existing items exactly"</code></td><td>シンボルセットが既存と不一致</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="ep-quotes">4. 相場データ（OHLCV）</h2>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/quotes/{symbol}?timeframe={tf}</span>
+  </div>
+  <table>
+    <tr><th>パラメータ</th><th>種別</th><th>型</th><th>説明</th></tr>
+    <tr><td><code>symbol</code></td><td>path</td><td>string</td><td>ティッカー（例: <code>AAPL</code>, <code>7203</code>）</td></tr>
+    <tr><td><code>timeframe</code></td><td>query</td><td>string</td><td><code>5m</code> <code>15m</code> <code>60m</code> <code>1D</code> <code>1W</code> <code>1M</code>（デフォルト: <code>1D</code>）</td></tr>
+  </table>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし）</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">OHLCBar</span> {
+  t: <span class="kw">number</span>;  <span class="cm">// Unix timestamp（ミリ秒）</span>
+  o: <span class="kw">number</span>;  <span class="cm">// 始値 (Open)</span>
+  h: <span class="kw">number</span>;  <span class="cm">// 高値 (High)</span>
+  l: <span class="kw">number</span>;  <span class="cm">// 安値 (Low)</span>
+  c: <span class="kw">number</span>;  <span class="cm">// 終値 (Close)</span>
+  v: <span class="kw">number</span>;  <span class="cm">// 出来高 (Volume)</span>
+}</code></pre>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"No data for {symbol}"</code></td><td>データが存在しない</td></tr>
+    <tr><td><span class="status s502">502</span></td><td><code>"Data fetch failed: {error}"</code></td><td>yfinance 取得失敗</td></tr>
+  </table>
+
+  <h4>タイムフレーム → yfinance 変換</h4>
+  <table>
+    <tr><th>Frontend</th><th>yfinance interval</th><th>取得期間</th><th>キャッシュ TTL</th></tr>
+    <tr><td><code>5m</code></td><td><code>5m</code></td><td>5日</td><td>60秒</td></tr>
+    <tr><td><code>15m</code></td><td><code>15m</code></td><td>30日</td><td>5分</td></tr>
+    <tr><td><code>60m</code></td><td><code>60m</code></td><td>60日</td><td>15分</td></tr>
+    <tr><td><code>1D</code></td><td><code>1d</code></td><td>1年</td><td>1時間</td></tr>
+    <tr><td><code>1W</code></td><td><code>1wk</code></td><td>5年</td><td>1日</td></tr>
+    <tr><td><code>1M</code></td><td><code>1mo</code></td><td>10年</td><td>1日</td></tr>
+  </table>
+  <div class="callout callout-note">
+    <strong>JP銘柄の自動処理:</strong> 4桁の数字シンボル（例: <code>7203</code>）はバックエンドで自動的に <code>7203.T</code> に変換して yfinance に渡す。フロントエンドは変換不要。
+  </div>
+
+  <hr>
+
+  <h2 id="ep-fundamentals">5. 基礎情報（ファンダメンタルズ）</h2>
+
+  <h3 id="ep-fin-quarterly">5-1. 四半期財務データ</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/fundamentals/{symbol}/quarterly</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし） — キャッシュ TTL: 1時間</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">FinBar</span> {
+  t: <span class="kw">number</span>;    <span class="cm">// Unix timestamp（ミリ秒）</span>
+  roe: <span class="kw">number</span>;  <span class="cm">// 自己資本利益率（%）</span>
+  roic: <span class="kw">number</span>; <span class="cm">// 投下資本利益率（%）</span>
+  per: <span class="kw">number</span>;  <span class="cm">// 株価収益率</span>
+}</code></pre>
+
+  <h3 id="ep-fin-summary">5-2. サマリー基礎情報</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/fundamentals/{symbol}</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし） — キャッシュ TTL: 1時間</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">FinMetrics</span> {
+  roe: <span class="kw">number</span>;
+  roic: <span class="kw">number</span>;
+  per: <span class="kw">number</span>;
+  pbr: <span class="kw">number</span>;
+  div: <span class="kw">number</span>;
+  mcap: <span class="kw">string</span>;
+}</code></pre>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>"No fundamentals for {symbol}"</code></td><td>データが存在しない</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="ep-search">6. シンボル検索</h2>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/search?q={query}</span>
+  </div>
+  <p>クエリパラメータ <code>q</code>: 省略または空文字でプリセット全15件を返す。</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">SearchResult</span> {
+  code: <span class="kw">string</span>;
+  name: <span class="kw">string</span>;
+  market: <span class="st">'JP'</span> | <span class="st">'US'</span>;
+}</code></pre>
+  <h4>検索ロジック</h4>
+  <ol>
+    <li>空クエリ → プリセット全15件を返す</li>
+    <li>プリセット内でコード/名前前方一致 → 該当プリセットのみ返す</li>
+    <li>プリセット未マッチ且つクエリ長 ≥ 2 → yfinance.Search で外部検索</li>
+  </ol>
+  <h4>プリセット銘柄</h4>
+  <table>
+    <tr><th>コード</th><th>企業名</th><th>マーケット</th></tr>
+    <tr><td><code>7203</code></td><td>Toyota Motor</td><td>JP</td></tr>
+    <tr><td><code>6758</code></td><td>Sony Group</td><td>JP</td></tr>
+    <tr><td><code>9984</code></td><td>SoftBank Group</td><td>JP</td></tr>
+    <tr><td><code>6861</code></td><td>Keyence</td><td>JP</td></tr>
+    <tr><td><code>8306</code></td><td>Mitsubishi UFJ</td><td>JP</td></tr>
+    <tr><td><code>9432</code></td><td>NTT</td><td>JP</td></tr>
+    <tr><td><code>7974</code></td><td>Nintendo</td><td>JP</td></tr>
+    <tr><td><code>AAPL</code></td><td>Apple Inc.</td><td>US</td></tr>
+    <tr><td><code>MSFT</code></td><td>Microsoft</td><td>US</td></tr>
+    <tr><td><code>NVDA</code></td><td>NVIDIA</td><td>US</td></tr>
+    <tr><td><code>TSLA</code></td><td>Tesla</td><td>US</td></tr>
+    <tr><td><code>GOOGL</code></td><td>Alphabet</td><td>US</td></tr>
+    <tr><td><code>AMZN</code></td><td>Amazon</td><td>US</td></tr>
+    <tr><td><code>META</code></td><td>Meta Platforms</td><td>US</td></tr>
+    <tr><td><code>JPM</code></td><td>JPMorgan Chase</td><td>US</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="api-types">型定義</h2>
+
+  <h3>Watchlist</h3>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">Watchlist</span> {
+  id: <span class="kw">number</span>;
+  name: <span class="kw">string</span>;
+  position: <span class="kw">number</span>;       <span class="cm">// 表示順（0オリジン）</span>
+  is_default: <span class="kw">number</span>;     <span class="cm">// 0 or 1（boolean ではなく int）</span>
+  created_at: <span class="kw">string</span>;     <span class="cm">// ISO 8601 datetime</span>
+  updated_at: <span class="kw">string</span>;
+  items: <span class="ty">WatchlistItem</span>[];
+}</code></pre>
+
+  <h3>WatchlistItem</h3>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">WatchlistItem</span> {
+  id: <span class="kw">number</span>;
+  symbol: <span class="kw">string</span>;
+  market: <span class="kw">string</span>;            <span class="cm">// "US" | "JP"</span>
+  display_name: <span class="kw">string</span> | <span class="kw">null</span>;
+  position: <span class="kw">number</span>;
+}</code></pre>
+
+  <hr>
+
+  <h2 id="api-validation">バリデーション制約まとめ</h2>
+  <table>
+    <tr><th>フィールド</th><th>制約</th></tr>
+    <tr><td><code>Watchlist.name</code></td><td>1〜128文字</td></tr>
+    <tr><td><code>WatchlistItem.symbol</code></td><td>1〜32文字、保存時に大文字化</td></tr>
+    <tr><td><code>WatchlistItem.market</code></td><td>1〜16文字、デフォルト <code>"US"</code>、4桁数字は強制 <code>"JP"</code></td></tr>
+    <tr><td><code>WatchlistItem.display_name</code></td><td>最大128文字、省略可</td></tr>
+    <tr><td><code>(user_id, watchlist.name)</code></td><td>ユニーク制約</td></tr>
+    <tr><td><code>(watchlist_id, item.symbol)</code></td><td>ユニーク制約</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="api-caching">キャッシング</h2>
+  <p>全エンドポイントはプロセス内メモリの TTLCache を使用。Redis 等は不使用。</p>
+  <table>
+    <tr><th>エンドポイント</th><th>timeframe / 条件</th><th>キャッシュ TTL</th></tr>
+    <tr><td rowspan="6">Quotes</td><td><code>5m</code></td><td>60秒</td></tr>
+    <tr><td><code>15m</code></td><td>5分</td></tr>
+    <tr><td><code>60m</code></td><td>15分</td></tr>
+    <tr><td><code>1D</code></td><td>1時間</td></tr>
+    <tr><td><code>1W</code></td><td>1日</td></tr>
+    <tr><td><code>1M</code></td><td>1日</td></tr>
+    <tr><td>Fundamentals</td><td>全銘柄</td><td>1時間</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="api-errors">エラーハンドリング（フロントエンド）</h2>
+  <p><code>watchlistApi.ts</code> の <code>unwrap()</code> は以下の順でエラーを処理する：</p>
+  <ol>
+    <li><code>res.ok === false</code> → <code>res.json().detail</code> または <code>statusText</code> をメッセージに <code>Error</code> を throw</li>
+    <li><code>body.success === false</code> → <code>body.error</code> をメッセージに <code>Error</code> を throw</li>
+    <li><code>body.data === null</code> → <code>"API returned unsuccessful response"</code> を throw</li>
+  </ol>
+  <p>Quotes / Fundamentals / Search エンドポイントのエラーは呼び出し元で個別にハンドリング。</p>
+
+  <hr>
+
+  <h2 id="api-files">関連ファイル</h2>
+  <table>
+    <tr><th>役割</th><th>ファイル</th></tr>
+    <tr><td>Backend ルーター登録</td><td><code>backend/src/main.py</code></td></tr>
+    <tr><td>Watchlists ルート</td><td><code>backend/src/routes/watchlists.py</code></td></tr>
+    <tr><td>Quotes ルート</td><td><code>backend/src/routes/quotes.py</code></td></tr>
+    <tr><td>Search ルート</td><td><code>backend/src/routes/search.py</code></td></tr>
+    <tr><td>Fundamentals ルート</td><td><code>backend/src/routes/fundamentals.py</code></td></tr>
+    <tr><td>Pydantic スキーマ</td><td><code>backend/src/schemas/watchlist.py</code></td></tr>
+    <tr><td>ApiResponse 定義</td><td><code>backend/src/schemas/common.py</code></td></tr>
+    <tr><td>ORM モデル</td><td><code>backend/src/db/models.py</code></td></tr>
+    <tr><td>Watchlist API クライアント</td><td><code>apps/renderer/src/lib/watchlistApi.ts</code></td></tr>
+    <tr><td>Quotes / Fundamentals API クライアント</td><td><code>apps/renderer/src/lib/api.ts</code></td></tr>
+    <tr><td>Search API クライアント</td><td><code>apps/renderer/src/lib/searchApi.ts</code></td></tr>
+    <tr><td>TypeScript 型定義</td><td><code>apps/renderer/src/types.ts</code></td></tr>
+    <tr><td>Watchlist フック</td><td><code>apps/renderer/src/hooks/useWatchlists.ts</code></td></tr>
+    <tr><td>Chart データフック</td><td><code>apps/renderer/src/hooks/useChartData.ts</code></td></tr>
+    <tr><td>Search フック</td><td><code>apps/renderer/src/hooks/useDebouncedSearch.ts</code></td></tr>
+  </table>
+
+</section>
+
+<!-- ─────────────── ARCHITECTURE ─────────────── -->
+<section class="doc-section" id="sec-arch">
+
+  <h1>KANATA Architecture
+    <span class="subtitle">システム設計・アーキテクチャ仕様</span>
+  </h1>
+
+  <h2 id="arch-overview">1. システム全体図</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph Electron["Electron App (Windows)"]
+        subgraph MAIN["Main Process"]
+            IDX["index.ts\nBrowserWindow (frameless)"]
+            SIDECAR["pythonSidecar.ts\nサブプロセス管理"]
+            IPC["ipc/bridge.ts\nipcMain handler (9チャンネル)"]
+            PRE["preload.ts\ncontextBridge"]
+        end
+        subgraph RENDERER["Renderer Process"]
+            VITE["React + Vite\nrenderer"]
+        end
+        subgraph SIDECARPROC["Python Sidecar (subprocess)"]
+            UVICORN["Uvicorn / FastAPI\n動的ポート"]
+            SQLITE["SQLite\nkanata.db (AppData)"]
+        end
+    end
+    EXT["yfinance (PyPI)\n外部株価データ"]
+
+    IDX -- "spawn" --> SIDECAR
+    SIDECAR -- "起動 --port 0" --> UVICORN
+    IDX -- "register" --> IPC
+    PRE -- "contextBridge" --> VITE
+    VITE -- "IPC getBackendUrl()" --> IPC
+    VITE -- "IPC ウィンドウ操作" --> IPC
+    VITE -- "HTTP fetch\n動的ポート" --> UVICORN
+    UVICORN -- "SQLAlchemy 2.x" --> SQLITE
+    UVICORN -- "pip request" --> EXT
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-dataflow">2. データフロー</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant B as Browser
+    participant FE as React App
+    participant HK as useChartData Hook
+    participant API as api.ts
+    participant BE as FastAPI
+    participant CA as TTLCache
+    participant YF as yfinance
+
+    B->>FE: シンボル選択 / TF変更
+    FE->>HK: symbols[], timeframe 更新
+    HK->>API: fetchQuotes(symbol, tf)
+    API->>BE: GET /api/quotes/{symbol}?timeframe=1D
+    BE->>CA: キャッシュ確認
+
+    alt キャッシュヒット
+        CA-->>BE: OHLCBar[]
+    else キャッシュミス
+        BE->>YF: Ticker(symbol.T).history()
+        YF-->>BE: DataFrame
+        BE->>CA: キャッシュ保存
+        CA-->>BE: OHLCBar[]
+    end
+
+    BE-->>API: OHLCBar[]
+    API-->>HK: OHLCBar[]
+    HK-->>FE: realData 更新
+    FE->>B: Chart 再描画
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-components">3. フロントエンド コンポーネントツリー</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TD
+    APP["App.tsx\nAppState / localStorage\nuseWatchlists / useChartData"]
+    APP --> TOPBAR["TopBar\nブランド / 現在値 / ステータス"]
+    APP --> MAIN["main-grid"]
+    APP --> STATUSBAR["StatusBar\nTF / ツール / 描画数"]
+    APP --> TWEAKS["TweaksPanel\nテーマ / 密度 / 比較モード"]
+    TOPBAR --> WC["WindowControls\n最小化 / 最大化 / 閉じる"]
+    MAIN --> LP["LeftPanel\nTF選択 / 描画ツール\nインジケータ トグル"]
+    MAIN --> CHART["Chart.tsx\nCanvas 2D (1697行)"]
+    MAIN --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
+    CHART --> CANDLE["ローソク足\nグリッド / 価格軸"]
+    CHART --> OVERLAY["オーバーレイ指標\nSMA / EMA / BOLL / PSAR / 一目"]
+    CHART --> SQMARK["SQ/ウィッチングマーカー\noverlays/drawSqMarkers.ts"]
+    CHART --> COMPARE["比較ライン\n複数シンボル 騰落率比較"]
+    CHART --> SUB["サブパネル"]
+    CHART --> DRAWING["描画ツール\nhline / vline / trend / rect / ellipse / text"]
+    SUB --> VOL["drawVolume.ts"]
+    SUB --> STOCH["drawStoch.ts"]
+    SUB --> MACD["drawMacd.ts"]
+    SUB --> RSI["drawRsi.ts"]
+    RP --> WLS["WatchlistSelector\nドロップダウン / CRUD"]
+    RP --> ASF["AddSymbolForm\n検索 / 銘柄追加"]
+    RP --> TICKER["銘柄行リスト\nスパークライン / 価格"]
+    RP --> FIN["基礎情報パネル\nROE / ROIC / PER 等"]
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-state">4. 状態管理</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph LR
+    subgraph APP["App.tsx"]
+        STATE["AppState\nselected / timeframe\nactiveTool / drawings\nselectedDrawingId\nindicators / indicatorParams\nshowVolume / showFinancial\nshowSqMarkers / financial"]
+        AES["Aesthetic\ndark-blue / neutral\namber-crt / midnight"]
+        DEN["Density\ncompact / comfortable"]
+        AWL["activeWatchlistId"]
+    end
+    subgraph HOOKS["Custom Hooks"]
+        USEWD["useWatchlists\nwatchlists / status / CRUD"]
+        USECD["useChartData\nrealData / status / errors"]
+        USEDS["useDebouncedSearch\nresults / loading\n280ms debounce"]
+    end
+    subgraph LS["localStorage"]
+        LS1["kanata.state"]
+        LS2["kanata.aesthetic"]
+        LS3["kanata.density"]
+        LS4["kanata.activeWatchlistId"]
+        LS5["kanata.alerts"]
+    end
+    STATE <--> LS1
+    AES <--> LS2
+    DEN <--> LS3
+    AWL <--> LS4
+    USEWD -- "watchlists" --> APP
+    USECD -- "realData" --> APP
+    USEDS -- "results" --> ASF["AddSymbolForm"]
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-backend">5. バックエンド レイヤー構成</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph ROUTES["Routes (HTTP Handler)"]
+        QR["quotes.py\nGET /api/quotes/:symbol"]
+        SR["search.py\nGET /api/search"]
+        WR["watchlists.py\n8 エンドポイント"]
+        FR["fundamentals.py\nGET /api/fundamentals/:symbol"]
+        HR["/api/health"]
+    end
+    subgraph SERVICES["Services"]
+        YFP["yfinance_provider.py\nto_yf_symbol()\nINTERVAL_MAP / fetch_ohlcv()"]
+        CACHE["cache.py\nTTLCache (in-memory)"]
+    end
+    subgraph SCHEMAS["Schemas (Pydantic v2)"]
+        COMMON["common.py\nApiResponse[T]\nok() / fail()"]
+        WSCH["watchlist.py\nWatchlistRead / Create\nUpdate / ..."]
+    end
+    subgraph DB["Database (SQLAlchemy 2.x)"]
+        DBMOD["models.py\nWatchlist / WatchlistItem"]
+        DBINIT["init_db.py\ncreate_all() / default seed"]
+        DBCONN["database.py\nengine / SessionLocal\nget_db()"]
+    end
+    QR --> YFP
+    QR --> CACHE
+    SR --> YFP
+    FR --> YFP
+    FR --> CACHE
+    WR --> WSCH
+    WR --> DBMOD
+    DBMOD --> DBCONN
+    DBCONN --> SQLITE[(kanata.db)]
+    DBINIT --> DBCONN
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-datamodel">6. データモデル</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+erDiagram
+    Watchlist {
+        int id PK
+        string user_id "固定: local"
+        string name "1-128文字"
+        int position "表示順"
+        int is_default "0 or 1"
+        datetime created_at
+        datetime updated_at
+    }
+    WatchlistItem {
+        int id PK
+        int watchlist_id FK
+        string symbol "大文字 1-32文字"
+        string market "JP or US"
+        string display_name "nullable"
+        int position "表示順"
+        datetime created_at
+    }
+    Watchlist ||--o{ WatchlistItem : "items CASCADE DELETE"
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-ipc">7. IPC チャンネル一覧</h2>
+  <p><code>PreloadApi</code>（<code>packages/shared-types</code>）が全チャンネルの型を定義し、<code>window.kanata</code> 経由でレンダラーに公開。</p>
+  <table>
+    <tr><th>チャンネル定数</th><th>チャンネル名</th><th>方向</th><th>用途</th></tr>
+    <tr><td><code>BACKEND_URL</code></td><td><code>kanata:backend-url</code></td><td>invoke</td><td>FastAPI の動的ポート URL 取得</td></tr>
+    <tr><td><code>BACKEND_STATUS</code></td><td><code>kanata:backend-status</code></td><td>invoke</td><td>サイドカー状態取得（<code>SidecarStatus</code>）</td></tr>
+    <tr><td><code>OPEN_LOGS</code></td><td><code>kanata:open-logs</code></td><td>invoke</td><td>ログディレクトリを OS で開く</td></tr>
+    <tr><td><code>APP_VERSION</code></td><td><code>kanata:app-version</code></td><td>invoke</td><td>アプリバージョン取得</td></tr>
+    <tr><td><code>WINDOW_MINIMIZE</code></td><td><code>kanata:window-minimize</code></td><td>invoke</td><td>ウィンドウ最小化</td></tr>
+    <tr><td><code>WINDOW_MAXIMIZE</code></td><td><code>kanata:window-maximize</code></td><td>invoke</td><td>最大化 / 元に戻す トグル</td></tr>
+    <tr><td><code>WINDOW_CLOSE</code></td><td><code>kanata:window-close</code></td><td>invoke</td><td>ウィンドウ閉じる</td></tr>
+    <tr><td><code>WINDOW_IS_MAXIMIZED</code></td><td><code>kanata:window-is-maximized</code></td><td>invoke</td><td>最大化状態を取得</td></tr>
+    <tr><td><code>WINDOW_MAXIMIZE_CHANGED</code></td><td><code>kanata:window-maximize-changed</code></td><td>push</td><td>最大化状態変化イベント</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="arch-timeframe">8. タイムフレーム変換</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph LR
+    FE["Frontend\n5m / 15m / 60m / 1D / 1W / 1M"]
+    BE["yfinance\n5m / 15m / 60m / 1d / 1wk / 1mo"]
+    CA["TTL Cache\n60s / 5m / 15m / 1h / 1d / 1d"]
+    FE -- "INTERVAL_MAP\nyfinance_provider.py" --> BE
+    BE -- "キャッシュ TTL" --> CA
+    </div>
+  </div>
+
+  <hr>
+
+  <h2 id="arch-libs">9. フロントエンド ライブラリ一覧</h2>
+  <p><code>apps/renderer/src/lib/</code> 配下のユーティリティ群：</p>
+  <table>
+    <tr><th>ファイル</th><th>役割</th></tr>
+    <tr><td><code>api.ts</code></td><td>Quotes / Fundamentals フェッチラッパ</td></tr>
+    <tr><td><code>backendUrl.ts</code></td><td>IPC 経由でバックエンド URL を取得・キャッシュ</td></tr>
+    <tr><td><code>colors.ts</code></td><td>Canvas 描画カラー定数（<code>COLORS</code>, <code>COMPARE_COLORS</code>）</td></tr>
+    <tr><td><code>data.ts</code></td><td><code>genSeries</code>（プレースホルダー OHLC 生成） / <code>retime()</code></td></tr>
+    <tr><td><code>formatters.ts</code></td><td><code>fmtDate</code> / <code>fmtPrice</code> / <code>fmtVol</code></td></tr>
+    <tr><td><code>futureBars.ts</code></td><td>未来バー時刻計算: <code>nextBarTimestamp()</code> / <code>barTimestampAt()</code></td></tr>
+    <tr><td><code>indicators.ts</code></td><td>SMA / EMA / BOLL / STOCH / PSAR / Ichimoku / MACD / RSI をクライアント計算</td></tr>
+    <tr><td><code>migrateLocalState.ts</code></td><td>既存 localStorage を v1 スキーマへ一度だけ移行</td></tr>
+    <tr><td><code>searchApi.ts</code></td><td>Search エンドポイントフェッチラッパ</td></tr>
+    <tr><td><code>sqCalendar.ts</code></td><td><code>nthWeekdayOfMonth()</code> — 第 N 曜日の日付計算</td></tr>
+    <tr><td><code>sqEvents.ts</code></td><td><code>getSqEventsInRange()</code> / <code>buildSqEventMap()</code> — SQ・ウィッチング日イベント生成</td></tr>
+    <tr><td><code>alertChecker.ts</code></td><td><code>checkAlertCondition()</code> — アラート条件を終値と比較</td></tr>
+    <tr><td><code>alertStorage.ts</code></td><td><code>kanata.alerts</code> localStorage への CRUD ラッパ</td></tr>
+    <tr><td><code>watchlistApi.ts</code></td><td>Watchlist 8 エンドポイントのフェッチラッパ</td></tr>
+    <tr><td><code>watchlistTickers.ts</code></td><td><code>Watchlist.items</code> → 表示用 <code>Ticker</code> 変換</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="arch-types">10. 主要型定義</h2>
+  <p><code>apps/renderer/src/types.ts</code> 集中管理の主要型：</p>
+  <table>
+    <tr><th>型</th><th>説明</th></tr>
+    <tr><td><code>OHLCBar</code></td><td><code>{t, o, h, l, c, v}</code> — OHLCV バーデータ</td></tr>
+    <tr><td><code>AppState</code></td><td>アプリ全体状態（<code>showSqMarkers</code> を含む）</td></tr>
+    <tr><td><code>DrawingObject</code></td><td>描画ツールオブジェクト（種別・OHLC インデックス・価格）</td></tr>
+    <tr><td><code>AlertObject</code></td><td>アラート設定 <code>{id, drawingId, symbol, direction, triggered, createdAt}</code></td></tr>
+    <tr><td><code>IndicatorState</code></td><td>各インジケーターの表示 on/off フラグ</td></tr>
+    <tr><td><code>IndicatorParams</code></td><td>MACD / RSI のパラメータ</td></tr>
+    <tr><td><code>Watchlist</code> / <code>WatchlistItem</code></td><td>バックエンド API と同形の Watchlist 型</td></tr>
+    <tr><td><code>SearchResult</code></td><td><code>{code, name, market}</code></td></tr>
+    <tr><td><code>ApiResponse&lt;T&gt;</code></td><td><code>{success, data, error}</code> — 共通エンベロープ</td></tr>
+    <tr><td><code>FinBar</code></td><td><code>{t, roe, roic, per}</code> — 四半期財務バー</td></tr>
+    <tr><td><code>FinMetrics</code></td><td><code>{roe, roic, per, pbr, div, mcap}</code> — サマリー基礎情報</td></tr>
+    <tr><td><code>SqEvent</code></td><td><code>{date, type, market, label, shortLabel, severity}</code></td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="arch-infra">インフラ構成サマリー</h2>
+  <div class="infra-grid">
+    <div class="infra-card">
+      <div class="label">Runtime</div>
+      <div class="value">Electron v40<br>Windows ネイティブ<br>frameless window</div>
+    </div>
+    <div class="infra-card">
+      <div class="label">Frontend</div>
+      <div class="value">React 18 + TypeScript<br>Vite / Node 20<br>Renderer Process</div>
+    </div>
+    <div class="infra-card">
+      <div class="label">Backend</div>
+      <div class="value">FastAPI<br>SQLAlchemy 2.x<br>Python 3.12 (Sidecar)</div>
+    </div>
+    <div class="infra-card">
+      <div class="label">Database</div>
+      <div class="value">SQLite<br>%APPDATA%/kanata/<br>kanata.db</div>
+    </div>
+    <div class="infra-card">
+      <div class="label">外部データ</div>
+      <div class="value">yfinance (pip)<br>TTLCache<br>Redis 未使用</div>
+    </div>
+    <div class="infra-card">
+      <div class="label">認証</div>
+      <div class="value">なし<br>user_id = "local"<br>固定（シングルユーザー）</div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ════════════════════ SCRIPT ════════════════════ -->
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      background:        '#181c2c',
+      primaryColor:      '#1e2538',
+      primaryTextColor:  '#ced8f0',
+      primaryBorderColor:'#384060',
+      lineColor:         '#506080',
+      secondaryColor:    '#22283c',
+      tertiaryColor:     '#1c2030',
+      edgeLabelBackground:'#181c2c',
+      clusterBkg:        '#1a1e30',
+      clusterBorder:     '#384060',
+      titleColor:        '#7db0e8',
+      nodeBorder:        '#384060',
+      mainBkg:           '#1e2538',
+      actorBkg:          '#1e2538',
+      actorBorder:       '#384060',
+      actorTextColor:    '#ced8f0',
+      actorLineColor:    '#506080',
+      signalColor:       '#7db0e8',
+      signalTextColor:   '#ced8f0',
+      labelBoxBkgColor:  '#1e2538',
+      labelBoxBorderColor:'#384060',
+      labelTextColor:    '#ced8f0',
+      loopTextColor:     '#ced8f0',
+      noteBkgColor:      '#22283c',
+      noteBorderColor:   '#384060',
+      noteTextColor:     '#ced8f0',
+      activationBkgColor:'#2a3050',
+      activationBorderColor:'#7db0e8',
+      sequenceNumberColor:'#ced8f0',
+    },
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    fontSize: 12,
+  });
+
+  let archRendered = false;
+
+  function switchTab(tab) {
+    document.getElementById('sec-api').classList.toggle('active', tab === 'api');
+    document.getElementById('sec-arch').classList.toggle('active', tab === 'arch');
+    document.getElementById('nav-api').style.display  = tab === 'api'  ? '' : 'none';
+    document.getElementById('nav-arch').style.display = tab === 'arch' ? '' : 'none';
+    document.querySelectorAll('.nav-tab').forEach((el, i) => {
+      el.classList.toggle('active', (i === 0) === (tab === 'api'));
+    });
+    window.scrollTo(0, 0);
+    if (tab === 'arch' && !archRendered) {
+      archRendered = true;
+      mermaid.run({ nodes: document.querySelectorAll('#sec-arch .mermaid') });
+    }
+  }
+
+  // Active nav link on scroll
+  function updateActive() {
+    const headings = document.querySelectorAll('.doc-section.active h2[id], .doc-section.active h3[id]');
+    let cur = '';
+    headings.forEach(el => {
+      if (el.getBoundingClientRect().top < 60) cur = el.id;
+    });
+    document.querySelectorAll('.nav-link').forEach(l => {
+      l.classList.toggle('active', l.getAttribute('href') === '#' + cur);
+    });
+  }
+
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+</script>
+</body>
+</html>

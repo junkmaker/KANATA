@@ -83,11 +83,12 @@ graph TD
     TOPBAR --> WC["WindowControls\n最小化 / 最大化 / 閉じる"]
 
     MAIN --> LP["LeftPanel\nTF選択 / 描画ツール\nインジケータ トグル"]
-    MAIN --> CHART["Chart.tsx\nCanvas 2D (1368行)"]
+    MAIN --> CHART["Chart.tsx\nCanvas 2D (1697行)"]
     MAIN --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
 
     CHART --> CANDLE["ローソク足\nグリッド / 価格軸"]
     CHART --> OVERLAY["オーバーレイ指標\nSMA / EMA / BOLL / PSAR / 一目"]
+    CHART --> SQMARK["SQ/ウィッチングマーカー\noverlays/drawSqMarkers.ts"]
     CHART --> COMPARE["比較ライン\n複数シンボル % change"]
     CHART --> SUB["サブパネル"]
     CHART --> DRAWING["描画ツール\nhline / vline / trend / rect / ellipse / text"]
@@ -110,7 +111,7 @@ graph TD
 ```mermaid
 graph LR
     subgraph APP["App.tsx (単一ソース)"]
-        STATE["AppState\nselected[]\ntimeframe\nactiveTool\ndrawings[]\nselectedDrawingId\nindicators{}\nindicatorParams{}\nshowVolume\nshowFinancial\nfinancial{}"]
+        STATE["AppState\nselected[]\ntimeframe\nactiveTool\ndrawings[]\nselectedDrawingId\nindicators{}\nindicatorParams{}\nshowVolume\nshowFinancial\nshowSqMarkers\nfinancial{}"]
         AES["Aesthetic\ndark-blue / neutral\namber-crt / midnight"]
         DEN["Density\ncompact / comfortable"]
         AWL["activeWatchlistId"]
@@ -127,6 +128,7 @@ graph LR
         LS2["kanata.aesthetic"]
         LS3["kanata.density"]
         LS4["kanata.activeWatchlistId"]
+        LS5["kanata.alerts"]
     end
 
     STATE <-- "JSON serialize" --> LS1
@@ -240,6 +242,48 @@ graph LR
     FE -- "INTERVAL_MAP\n(yfinance_provider.py)" --> BE
     BE -- "キャッシュ TTL" --> CA
 ```
+
+---
+
+## 9. フロントエンド ライブラリ一覧
+
+`apps/renderer/src/lib/` 配下のユーティリティ群：
+
+| ファイル | 役割 |
+|---------|------|
+| `api.ts` | Quotes / Fundamentals フェッチラッパ |
+| `backendUrl.ts` | IPC 経由でバックエンド URL を取得・キャッシュ |
+| `colors.ts` | Canvas 描画カラー定数（`COLORS`, `COMPARE_COLORS`） |
+| `data.ts` | `genSeries`（プレースホルダー OHLC 生成） / `retime()` |
+| `formatters.ts` | `fmtDate` / `fmtPrice` / `fmtVol` |
+| `futureBars.ts` | 未来バー時刻計算: `nextBarTimestamp()` / `barTimestampAt()` |
+| `indicators.ts` | SMA / EMA / BOLL / STOCH / PSAR / Ichimoku / MACD / RSI をクライアント計算 |
+| `migrateLocalState.ts` | 既存 localStorage を v1 スキーマへ一度だけ移行 |
+| `searchApi.ts` | Search エンドポイントフェッチラッパ |
+| `sqCalendar.ts` | `nthWeekdayOfMonth()` — 第 N 曜日の日付計算 |
+| `sqEvents.ts` | `getSqEventsInRange()` / `buildSqEventMap()` — SQ・ウィッチング日イベント生成 |
+| `alertChecker.ts` | `checkAlertCondition()` — アラート条件を終値と比較 |
+| `alertStorage.ts` | `kanata.alerts` localStorage への CRUD ラッパ |
+| `watchlistApi.ts` | Watchlist 8 エンドポイントのフェッチラッパ |
+| `watchlistTickers.ts` | `Watchlist.items` → 表示用 `Ticker` 変換 |
+
+---
+
+## 10. 主要型定義
+
+`apps/renderer/src/types.ts` 集中管理の主要型：
+
+| 型 | 説明 |
+|----|------|
+| `OHLCBar` | `{t, o, h, l, c, v}` — OHLCV バーデータ |
+| `AppState` | アプリ全体状態（`showSqMarkers` を含む） |
+| `DrawingObject` | 描画ツールオブジェクト（種別・座標・価格） |
+| `AlertObject` | アラート設定（`{id, drawingId, symbol, direction, triggered, createdAt}`） |
+| `IndicatorState` | 各インジケーターの表示 on/off フラグ |
+| `IndicatorParams` | MACD / RSI のパラメータ |
+| `Watchlist` / `WatchlistItem` | バックエンド API と同形の Watchlist 型 |
+| `SearchResult` | `{code, name, market}` |
+| `ApiResponse<T>` | `{success, data, error}` — 共通エンベロープ |
 
 ---
 
