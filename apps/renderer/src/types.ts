@@ -81,9 +81,12 @@ export interface FinancialState {
 
 export type DrawingType = 'hline' | 'vline' | 'trend' | 'rect' | 'ellipse' | 'text';
 
+export type PaneId = 'price' | 'stoch' | 'macd' | 'rsi';
+
 export interface DrawingObject {
   id: number;
   type: DrawingType;
+  pane?: PaneId;
   ticker?: string;
   color?: string;
   v?: number;

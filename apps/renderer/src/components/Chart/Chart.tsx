@@ -3,7 +3,7 @@ import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, Ticker, YRange } from '../../types';
+import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, PaneId, Ticker, YRange } from '../../types';
 import { addAlert } from '../../lib/alertStorage';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
@@ -180,6 +180,22 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     return { min: min - pad, max: max + pad };
   }, [primaryData, view, state.indicators.boll, indi]);
 
+  const macdYRange = useMemo(() => {
+    if (!indi.macd) return { min: -0.001, max: 0.001 };
+    const { macd: macdLine, signal: signalLine, histogram } = indi.macd;
+    let min = Infinity, max = -Infinity;
+    for (let i = view.start; i < view.end; i++) {
+      for (const v of [macdLine[i], signalLine[i], histogram[i]]) {
+        if (v != null) { if (v > max) max = v; if (v < min) min = v; }
+      }
+    }
+    if (min === Infinity) return { min: -0.001, max: 0.001 };
+    if (max < 0) max = 0;
+    if (min > 0) min = 0;
+    const pad = (max - min) * 0.1 || 0.001;
+    return { min: min - pad, max: max + pad };
+  }, [indi.macd, view]);
+
   // nVis はビューポート全体（未来バー含む）で計算することで bw を一定に保つ
   const nVis = view.end - view.start;
   const bw = priceW / nVis;
@@ -188,6 +204,74 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const t = (v - yRange.min) / (yRange.max - yRange.min);
     return PAD_T + (1 - t) * priceH;
   };
+
+  interface PaneDef {
+    id: PaneId;
+    y0: number;
+    height: number;
+    active: boolean;
+    yScale: (v: number) => number;
+    yInvert: (py: number) => number;
+    fmtVal: (v: number) => string;
+  }
+
+  const paneDefs = useMemo<PaneDef[]>(() => {
+    const tk = tickers.find((t) => t.code === primary);
+    const cur = tk?.currency || '$';
+    return [
+      {
+        id: 'price',
+        y0: PAD_T,
+        height: priceH,
+        active: true,
+        yScale: (v) => PAD_T + (1 - (v - yRange.min) / (yRange.max - yRange.min)) * priceH,
+        yInvert: (py) => yRange.max - ((py - PAD_T) / priceH) * (yRange.max - yRange.min),
+        fmtVal: (v) => fmtPrice(v, cur),
+      },
+      {
+        id: 'stoch',
+        y0: stochY0,
+        height: STOCH_H,
+        active: state.indicators.stoch,
+        yScale: (v) => stochY0 + (1 - v / 100) * (STOCH_H - 4),
+        yInvert: (py) => (1 - (py - stochY0) / Math.max(1, STOCH_H - 4)) * 100,
+        fmtVal: (v) => v.toFixed(1),
+      },
+      {
+        id: 'macd',
+        y0: macdY0,
+        height: MACD_H,
+        active: state.indicators.macd,
+        yScale: (v) => macdY0 + (1 - (v - macdYRange.min) / (macdYRange.max - macdYRange.min)) * (MACD_H - 4),
+        yInvert: (py) => macdYRange.min + (1 - (py - macdY0) / Math.max(1, MACD_H - 4)) * (macdYRange.max - macdYRange.min),
+        fmtVal: (v) => v.toFixed(4),
+      },
+      {
+        id: 'rsi',
+        y0: rsiY0,
+        height: RSI_H,
+        active: state.indicators.rsi,
+        yScale: (v) => rsiY0 + (1 - v / 100) * (RSI_H - 4),
+        yInvert: (py) => (1 - (py - rsiY0) / Math.max(1, RSI_H - 4)) * 100,
+        fmtVal: (v) => v.toFixed(1),
+      },
+    ];
+  }, [
+    priceH, yRange, stochY0, STOCH_H, macdY0, MACD_H, macdYRange, rsiY0, RSI_H,
+    state.indicators.stoch, state.indicators.macd, state.indicators.rsi,
+    tickers, primary,
+  ]);
+
+  const getPaneAt = useCallback(
+    (sy: number): PaneDef => {
+      for (const pane of paneDefs) {
+        if (!pane.active) continue;
+        if (sy >= pane.y0 && sy < pane.y0 + pane.height) return pane;
+      }
+      return paneDefs[0];
+    },
+    [paneDefs],
+  );
 
   let volMax = 1;
   for (let i = view.start; i < dataEnd; i++)
@@ -649,6 +733,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     y: number;
     idx: number;
     v: number;
+    paneId: PaneId;
   } | null>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const textInputReadyRef = useRef(false);
@@ -718,6 +803,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
             type: 'text',
             idx: textInput.idx,
             v: textInput.v,
+            pane: textInput.paneId,
             text: text.trim(),
             color: COLORS.accent,
             ticker: primary,
@@ -735,21 +821,26 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
   const screenToData = useCallback(
     (sx: number, sy: number) => {
       const idx = view.start + (sx - PAD_L) / bw;
-      const v = yRange.max - ((sy - PAD_T) / priceH) * (yRange.max - yRange.min);
-      return { idx, v };
+      const pane = getPaneAt(sy);
+      const v = pane.yInvert(sy);
+      return { idx, v, paneId: pane.id as PaneId };
     },
-    [view, bw, yRange, priceH],
+    [view, bw, getPaneAt],
   );
 
-  const snapPoint = (sx: number, sy: number, mode: SnapMode): { idx: number; v: number } => {
-    const { idx: rawIdx, v: rawV } = screenToData(sx, sy);
-    if (!primaryData?.length) return { idx: rawIdx, v: rawV };
+  const snapPoint = (sx: number, sy: number, mode: SnapMode): { idx: number; v: number; paneId: PaneId } => {
+    const { idx: rawIdx, v: rawV, paneId } = screenToData(sx, sy);
+    if (!primaryData?.length) return { idx: rawIdx, v: rawV, paneId };
     const ci = Math.max(0, Math.min(primaryData.length - 1 + MAX_FUTURE_BARS, Math.round(rawIdx)));
+    // サブペインではバーインデックスのみスナップ（OHLC スナップなし）
+    if (paneId !== 'price') {
+      return { idx: ci, v: rawV, paneId };
+    }
     // 未来バーには価格データがないのでスナップ不可
     const bar = ci < primaryData.length ? primaryData[ci] : undefined;
     if (!bar) {
       const snappedIdx = mode === 'high' ? rawIdx : ci;
-      return { idx: snappedIdx, v: rawV };
+      return { idx: snappedIdx, v: rawV, paneId };
     }
     const snappedIdx = mode === 'high' ? rawIdx : ci;
     const highY = yScale(bar.h);
@@ -763,14 +854,15 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       if (dH <= SNAP_PX && dH <= dL) snappedV = bar.h;
       else if (dL <= SNAP_PX) snappedV = bar.l;
     }
-    return { idx: snappedIdx, v: snappedV };
+    return { idx: snappedIdx, v: snappedV, paneId };
   };
 
   const dataToScreen = useCallback(
-    (idx: number, v: number) => {
-      return { x: xScale(idx), y: yScale(v) };
+    (idx: number, v: number, paneId?: PaneId) => {
+      const pane = paneDefs.find((p) => p.id === (paneId ?? 'price')) ?? paneDefs[0];
+      return { x: PAD_L + (idx - view.start) * bw + bw / 2, y: pane.yScale(v) };
     },
-    [view, bw, yRange, priceH],
+    [view, bw, paneDefs],
   );
 
   const hitTest = useCallback(
@@ -780,8 +872,10 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       for (let i = drawings.length - 1; i >= 0; i--) {
         const d = drawings[i];
         if (d.ticker && d.ticker !== primary) continue;
+        const dpane = paneDefs.find((p) => p.id === (d.pane ?? 'price')) ?? paneDefs[0];
+        if (!dpane.active) continue;
         if (d.type === 'hline' && d.v != null) {
-          if (Math.abs(sy - yScale(d.v)) <= TOL) return d.id;
+          if (Math.abs(sy - dpane.yScale(d.v)) <= TOL) return d.id;
         } else if (d.type === 'vline' && d.idx != null) {
           if (Math.abs(sx - xScale(d.idx)) <= TOL) return d.id;
         } else if (d.type === 'trend' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
@@ -832,7 +926,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
       return null;
     },
-    [state.drawings, primary, dataToScreen, xScale, yScale],
+    [state.drawings, primary, dataToScreen, xScale, paneDefs],
   );
 
   useEffect(() => {
@@ -851,21 +945,31 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     const HANDLE_COLOR = '#fff';
     allDrawings.forEach((d) => {
       if (d.ticker && d.ticker !== primary) return;
+      const dpane = paneDefs.find((p) => p.id === (d.pane ?? 'price')) ?? paneDefs[0];
+      if (!dpane.active) return;
+      const dYScale = dpane.yScale;
       const isSelected = d.id === state.selectedDrawingId;
       ctx.strokeStyle = d.color || COLORS.accent;
       ctx.fillStyle = d.color || COLORS.accent;
       ctx.lineWidth = isSelected ? 2.5 : 1.5;
       if (d.type === 'hline' && d.v != null) {
-        const y = yScale(d.v);
+        const y = dYScale(d.v);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(PAD_L, dpane.y0, priceW, dpane.height);
+        ctx.clip();
+        ctx.strokeStyle = d.color || COLORS.accent;
+        ctx.lineWidth = isSelected ? 2.5 : 1.5;
         ctx.setLineDash([5, 3]);
         ctx.beginPath();
         ctx.moveTo(PAD_L, y);
         ctx.lineTo(PAD_L + priceW, y);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.restore();
         ctx.font = '10px "JetBrains Mono", monospace';
-        const tk = tickers.find((t) => t.code === primary);
-        ctx.fillText(fmtPrice(d.v, tk?.currency || '$'), PAD_L + 4, y - 4);
+        ctx.fillStyle = d.color || COLORS.accent;
+        ctx.fillText(dpane.fmtVal(d.v), PAD_L + 4, y - 4);
         if (isSelected) {
           const cx = PAD_L + priceW / 2;
           ctx.fillStyle = HANDLE_COLOR;
@@ -878,14 +982,21 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         }
       } else if (d.type === 'vline' && d.idx != null) {
         const x = xScale(d.idx);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(PAD_L, dpane.y0, priceW, dpane.height);
+        ctx.clip();
+        ctx.strokeStyle = d.color || COLORS.accent;
+        ctx.lineWidth = isSelected ? 2.5 : 1.5;
         ctx.setLineDash([5, 3]);
         ctx.beginPath();
-        ctx.moveTo(x, PAD_T);
-        ctx.lineTo(x, PAD_T + priceH);
+        ctx.moveTo(x, dpane.y0);
+        ctx.lineTo(x, dpane.y0 + dpane.height);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.restore();
         if (isSelected) {
-          const cy = PAD_T + priceH / 2;
+          const cy = dpane.y0 + dpane.height / 2;
           ctx.fillStyle = HANDLE_COLOR;
           ctx.beginPath();
           ctx.arc(x, cy, 4, 0, Math.PI * 2);
@@ -901,8 +1012,13 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         d.i2 != null &&
         d.v2 != null
       ) {
-        const p1 = dataToScreen(d.i1, d.v1);
-        const p2 = dataToScreen(d.i2, d.v2);
+        const paneId = d.pane ?? 'price';
+        const p1 = dataToScreen(d.i1, d.v1, paneId);
+        const p2 = dataToScreen(d.i2, d.v2, paneId);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(PAD_L, dpane.y0, priceW, dpane.height);
+        ctx.clip();
         if (d.type === 'trend') {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
@@ -975,8 +1091,9 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
             });
           }
         }
+        ctx.restore();
       } else if (d.type === 'text' && d.idx != null && d.v != null) {
-        const p = dataToScreen(d.idx, d.v);
+        const p = dataToScreen(d.idx, d.v, d.pane ?? 'price');
         if (isSelected) {
           const w = (d.text?.length ?? 1) * 7 + 12;
           ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.18)');
@@ -994,13 +1111,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     });
 
     if (hover && hover.sx >= PAD_L && hover.sx <= PAD_L + priceW) {
+      const hoverPane = getPaneAt(hover.sy);
       ctx.strokeStyle = COLORS.muted;
       ctx.setLineDash([2, 3]);
       ctx.beginPath();
       ctx.moveTo(Math.round(hover.sx) + 0.5, PAD_T);
       ctx.lineTo(Math.round(hover.sx) + 0.5, FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H);
       ctx.stroke();
-      if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
+      if (hover.sy >= hoverPane.y0 && hover.sy <= hoverPane.y0 + hoverPane.height) {
         ctx.beginPath();
         ctx.moveTo(PAD_L, Math.round(hover.sy) + 0.5);
         ctx.lineTo(PAD_L + priceW, Math.round(hover.sy) + 0.5);
@@ -1008,8 +1126,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       }
       ctx.setLineDash([]);
 
-      // スナップインジケーター
-      if (state.activeTool !== 'pan' && state.activeTool !== 'text' && primaryData?.length) {
+      // スナップインジケーター（プライスペインのみ）
+      if (state.activeTool !== 'pan' && state.activeTool !== 'text' && primaryData?.length && hoverPane.id === 'price') {
         const mode = getSnapMode(state.activeTool);
         const rawData = screenToData(hover.sx, hover.sy);
         const ci = Math.max(0, Math.min(primaryData.length - 1, Math.round(rawData.idx)));
@@ -1047,8 +1165,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         }
       }
 
-      if (hover.sy >= PAD_T && hover.sy <= PAD_T + priceH) {
-        const v = yRange.max - ((hover.sy - PAD_T) / priceH) * (yRange.max - yRange.min);
+      if (hover.sy >= hoverPane.y0 && hover.sy <= hoverPane.y0 + hoverPane.height) {
+        const v = hoverPane.yInvert(hover.sy);
         ctx.fillStyle = COLORS.panel;
         ctx.fillRect(PAD_L + priceW, hover.sy - 9, PAD_R - 2, 18);
         ctx.strokeStyle = COLORS.accent;
@@ -1056,9 +1174,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         ctx.fillStyle = COLORS.accent;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        const tk = tickers.find((t) => t.code === primary);
         ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, hover.sy);
+        ctx.fillText(hoverPane.fmtVal(v), PAD_L + priceW + 6, hover.sy);
       }
 
       const idx = Math.round(view.start + (hover.sx - PAD_L) / bw);
@@ -1104,7 +1221,6 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     state.activeTool,
     state.showSqMarkers,
     tempDrawing,
-    yRange,
     view,
     primary,
     primaryData,
@@ -1114,6 +1230,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     dataToScreen,
     screenToData,
     sqEventMap,
+    paneDefs,
+    getPaneAt,
   ]);
 
   // Pointer handlers
@@ -1147,7 +1265,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       setDragging({ type: 'pan', startX: sx, startView: { ...view } });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'hline') {
-      const { v: sv } = snapPoint(sx, sy, 'high');
+      const { v: sv, paneId } = snapPoint(sx, sy, 'high');
       setState((s) => ({
         ...s,
         drawings: [
@@ -1155,6 +1273,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           {
             type: 'hline',
             v: sv,
+            pane: paneId,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
@@ -1163,7 +1282,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         activeTool: 'pan',
       }));
     } else if (tool === 'vline') {
-      const { idx: si } = snapPoint(sx, sy, 'time');
+      const { idx: si, paneId } = snapPoint(sx, sy, 'time');
       setState((s) => ({
         ...s,
         drawings: [
@@ -1171,6 +1290,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
           {
             type: 'vline',
             idx: si,
+            pane: paneId,
             color: COLORS.amber,
             ticker: primary,
             id: Math.random(),
@@ -1179,13 +1299,14 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         activeTool: 'pan',
       }));
     } else if (tool === 'trend' || tool === 'rect' || tool === 'ellipse') {
-      const { idx: si, v: sv } = snapPoint(sx, sy, 'highlow');
+      const { idx: si, v: sv, paneId } = snapPoint(sx, sy, 'highlow');
       setTempDrawing({
         type: tool as (typeof state.drawings)[0]['type'],
         i1: si,
         v1: sv,
         i2: si,
         v2: sv,
+        pane: paneId,
         color: COLORS.accent,
         ticker: primary,
         id: Math.random(),
@@ -1193,8 +1314,8 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       setDragging({ type: 'drawing' });
       e.currentTarget.setPointerCapture(e.pointerId);
     } else if (tool === 'text') {
-      const { idx: si, v: sv } = snapPoint(sx, sy, 'highlow');
-      setTextInput({ x: sx, y: sy, idx: si, v: sv });
+      const { idx: si, v: sv, paneId } = snapPoint(sx, sy, 'highlow');
+      setTextInput({ x: sx, y: sy, idx: si, v: sv, paneId });
     }
   };
 
