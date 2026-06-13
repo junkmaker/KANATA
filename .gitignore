@@ -26,3 +26,6 @@ package_debug.json
 
 # Office documents
 docs/*.docx
+
+# gpaphify
+graphify-out/
