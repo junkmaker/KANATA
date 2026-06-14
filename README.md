@@ -225,22 +225,6 @@ npm run dist
 
 アプリ内メニュー → ヘルプ → ログフォルダを開く でエクスプローラから直接確認できる。
 
----
-
-## 実装状況
-
-| フェーズ | 内容 | 状態 |
-|---------|------|------|
-| Phase 1 | Electron 基本起動・サイドカー接続 | 完了 |
-| Phase 2 | サイドカー堅牢化・IPC 拡張・SQLite 永続化 | 完了 |
-| Phase 3 | NSIS インストーラ・Python バンドル | 完了 |
-| Phase 4 | チャート機能（インジケーター・描画ツール・TF 切替） | 完了 |
-| Phase 5 | Vitest ユニットテスト・Playwright E2E 骨格・リリースチェックリスト | 完了 |
-
-詳細は [docs/electron.plan.md](docs/electron.plan.md) を参照。
-
----
-
 ## コントリビューター向け注意事項
 
 - **`ELECTRON_RUN_AS_NODE=1` を継承させない**: VSCode の Electron 拡張がこの変数をセットするため、`npm run dev` は必ず `scripts/dev.cjs` 経由で実行する
