@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchFundamentals } from '../../lib/api';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
@@ -48,6 +48,9 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState<'top' | 'bottom'>('bottom');
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const scrollDirectionRef = useRef<'up' | 'down' | null>(null);
 
   // Source list for the visible watchlist rows (the active list's members)
   const visibleTickers = useMemo(() => {
@@ -114,6 +117,28 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
     setState((s) => ({ ...s, selected: s.selected.filter((c) => c !== code) }));
   };
 
+  const stopAutoScroll = () => {
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+    scrollDirectionRef.current = null;
+  };
+
+  const startAutoScroll = (direction: 'up' | 'down') => {
+    if (scrollDirectionRef.current === direction) return;
+    stopAutoScroll();
+    scrollDirectionRef.current = direction;
+    const SPEED = 8;
+    const tick = () => {
+      const el = listRef.current;
+      if (!el) return;
+      el.scrollTop += direction === 'up' ? -SPEED : SPEED;
+      scrollRafRef.current = requestAnimationFrame(tick);
+    };
+    scrollRafRef.current = requestAnimationFrame(tick);
+  };
+
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, code: string) => {
     setDraggedCode(code);
     e.dataTransfer.effectAllowed = 'move';
@@ -172,6 +197,26 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   const handleDragEnd = () => {
     setDraggedCode(null);
     setDragOverCode(null);
+    stopAutoScroll();
+  };
+
+  const handleListDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    const el = listRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const ZONE = 60;
+    if (e.clientY < rect.top + ZONE) {
+      startAutoScroll('up');
+    } else if (e.clientY > rect.bottom - ZONE) {
+      startAutoScroll('down');
+    } else {
+      stopAutoScroll();
+    }
+  };
+
+  const handleListDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    stopAutoScroll();
   };
 
   const primary = state.selected[0];
@@ -235,7 +280,12 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
         </div>
       </div>
 
-      <div className="ticker-list">
+      <div
+        className="ticker-list"
+        ref={listRef}
+        onDragOver={isDraggable ? handleListDragOver : undefined}
+        onDragLeave={isDraggable ? handleListDragLeave : undefined}
+      >
         {visibleTickers.map((t) => {
           const series = data[t.code];
           const ll = series && series.length >= 1 ? series[series.length - 1] : null;

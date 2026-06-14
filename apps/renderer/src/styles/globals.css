@@ -183,7 +183,9 @@ input { font: inherit; color: inherit; }
 /* ── Side panels ── */
 .panel { background: var(--panel); min-height: 0; overflow-y: auto; }
 .panel-left { border-right: 1px solid var(--border); }
-.panel-right { border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.panel-right { border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+/* RightPanel is wrapped in a [data-testid="watchlist"] div; display:contents lets .panel-right be the direct grid item so its height is constrained (enabling .ticker-list scroll) */
+[data-testid="watchlist"] { display: contents; }
 .panel-left::-webkit-scrollbar, .panel-right::-webkit-scrollbar, .ticker-list::-webkit-scrollbar { width: 6px; height: 6px; }
 .panel-left::-webkit-scrollbar-thumb, .panel-right::-webkit-scrollbar-thumb, .ticker-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .panel-left::-webkit-scrollbar-track, .panel-right::-webkit-scrollbar-track { background: transparent; }
