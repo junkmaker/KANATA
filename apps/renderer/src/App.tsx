@@ -238,32 +238,6 @@ export function App() {
     );
   }
 
-  // Watchlist loaded but has no tickers — render shell so user can add tickers
-  if (displayTickers.length === 0) {
-    return (
-      <div className="app">
-        <div className="main-grid">
-          <LeftPanel state={state} setState={setState} />
-          <div
-            className="chart-area"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <div style={{ padding: 24, opacity: 0.5 }}>ウォッチリストに銘柄を追加してください</div>
-          </div>
-          <div data-testid="watchlist">
-            <RightPanel
-              state={state}
-              setState={setState}
-              tickers={displayTickers}
-              data={data}
-              watchlist={watchlistController}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       <TopBar
@@ -279,7 +253,11 @@ export function App() {
       <div className="main-grid">
         <LeftPanel state={state} setState={setState} />
         <div className="chart-area">
-          <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
+          {displayTickers.length === 0 ? (
+            <div className="chart-empty">ウォッチリストに銘柄を追加してください</div>
+          ) : (
+            <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
+          )}
         </div>
         <div data-testid="watchlist">
           <RightPanel
