@@ -8,4 +8,7 @@ export const IPC_CHANNELS = {
   WINDOW_CLOSE: 'kanata:window-close',
   WINDOW_IS_MAXIMIZED: 'kanata:window-is-maximized',
   WINDOW_MAXIMIZE_CHANGED: 'kanata:window-maximize-changed',
+  FRED_KEY_STATUS: 'kanata:fred-key-status',
+  FRED_KEY_SET: 'kanata:fred-key-set',
+  FRED_KEY_CLEAR: 'kanata:fred-key-clear',
 } as const;

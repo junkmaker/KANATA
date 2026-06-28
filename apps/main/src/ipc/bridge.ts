@@ -1,6 +1,12 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
-import { getBackendUrl, getSidecarStatus } from '../sidecar/pythonSidecar.js';
+import {
+  clearFredApiKey,
+  isEncryptionAvailable,
+  isFredKeyConfigured,
+  setFredApiKey,
+} from '../lib/secrets.js';
+import { getBackendUrl, getSidecarStatus, restartSidecar } from '../sidecar/pythonSidecar.js';
 import { IPC_CHANNELS } from './channels.js';
 
 export { IPC_CHANNELS };
@@ -29,5 +35,26 @@ export function registerIpcHandlers(): void {
   });
   ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, () => {
     return BrowserWindow.getFocusedWindow()?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.FRED_KEY_STATUS, () => ({
+    configured: isFredKeyConfigured(),
+    encryptionAvailable: isEncryptionAvailable(),
+  }));
+  ipcMain.handle(IPC_CHANNELS.FRED_KEY_SET, async (_event, key: unknown) => {
+    const saved = typeof key === 'string' ? setFredApiKey(key) : false;
+    if (saved) await restartSidecar();
+    return {
+      configured: isFredKeyConfigured(),
+      encryptionAvailable: isEncryptionAvailable(),
+    };
+  });
+  ipcMain.handle(IPC_CHANNELS.FRED_KEY_CLEAR, async () => {
+    const cleared = clearFredApiKey();
+    if (cleared) await restartSidecar();
+    return {
+      configured: isFredKeyConfigured(),
+      encryptionAvailable: isEncryptionAvailable(),
+    };
   });
 }

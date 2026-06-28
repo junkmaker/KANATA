@@ -273,6 +273,7 @@ export function App() {
         dataStatus={status}
         view={view}
         onViewChange={setView}
+        onOpenSettings={() => setTweaksOpen(true)}
       />
       {view === 'macro' ? (
         <div className="main-grid macro-view">

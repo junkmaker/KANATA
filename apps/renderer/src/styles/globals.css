@@ -603,3 +603,33 @@ input { font: inherit; color: inherit; }
 }
 .chip:hover { border-color: var(--accent); color: var(--text); }
 .chip.on { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.chip:disabled { opacity: 0.4; cursor: default; }
+
+.apikey-status { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.apikey-badge {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+  padding: 2px 6px; border-radius: 2px;
+  border: 1px solid var(--border); color: var(--muted);
+}
+.apikey-badge.on { color: var(--bg); background: var(--up, #26a69a); border-color: transparent; }
+.apikey-hint { font-family: var(--font-mono); font-size: 9px; color: var(--muted); }
+.apikey-hint.err { color: var(--down, #ef5350); }
+.apikey-input {
+  width: 100%; box-sizing: border-box;
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 6px 8px; margin-bottom: 6px;
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 2px;
+}
+.apikey-input:focus { outline: none; border-color: var(--accent); }
+.apikey-actions { display: flex; gap: 4px; margin-bottom: 6px; }
+.apikey-link { font-family: var(--font-mono); font-size: 9px; color: var(--accent); text-decoration: none; }
+.apikey-link:hover { text-decoration: underline; }
+
+.settings-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin-left: 4px; padding: 0;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--muted); border-radius: 3px;
+}
+.settings-btn:hover { color: var(--text); background: var(--panel); }
