@@ -130,10 +130,25 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `db/init_db.py` — `Base.metadata.create_all` + デフォルトウォッチリスト seed（Alembic は未導入）
 - `schemas/common.py` — `ApiResponse` エンベロープと `ok` / `fail` ヘルパ
 - `schemas/watchlist.py` — Pydantic v2 スキーマ（`ConfigDict(from_attributes=True)`）
+- `routes/macro.py` — `/api/macro/{hy-oas,net-liquidity,rsp-spy,dashboard}` 4 エンドポイント。共通クエリ `start`/`end`（ISO、既定は 730 日前〜当日）。**watchlist と違い `{success,data,error}` エンベロープではなく §6 の生オブジェクトを返す**（quotes 寄り）。各レスポンスを TTL 1h でキャッシュ。FRED キー未設定でも 500 にせず該当指標を `meta.available=false` で返す（部分稼働）
+- `services/fred_provider.py` — FRED observations を同期 `httpx.Client` で取得。共有 TTLCache（6h）+ 取得失敗時の stale フォールバック（14d）。`FRED_API_KEY` 未設定時は `MissingFredKey` を送出。FRED 日付は米国基準のまま扱う
+- `services/macro_provider.py` — 単位換算・週次リサンプル・純流動性・RSP/SPY inner join・シグナル判定のコア。**`WALCL` は百万$ → 十億$（÷1000）、純流動性は兆$ 表示（÷1000）**。RSP/SPY は yfinance のミリ秒 `t` で inner join。`evaluate_signal` / `build_dashboard`（総合シグナル）は config ルール準拠
+- `config/macro_thresholds.json` + `config/macro_config.py` — series ID・閾値・参照期間・総合シグナルルールを JSON で外出し。`MACRO_CONFIG_PATH` 環境変数で差し替え可、未検出時は内蔵デフォルト。**ハードコード禁止、閾値変更は JSON 編集のみ**
+- `schemas/macro.py` — §6 レスポンス契約の Pydantic v2 モデル（`response_model` 用）。日付は ISO 文字列、値は数値型
+
+#### FRED_API_KEY の設定
+
+- マクロ指標のうち HY OAS と Fed 純流動性は [FRED API](https://fred.stlouisfed.org/docs/api/) を使う。無料の API キーを取得し、環境変数 `FRED_API_KEY` で渡す（**未設定でも RSP/SPY は yfinance で稼働する＝部分稼働**）。
+- 開発時: `$env:FRED_API_KEY = "<your_key>"; npm run dev`（PowerShell）。`.env` 経由も可（`python-dotenv`、`.env` は `.gitignore` 済み）。
+- sidecar は spawn 時に `...process.env` を継承するため、シェル/OS に設定すれば自動で伝播する（コード変更不要）。**Electron パッケージにキーを同梱しない**。
+- 通信先ドメイン `api.stlouisfed.org` への到達が必要。
 
 ### フロントエンド (`apps/renderer/src/`)
 
-- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` / `kanata.migrated.v1`
+- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view`（チャート⇔マクロ）。`view` 切替で main-grid をチャート 3 ペイン or `MacroDashboard` に出し分け（既存フックは Rules of Hooks 順守で無条件に呼び続ける）
+- `components/Macro/` — `MacroDashboard`（総合シグナル + 3 カード + 期間 3M/6M/1Y/2Y 切替、`useMacroDashboard` フック使用）/ `MacroCard` / `MacroLineChart`（軽量 Canvas 折れ線、閾値・安値線オーバーレイ、devicePixelRatio 対応、CSS 変数は `getComputedStyle` で解決）/ `SignalBadge`（緑/黄/赤/グレー）/ `macro.css`
+- `lib/macroApi.ts` — マクロ 4 エンドポイントの fetch ラッパ。**§6 の生レスポンスを返す（envelope を剥がさない）**。`MacroPeriod` を `start` クエリへ変換
+- `hooks/useMacroDashboard.ts` — `period` 依存で dashboard を取得（`status: 'loading' | 'ready' | 'offline'`、cancelled ガード）
 - `lib/backendUrl.ts` — `window.kanata.getBackendUrl()` IPC 経由でバックエンド URL を取得・キャッシュ。`VITE_API_URL` または `http://127.0.0.1:8000` にフォールバック
 - `hooks/useWatchlists.ts` — バックエンド `/api/watchlists*` を叩くフック。`status: 'loading' | 'ready' | 'offline'`
 - `lib/watchlistApi.ts` — 8 本の fetch ラッパ。`{success, data, error}` エンベロープを剥がす
@@ -216,13 +231,3 @@ release.yml（タグ push をトリガー）
 ## ブランディング
 
 「KAIROS /TERMINAL」→「KANATA /TERMINAL」にリネーム済み。localStorage キーも `kanata.*` に統一済み。これから追加するキー・表示名も `KANATA` ブランドで揃える。
-
-## graphify
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

@@ -3,6 +3,8 @@ import { fmtPrice } from '../lib/formatters';
 import type { AppState, OHLCBar, Ticker } from '../types';
 import { WindowControls } from './WindowControls';
 
+type View = 'chart' | 'macro';
+
 interface TopBarProps {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -12,6 +14,8 @@ interface TopBarProps {
   chgPct: number;
   up: boolean;
   dataStatus: DataStatus;
+  view: View;
+  onViewChange: (view: View) => void;
 }
 
 const STATUS_LABEL: Record<DataStatus, string> = {
@@ -28,7 +32,16 @@ const STATUS_COLOR: Record<DataStatus, string> = {
   error: 'var(--bear)',
 };
 
-export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: TopBarProps) {
+export function TopBar({
+  primaryTicker,
+  last,
+  chg,
+  chgPct,
+  up,
+  dataStatus,
+  view,
+  onViewChange,
+}: TopBarProps) {
   const marketTime = new Date().toLocaleTimeString('en-GB', { hour12: false });
   const dotColor = STATUS_COLOR[dataStatus];
 
@@ -47,6 +60,23 @@ export function TopBar({ primaryTicker, last, chg, chgPct, up, dataStatus }: Top
           <div className="brand-name">KANATA /TERMINAL</div>
           <div className="brand-sub">chart · v0.4.1</div>
         </div>
+      </div>
+
+      <div className="view-switch" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <button
+          type="button"
+          className={`view-tab ${view === 'chart' ? 'active' : ''}`}
+          onClick={() => onViewChange('chart')}
+        >
+          チャート
+        </button>
+        <button
+          type="button"
+          className={`view-tab ${view === 'macro' ? 'active' : ''}`}
+          onClick={() => onViewChange('macro')}
+        >
+          マクロ
+        </button>
       </div>
 
       {primaryTicker && (

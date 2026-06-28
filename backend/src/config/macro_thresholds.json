@@ -1,0 +1,28 @@
+{
+  "series": {
+    "hy_oas": "BAMLH0A0HYM2",
+    "walcl": "WALCL",
+    "rrp": "RRPONTSYD",
+    "tga": "WTREGEN"
+  },
+  "default_lookback_days": 730,
+  "thresholds": {
+    "hy_oas": {
+      "yellow_lookback_points": 20,
+      "yellow_widening_bp": 50.0,
+      "red_lookback_points": 60
+    },
+    "net_liquidity": {
+      "yellow_lookback_points": 8,
+      "red_lookback_points": 26
+    },
+    "rsp_spy": {
+      "near_low_pct": 2.0,
+      "low_lookback_points": 60
+    }
+  },
+  "overall": {
+    "red_if_any_red": true,
+    "yellow_if_yellow_count_gte": 2
+  }
+}

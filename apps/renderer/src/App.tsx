@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Chart } from './components/Chart/Chart';
+import { MacroDashboard } from './components/Macro/MacroDashboard';
 import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { RightPanel } from './components/RightPanel/RightPanel';
 import { StatusBar } from './components/StatusBar';
@@ -14,6 +15,17 @@ import type { AppState } from './types';
 import './styles/globals.css';
 
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
+const VIEW_KEY = 'kanata.view';
+
+type View = 'chart' | 'macro';
+
+function loadView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'macro' ? 'macro' : 'chart';
+  } catch {
+    return 'chart';
+  }
+}
 
 const DEFAULT_STATE: AppState = {
   selected: [],
@@ -92,6 +104,8 @@ export function App() {
     }
   });
 
+  const [view, setView] = useState<View>(loadView);
+
   const wl = useWatchlists();
   const [activeListId, setActiveListId] = useState<number | null>(loadActiveListId);
 
@@ -143,6 +157,14 @@ export function App() {
       /* noop */
     }
   }, [state]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      /* noop */
+    }
+  }, [view]);
 
   useEffect(() => {
     try {
@@ -238,32 +260,6 @@ export function App() {
     );
   }
 
-  // Watchlist loaded but has no tickers — render shell so user can add tickers
-  if (displayTickers.length === 0) {
-    return (
-      <div className="app">
-        <div className="main-grid">
-          <LeftPanel state={state} setState={setState} />
-          <div
-            className="chart-area"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <div style={{ padding: 24, opacity: 0.5 }}>ウォッチリストに銘柄を追加してください</div>
-          </div>
-          <div data-testid="watchlist">
-            <RightPanel
-              state={state}
-              setState={setState}
-              tickers={displayTickers}
-              data={data}
-              watchlist={watchlistController}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="app">
       <TopBar
@@ -275,22 +271,34 @@ export function App() {
         chgPct={chgPct}
         up={up}
         dataStatus={status}
+        view={view}
+        onViewChange={setView}
       />
-      <div className="main-grid">
-        <LeftPanel state={state} setState={setState} />
-        <div className="chart-area">
-          <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
+      {view === 'macro' ? (
+        <div className="main-grid macro-view">
+          <MacroDashboard />
         </div>
-        <div data-testid="watchlist">
-          <RightPanel
-            state={state}
-            setState={setState}
-            tickers={displayTickers}
-            data={data}
-            watchlist={watchlistController}
-          />
+      ) : (
+        <div className="main-grid">
+          <LeftPanel state={state} setState={setState} />
+          <div className="chart-area">
+            {displayTickers.length === 0 ? (
+              <div className="chart-empty">ウォッチリストに銘柄を追加してください</div>
+            ) : (
+              <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
+            )}
+          </div>
+          <div data-testid="watchlist">
+            <RightPanel
+              state={state}
+              setState={setState}
+              tickers={displayTickers}
+              data={data}
+              watchlist={watchlistController}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <StatusBar state={state} primaryTicker={primaryTicker} last={last} />
       {tweaksOpen && (
         <TweaksPanel

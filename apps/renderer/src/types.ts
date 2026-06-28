@@ -173,6 +173,44 @@ export interface ApiResponse<T> {
   error: string | null;
 }
 
+// --- Macro dashboard ---
+export type MacroSignal = 'green' | 'yellow' | 'red' | 'gray';
+export type MacroPeriod = '3M' | '6M' | '1Y' | '2Y';
+
+export interface MacroSeriesPoint {
+  date: string;
+  value: number;
+}
+
+export interface MacroLatest {
+  date: string;
+  value: number;
+  change: number | null;
+  provisional: boolean;
+}
+
+export interface MacroIndicatorMeta {
+  source: string;
+  stale: boolean;
+  available: boolean;
+}
+
+export interface MacroIndicator {
+  indicator: string;
+  unit: string;
+  lens: string;
+  signal: MacroSignal;
+  latest: MacroLatest | null;
+  thresholds: Record<string, string | null>;
+  series: MacroSeriesPoint[];
+  meta: MacroIndicatorMeta;
+}
+
+export interface MacroDashboard {
+  overall_signal: MacroSignal;
+  indicators: MacroIndicator[];
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
