@@ -1,0 +1,178 @@
+.macro-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.macro-overall {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.macro-overall-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.macro-overall-text {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+
+.macro-error {
+  padding: 10px 14px;
+  border: 1px solid var(--bear);
+  border-radius: 6px;
+  color: var(--bear);
+  font-size: 13px;
+}
+
+.macro-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.macro-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.macro-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.macro-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.macro-card-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.macro-card-values {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.macro-card-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-card-change {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-card-change.up {
+  color: var(--bull);
+}
+
+.macro-card-change.down {
+  color: var(--bear);
+}
+
+.macro-linechart {
+  width: 100%;
+  display: block;
+}
+
+.macro-card-flags {
+  display: flex;
+  gap: 6px;
+  min-height: 16px;
+}
+
+.macro-flag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.macro-flag.stale {
+  background: color-mix(in oklch, var(--bear) 22%, transparent);
+  color: var(--bear);
+}
+
+.macro-flag.provisional {
+  background: color-mix(in oklch, var(--amber) 22%, transparent);
+  color: var(--amber);
+}
+
+.macro-card-unavailable {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.macro-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.macro-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.macro-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.macro-periods {
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+
+.macro-period {
+  padding: 4px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.macro-period.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
