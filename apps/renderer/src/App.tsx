@@ -9,6 +9,7 @@ import { TweaksPanel } from './components/TweaksPanel';
 import { useAlertCheck } from './hooks/useAlertCheck';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
+import { subscribeBackendUrlChange } from './lib/backendUrl';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
 import { watchlistToTickers } from './lib/watchlistTickers';
 import type { AppState } from './types';
@@ -108,6 +109,9 @@ export function App() {
 
   const wl = useWatchlists();
   const [activeListId, setActiveListId] = useState<number | null>(loadActiveListId);
+
+  // サイドカー再起動（FRED キー保存など）で新ポートに変わったら URL キャッシュを追従させる
+  useEffect(() => subscribeBackendUrlChange(), []);
 
   // One-shot migration of legacy localStorage watchlist on first ready load
   useEffect(() => {
