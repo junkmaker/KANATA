@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import { sidecarLogger as log } from '../lib/logger.js';
 import { reservePort } from '../lib/port.js';
+import { getFredApiKey } from '../lib/secrets.js';
 
 const BACKEND_READY_TIMEOUT_MS = 20_000;
 const MAX_BACKUPS = 7;
@@ -123,6 +124,10 @@ async function launchSidecar(): Promise<string> {
 
   const pythonHome = app.isPackaged ? join(process.resourcesPath, 'python') : undefined;
 
+  // ユーザーがアプリ内で設定した FRED キー（暗号化保存）を環境変数として注入する。
+  // 保存キーがあれば常に優先（OS 環境変数より後ろに置いて上書き）。
+  const fredApiKey = getFredApiKey();
+
   const args = [
     '-m',
     'uvicorn',
@@ -146,6 +151,7 @@ async function launchSidecar(): Promise<string> {
       DATABASE_URL: `sqlite:///${dbPath}`,
       KANATA_ALLOWED_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173',
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
+      ...(fredApiKey ? { FRED_API_KEY: fredApiKey } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -243,4 +249,22 @@ export function stopPythonSidecar(): void {
 
 export function getBackendUrl(): string | null {
   return state.backendUrl;
+}
+
+/**
+ * サイドカーを停止して再起動する。環境変数（FRED キー等）の変更を反映させる用途。
+ * 起動完了まで待ってから status コールバックを通知する。
+ */
+export async function restartSidecar(): Promise<void> {
+  log.info('Restarting sidecar to apply settings change');
+  stopPythonSidecar();
+  state.restartCount = 0;
+  state.status = 'starting';
+  onStatusChange?.('starting', null);
+  try {
+    const url = await startPythonSidecar();
+    log.info(`Sidecar restarted at ${url}`);
+  } catch (err) {
+    log.error(`Sidecar restart failed: ${String(err)}`);
+  }
 }

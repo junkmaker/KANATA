@@ -14,6 +14,15 @@ export function useMacroDashboard(period: MacroPeriod): UseMacroDashboardResult 
   const [data, setData] = useState<MacroDashboard | null>(null);
   const [status, setStatus] = useState<MacroStatus>('loading');
   const [error, setError] = useState<string | null>(null);
+  // API キー保存などでサイドカーが再起動し ready に戻ったら再取得するためのトークン
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const unsubscribe = window.kanata?.onBackendStatus((payload) => {
+      if (payload.status === 'ready') setReloadToken((t) => t + 1);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +44,7 @@ export function useMacroDashboard(period: MacroPeriod): UseMacroDashboardResult 
     return () => {
       cancelled = true;
     };
-  }, [period]);
+  }, [period, reloadToken]);
 
   return { data, status, error };
 }

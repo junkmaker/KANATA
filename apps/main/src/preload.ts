@@ -33,6 +33,9 @@ const api: PreloadApi = {
         handler as Parameters<typeof ipcRenderer.off>[1],
       );
   },
+  getFredKeyStatus: () => ipcRenderer.invoke(IPC_CHANNELS.FRED_KEY_STATUS),
+  setFredKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.FRED_KEY_SET, key),
+  clearFredKey: () => ipcRenderer.invoke(IPC_CHANNELS.FRED_KEY_CLEAR),
 };
 
 try {

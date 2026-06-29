@@ -1,4 +1,5 @@
 import type { AppState } from '../types';
+import { ApiKeyField } from './Settings/ApiKeyField';
 
 interface TweaksPanelProps {
   aesthetic: string;
@@ -27,6 +28,8 @@ export function TweaksPanel({
           閉じる
         </button>
       </div>
+
+      <ApiKeyField />
 
       <div className="tweaks-row">
         <div className="tweak-label">カラーテーマ</div>
