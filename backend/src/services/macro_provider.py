@@ -9,12 +9,11 @@ missing; RSP/SPY (yfinance) keeps working (partial availability).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from ..config.macro_config import load_macro_config
 from .fred_provider import MissingFredKey, fetch_fred_series
-from .yfinance_provider import fetch_ohlcv
+from .yfinance_provider import fetch_daily_closes
 
 logger = logging.getLogger(__name__)
 
@@ -25,20 +24,15 @@ _THRESHOLD_TEXT: dict[str, dict[str, Any]] = {
     "hy_oas": {"green_max": None, "yellow_band": "20営業日で +50bp 拡大", "red": "直近高値更新/急拡大"},
     "net_liquidity": {"green_max": None, "yellow_band": "下降トレンド入り", "red": "直近安値割れ"},
     "rsp_spy": {"green_max": None, "yellow_band": "直近安値接近", "red": "直近安値割れ"},
+    "nikkei_sp": {"green_max": None, "yellow_band": "中期下降トレンド", "red": "直近安値割れ"},
+    "nikkei_topix": {"green_max": None, "yellow_band": "中期下降トレンド", "red": "直近安値割れ"},
+    "brent_wti": {"green_max": None, "yellow_band": "正常帯($1.5〜7)外", "red": "逆転/極端拡大"},
 }
 
 
 # --------------------------------------------------------------------------- #
 # Small numeric helpers
 # --------------------------------------------------------------------------- #
-def _date_to_ms(date_str: str) -> int:
-    return int(datetime.strptime(date_str, "%Y-%m-%d").timestamp() * 1000)
-
-
-def _ms_to_date(ms: int) -> str:
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
-
-
 def _as_of(observations_sorted: list[dict], target_date: str) -> float | None:
     """Forward-fill: value of the last observation with date <= target_date."""
     result: float | None = None
@@ -153,6 +147,31 @@ def evaluate_signal(indicator_key: str, series: list[dict], cfg: dict) -> Signal
             return "yellow"
         return "green"
 
+    if indicator_key in ("nikkei_sp", "nikkei_topix"):
+        # 上昇=良好トレンド。直近安値割れ→red、中期参照点より低い→yellow、else green。
+        t = thresholds.get(indicator_key, {})
+        low_n = int(t.get("low_lookback_points", 26))
+        down_n = int(t.get("downtrend_lookback_points", 8))
+        if latest <= min(values[-low_n:]):
+            return "red"
+        ref = values[-(down_n + 1)] if len(values) > down_n else values[0]
+        if latest < ref:
+            return "yellow"
+        return "green"
+
+    if indicator_key == "brent_wti":
+        # 正常帯（$1.5〜7）内が green、帯外は yellow、逆転($0以下)/極端拡大($10以上)は red。
+        t = thresholds.get("brent_wti", {})
+        if latest <= float(t.get("red_inversion_max", 0.0)) or latest >= float(
+            t.get("red_extreme_min", 10.0)
+        ):
+            return "red"
+        if latest < float(t.get("green_band_min", 1.5)) or latest > float(
+            t.get("green_band_max", 7.0)
+        ):
+            return "yellow"
+        return "green"
+
     return "green"
 
 
@@ -241,50 +260,125 @@ def build_net_liquidity(start: str, end: str, cfg: dict | None = None) -> dict:
 
 def build_rsp_spy(start: str, end: str, cfg: dict | None = None) -> dict:
     cfg = cfg or load_macro_config()
-    # yfinance 障害（ネットワーク/レート制限/パースエラー）が build_dashboard まで
-    # 伝播して全カードを 502 で落とすのを防ぎ、この指標だけ unavailable に degrade する。
-    try:
-        rsp = fetch_ohlcv("RSP", "1D")
-        spy = fetch_ohlcv("SPY", "1D")
-    except Exception as exc:  # noqa: BLE001 - yfinance は多様な例外を投げ得る
-        logger.warning("RSP/SPY fetch failed: %s", exc)
-        return _unavailable(
-            key="rsp_spy",
-            indicator="rsp_spy",
-            unit="ratio",
-            lens="momentum",
-            source="yfinance",
-        )
-
-    rsp_by_t = {b["t"]: b["c"] for b in rsp}
-    spy_by_t = {b["t"]: b["c"] for b in spy}
-
-    start_ms = _date_to_ms(start)
-    end_ms = _date_to_ms(end) + 86_400_000  # inclusive of the end day
-
-    series: list[dict] = []
-    for t in sorted(set(rsp_by_t) & set(spy_by_t)):  # inner join on timestamp
-        if t < start_ms or t > end_ms:
-            continue
-        spy_close = spy_by_t[t]
-        if spy_close == 0:
-            continue
-        ratio = rsp_by_t[t] / spy_close
-        series.append({"date": _ms_to_date(t), "value": round(ratio, 6)})
-
-    available = bool(series)
-    signal = evaluate_signal("rsp_spy", series, cfg) if series else "gray"
-    return _indicator(
+    return _build_pair(
         key="rsp_spy",
-        indicator="rsp_spy",
+        num_symbol="RSP",
+        den_symbol="SPY",
         unit="ratio",
         lens="momentum",
+        op="ratio",
+        cfg=cfg,
+        start=start,
+        end=end,
+    )
+
+
+def _build_pair(
+    *,
+    key: str,
+    num_symbol: str,
+    den_symbol: str,
+    unit: str,
+    lens: str,
+    op: str,
+    cfg: dict,
+    start: str,
+    end: str,
+) -> dict:
+    """2 銘柄の日次終値を取引所ローカル暦日で inner join し、比率(ratio)/差(diff)で系列化する。
+
+    エポック完全一致ではなくローカル暦日で結合する理由: 日経225(東京)と S&P500(NY) の
+    ように取引所タイムゾーンが異なるペアは、同じ取引日でも日足バーのエポックが不一致に
+    なり、タイムスタンプ結合では系列が空（＝取得不可）になる。各バー自身のローカル暦日
+    （fetch_daily_closes のキー）で結合すれば同/異タイムゾーンを問わず正しく対応できる。
+
+    degrade 方針: yfinance 障害（ネットワーク/レート制限/パースエラー）は例外を握って
+    この指標だけ unavailable に落とし、build_dashboard 全体が 502 になるのを防ぐ。
+    """
+    try:
+        a = fetch_daily_closes(num_symbol)
+        b = fetch_daily_closes(den_symbol)
+    except Exception as exc:  # noqa: BLE001 - yfinance は多様な例外を投げ得る
+        logger.warning("%s fetch failed: %s", key, exc)
+        return _unavailable(key=key, indicator=key, unit=unit, lens=lens, source="yfinance")
+
+    start_d = start[:10]
+    end_d = end[:10]
+
+    series: list[dict] = []
+    for d in sorted(set(a) & set(b)):  # inner join on local trading-day date
+        if d < start_d or d > end_d:  # ISO date strings compare lexicographically
+            continue
+        bv = b[d]
+        if op == "ratio":
+            if bv == 0:
+                continue
+            value = round(a[d] / bv, 6)
+        else:  # "diff"
+            value = round(a[d] - bv, 4)
+        series.append({"date": d, "value": value})
+
+    available = bool(series)
+    signal = evaluate_signal(key, series, cfg) if series else "gray"
+    return _indicator(
+        key=key,
+        indicator=key,
+        unit=unit,
+        lens=lens,
         series=series,
         signal=signal,
         source="yfinance",
         stale=False,
         available=available,
         provisional=False,
+    )
+
+
+def build_nikkei_sp(start: str, end: str, cfg: dict | None = None) -> dict:
+    cfg = cfg or load_macro_config()
+    s = cfg["series"]
+    return _build_pair(
+        key="nikkei_sp",
+        num_symbol=s["nikkei"],
+        den_symbol=s["sp500"],
+        unit="ratio",
+        lens="momentum",
+        op="ratio",
+        cfg=cfg,
+        start=start,
+        end=end,
+    )
+
+
+def build_nikkei_topix(start: str, end: str, cfg: dict | None = None) -> dict:
+    cfg = cfg or load_macro_config()
+    s = cfg["series"]
+    return _build_pair(
+        key="nikkei_topix",
+        num_symbol=s["nikkei"],
+        den_symbol=s["topix_etf"],
+        unit="ratio",
+        lens="momentum",
+        op="ratio",
+        cfg=cfg,
+        start=start,
+        end=end,
+    )
+
+
+def build_brent_wti(start: str, end: str, cfg: dict | None = None) -> dict:
+    cfg = cfg or load_macro_config()
+    s = cfg["series"]
+    return _build_pair(
+        key="brent_wti",
+        num_symbol=s["brent"],
+        den_symbol=s["wti"],
+        unit="usd_bbl",
+        lens="momentum",
+        op="diff",
+        cfg=cfg,
+        start=start,
+        end=end,
     )
 
 
@@ -303,12 +397,19 @@ def _overall_signal(indicators: list[dict], cfg: dict) -> Signal:
 
 def build_dashboard(start: str, end: str, cfg: dict | None = None) -> dict:
     cfg = cfg or load_macro_config()
-    indicators = [
+    # 総合シグナルは米国流動性の既存3指標のみで算出する。日本株/原油の追加3指標は
+    # 表示専用で overall_signal には寄与させない（意味論を汚さないため）。
+    core = [
         build_hy_oas(start, end, cfg),
         build_net_liquidity(start, end, cfg),
         build_rsp_spy(start, end, cfg),
     ]
+    extras = [
+        build_nikkei_sp(start, end, cfg),
+        build_nikkei_topix(start, end, cfg),
+        build_brent_wti(start, end, cfg),
+    ]
     return {
-        "overall_signal": _overall_signal(indicators, cfg),
-        "indicators": indicators,
+        "overall_signal": _overall_signal(core, cfg),  # 既存3指標のみ
+        "indicators": core + extras,
     }

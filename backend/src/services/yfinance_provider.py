@@ -51,6 +51,37 @@ def fetch_ohlcv(symbol: str, timeframe: str) -> list[dict]:
     return bars
 
 
+def fetch_daily_closes(symbol: str) -> dict[str, float]:
+    """Return {local_date_iso: close} for daily bars, keyed by the bar's own
+    exchange-local calendar date.
+
+    Cross-market pairs (e.g. ^N225 in Asia/Tokyo vs ^GSPC in America/New_York)
+    label "the same trading day" with different epoch timestamps because each
+    daily bar sits at local midnight. Keying by the bar's local date lets callers
+    inner-join by trading-day label regardless of timezone. Same-timezone pairs
+    are unaffected.
+    """
+    if not symbol.isascii():
+        return {}
+
+    yf_symbol = to_yf_symbol(symbol)
+    ticker = yf.Ticker(yf_symbol)
+    df = ticker.history(period="5y", interval="1d", auto_adjust=True)
+
+    if df.empty:
+        return {}
+
+    closes: dict[str, float] = {}
+    for ts, row in df.iterrows():
+        c = row["Close"]
+        if c is None or math.isnan(c):
+            continue
+        # ts is a tz-aware Timestamp; .date() yields the exchange-local date.
+        closes[ts.date().isoformat()] = round(float(c), 4)
+
+    return closes
+
+
 def get_ttl(timeframe: str) -> int:
     return INTERVAL_MAP.get(timeframe, ("", "", 3600))[2]
 

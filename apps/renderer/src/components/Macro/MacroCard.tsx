@@ -7,13 +7,25 @@ const TITLE: Record<string, string> = {
   hy_oas: 'HY OAS',
   net_liquidity: 'Fed純流動性',
   rsp_spy: 'RSP/SPY',
+  nikkei_sp: 'NS倍率',
+  nikkei_topix: 'NT倍率',
+  brent_wti: 'ブレント-WTI',
 };
 
 const SUBTITLE: Record<string, string> = {
   hy_oas: 'ハイイールド・スプレッド',
   net_liquidity: 'WALCL − RRP − TGA',
   rsp_spy: '等加重 ÷ 時価加重',
+  nikkei_sp: '日経225 ÷ S&P500',
+  nikkei_topix: '日経225 ÷ TOPIX(1306)',
+  brent_wti: 'ブレント − WTI スプレッド',
 };
+
+// yfinance 由来（FRED キー非依存）の指標。unavailable 時に FRED_API_KEY ヒントを出さない。
+const YFINANCE_INDICATORS = ['rsp_spy', 'nikkei_sp', 'nikkei_topix', 'brent_wti'];
+
+// 上昇=良好で安値線が意味を持つ指標（安値ラインをオーバーレイ表示する）。
+const LOW_LINE_INDICATORS = ['rsp_spy', 'nikkei_sp', 'nikkei_topix'];
 
 const SIGNAL_LINE_COLOR: Record<MacroSignal, string> = {
   green: 'var(--bull)',
@@ -32,6 +44,9 @@ function formatValue(value: number, unit: string): string {
   if (unit === 'ratio') {
     return value.toFixed(4);
   }
+  if (unit === 'usd_bbl') {
+    return `$${value.toFixed(2)}`;
+  }
   return new Intl.NumberFormat('en-US').format(value);
 }
 
@@ -41,6 +56,7 @@ function formatChange(change: number | null, unit: string): string {
   if (unit === 'bp') return `${sign}${change.toFixed(0)} bp`;
   if (unit === 'USD_trillion') return `${sign}${change.toFixed(2)}`;
   if (unit === 'ratio') return `${sign}${change.toFixed(4)}`;
+  if (unit === 'usd_bbl') return `${sign}$${change.toFixed(2)}`;
   return `${sign}${change}`;
 }
 
@@ -54,7 +70,7 @@ export function MacroCard({ indicator }: Props) {
   const subtitle = SUBTITLE[indicator.indicator] ?? '';
 
   const lowLine = useMemo(() => {
-    if (indicator.indicator !== 'rsp_spy' || series.length === 0) return null;
+    if (!LOW_LINE_INDICATORS.includes(indicator.indicator) || series.length === 0) return null;
     return Math.min(...series.map((p) => p.value));
   }, [indicator.indicator, series]);
 
@@ -91,7 +107,9 @@ export function MacroCard({ indicator }: Props) {
       ) : (
         <div className="macro-card-unavailable">
           データ取得不可
-          {indicator.indicator !== 'rsp_spy' && <div className="macro-hint">FRED_API_KEY 未設定</div>}
+          {!YFINANCE_INDICATORS.includes(indicator.indicator) && (
+            <div className="macro-hint">FRED_API_KEY 未設定</div>
+          )}
         </div>
       )}
     </div>
