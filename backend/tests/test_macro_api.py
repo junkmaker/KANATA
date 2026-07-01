@@ -45,13 +45,20 @@ def _fred_side_effect(series_id, start, end):
     return data.get(series_id, [])
 
 
-def _ohlcv_side_effect(symbol, timeframe):
-    t0, t1 = 1_700_000_000_000, 1_700_086_400_000
-    if symbol == "RSP":
-        return [{"t": t0, "c": 150.0}, {"t": t1, "c": 151.0}]
-    if symbol == "SPY":
-        return [{"t": t0, "c": 500.0}, {"t": t1, "c": 505.0}]
-    return []
+def _closes_side_effect(symbol):
+    d0, d1 = "2026-06-30", "2026-07-01"
+    data = {
+        "RSP": {d0: 150.0, d1: 151.0},
+        "SPY": {d0: 500.0, d1: 505.0},
+        "^N225": {d0: 39000.0, d1: 40000.0},
+        "^GSPC": {d0: 5100.0, d1: 5000.0},
+        "1306": {d0: 2500.0, d1: 2520.0},
+        # Brent-WTI spread of 12 -> "red" extra; used to prove it does NOT
+        # contaminate the overall signal (which is core-only).
+        "BZ=F": {d0: 78.0, d1: 78.0},
+        "CL=F": {d0: 66.0, d1: 66.0},
+    }
+    return data.get(symbol, {})
 
 
 @pytest.mark.integration
@@ -79,7 +86,7 @@ def test_net_liquidity_endpoint_shape(client):
 
 @pytest.mark.integration
 def test_rsp_spy_endpoint_shape(client):
-    with patch("src.services.macro_provider.fetch_ohlcv", side_effect=_ohlcv_side_effect):
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=_closes_side_effect):
         res = client.get(f"/api/macro/rsp-spy{WIDE}")
     assert res.status_code == 200
     body = res.json()
@@ -89,12 +96,24 @@ def test_rsp_spy_endpoint_shape(client):
 
 
 @pytest.mark.integration
+def test_brent_wti_endpoint_shape(client):
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=_closes_side_effect):
+        res = client.get(f"/api/macro/brent-wti{WIDE}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["indicator"] == "brent_wti"
+    assert body["unit"] == "usd_bbl"
+    assert body["series"][0]["value"] == pytest.approx(12.0, abs=1e-6)  # 78 - 66
+    assert body["meta"]["available"] is True
+
+
+@pytest.mark.integration
 def test_dashboard_partial_when_fred_key_missing(client):
     """No FRED key -> hy-oas/net-liquidity unavailable, rsp-spy still works."""
     with patch(
         "src.services.macro_provider.fetch_fred_series",
         side_effect=MissingFredKey("no key"),
-    ), patch("src.services.macro_provider.fetch_ohlcv", side_effect=_ohlcv_side_effect):
+    ), patch("src.services.macro_provider.fetch_daily_closes", side_effect=_closes_side_effect):
         res = client.get(f"/api/macro/dashboard{WIDE}")
     assert res.status_code == 200
     body = res.json()
@@ -108,12 +127,12 @@ def test_dashboard_partial_when_fred_key_missing(client):
 def test_dashboard_survives_yfinance_failure(client):
     """yfinance 障害でも dashboard は 502 にならず、FRED カードは生き残る。"""
 
-    def boom(symbol, timeframe):
+    def boom(symbol):
         raise RuntimeError("yfinance down")
 
     with patch(
         "src.services.macro_provider.fetch_fred_series", side_effect=_fred_side_effect
-    ), patch("src.services.macro_provider.fetch_ohlcv", side_effect=boom):
+    ), patch("src.services.macro_provider.fetch_daily_closes", side_effect=boom):
         res = client.get(f"/api/macro/dashboard{WIDE}")
     assert res.status_code == 200
     body = res.json()
@@ -127,12 +146,17 @@ def test_dashboard_survives_yfinance_failure(client):
 def test_dashboard_overall_signal_aggregation(client):
     with patch(
         "src.services.macro_provider.fetch_fred_series", side_effect=_fred_side_effect
-    ), patch("src.services.macro_provider.fetch_ohlcv", side_effect=_ohlcv_side_effect):
+    ), patch("src.services.macro_provider.fetch_daily_closes", side_effect=_closes_side_effect):
         res = client.get(f"/api/macro/dashboard{WIDE}")
     assert res.status_code == 200
     body = res.json()
     assert body["overall_signal"] in {"green", "yellow", "red", "gray"}
-    assert len(body["indicators"]) == 3
+    # Core 3 (hy_oas/net_liquidity/rsp_spy) + extra 3 (nikkei_sp/nikkei_topix/brent_wti).
+    assert len(body["indicators"]) == 6
+    by_key = {i["indicator"]: i for i in body["indicators"]}
+    for key in ("nikkei_sp", "nikkei_topix", "brent_wti"):
+        assert key in by_key
+    # (non-contamination of overall_signal is proven in test_macro_provider.py)
 
 
 @pytest.mark.integration

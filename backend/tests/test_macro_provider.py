@@ -9,7 +9,10 @@ import pytest
 from src.config.macro_config import load_macro_config
 from src.services.macro_provider import (
     _overall_signal,
+    build_brent_wti,
+    build_dashboard,
     build_net_liquidity,
+    build_nikkei_sp,
     build_rsp_spy,
     evaluate_signal,
 )
@@ -81,20 +84,20 @@ def test_net_liquidity_weekly_resample_no_nan():
 # RSP/SPY inner join
 # --------------------------------------------------------------------------- #
 def test_rsp_spy_inner_join_excludes_mismatched_days():
-    a, b, c, d = 1_700_000_000_000, 1_700_086_400_000, 1_700_172_800_000, 1_700_259_200_000
+    d1, d2, d3, d4 = "2026-06-28", "2026-06-29", "2026-06-30", "2026-07-01"
 
-    def ohlcv_side_effect(symbol, timeframe):
+    def closes_side_effect(symbol):
         if symbol == "RSP":
-            return [{"t": a, "c": 150.0}, {"t": b, "c": 151.0}, {"t": c, "c": 152.0}]
+            return {d1: 150.0, d2: 151.0, d3: 152.0}
         if symbol == "SPY":
-            return [{"t": b, "c": 500.0}, {"t": c, "c": 505.0}, {"t": d, "c": 510.0}]
-        return []
+            return {d2: 500.0, d3: 505.0, d4: 510.0}
+        return {}
 
-    with patch("src.services.macro_provider.fetch_ohlcv", side_effect=ohlcv_side_effect):
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
         result = build_rsp_spy("2020-01-01", "2030-01-01", CFG)
 
     series = result["series"]
-    # Only timestamps b and c are common to both series.
+    # Only d2 and d3 are common trading days to both series.
     assert len(series) == 2
     assert series[0]["value"] == pytest.approx(151.0 / 500.0, abs=1e-6)
     assert series[1]["value"] == pytest.approx(152.0 / 505.0, abs=1e-6)
@@ -103,10 +106,10 @@ def test_rsp_spy_inner_join_excludes_mismatched_days():
 def test_rsp_spy_degrades_to_unavailable_on_fetch_error():
     """yfinance が例外を投げても build_rsp_spy は落ちず unavailable に degrade する。"""
 
-    def boom(symbol, timeframe):
+    def boom(symbol):
         raise RuntimeError("yfinance down")
 
-    with patch("src.services.macro_provider.fetch_ohlcv", side_effect=boom):
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=boom):
         result = build_rsp_spy("2020-01-01", "2030-01-01", CFG)
 
     assert result["meta"]["available"] is False
@@ -118,19 +121,77 @@ def test_rsp_spy_available_without_fred_key(monkeypatch):
     """RSP/SPY uses yfinance only; works with no FRED key configured."""
     monkeypatch.delenv("FRED_API_KEY", raising=False)
 
-    def ohlcv_side_effect(symbol, timeframe):
-        t0, t1 = 1_700_000_000_000, 1_700_086_400_000
+    def closes_side_effect(symbol):
+        d1, d2 = "2026-06-30", "2026-07-01"
         if symbol == "RSP":
-            return [{"t": t0, "c": 150.0}, {"t": t1, "c": 151.0}]
+            return {d1: 150.0, d2: 151.0}
         if symbol == "SPY":
-            return [{"t": t0, "c": 500.0}, {"t": t1, "c": 505.0}]
-        return []
+            return {d1: 500.0, d2: 505.0}
+        return {}
 
-    with patch("src.services.macro_provider.fetch_ohlcv", side_effect=ohlcv_side_effect):
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
         result = build_rsp_spy("2020-01-01", "2030-01-01", CFG)
 
     assert result["meta"]["available"] is True
     assert len(result["series"]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Nikkei / Brent-WTI pair builders (yfinance two-symbol join)
+# --------------------------------------------------------------------------- #
+def test_nikkei_sp_ratio_inner_join():
+    """異なるタイムゾーン（東京 vs NY）でも同一取引日（ローカル暦日）で結合されることを検証。"""
+    d1, d2, d3, d4 = "2026-06-28", "2026-06-29", "2026-06-30", "2026-07-01"
+
+    def closes_side_effect(symbol):
+        if symbol == "^N225":
+            return {d1: 39000.0, d2: 39500.0, d3: 40000.0}
+        if symbol == "^GSPC":
+            return {d2: 5000.0, d3: 5100.0, d4: 5200.0}
+        return {}
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_sp("2020-01-01", "2030-01-01", CFG)
+
+    series = result["series"]
+    # Only d2 and d3 are common trading days to both series.
+    assert len(series) == 2
+    assert result["unit"] == "ratio"
+    assert series[0]["value"] == pytest.approx(39500.0 / 5000.0, abs=1e-6)
+    assert series[1]["value"] == pytest.approx(40000.0 / 5100.0, abs=1e-6)
+
+
+def test_brent_wti_diff():
+    d1, d2 = "2026-06-30", "2026-07-01"
+
+    def closes_side_effect(symbol):
+        if symbol == "BZ=F":
+            return {d1: 70.0, d2: 71.0}
+        if symbol == "CL=F":
+            return {d1: 66.0, d2: 66.5}
+        return {}
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_brent_wti("2020-01-01", "2030-01-01", CFG)
+
+    series = result["series"]
+    assert result["unit"] == "usd_bbl"
+    assert series[0]["value"] == pytest.approx(4.0, abs=1e-6)  # 70 - 66
+    assert series[1]["value"] == pytest.approx(4.5, abs=1e-6)  # 71 - 66.5
+
+
+def test_brent_wti_degrades_to_unavailable_on_fetch_error():
+    """yfinance が例外を投げても build_brent_wti は落ちず unavailable に degrade する。"""
+
+    def boom(symbol):
+        raise RuntimeError("yfinance down")
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=boom):
+        result = build_brent_wti("2020-01-01", "2030-01-01", CFG)
+
+    assert result["meta"]["available"] is False
+    assert result["signal"] == "gray"
+    assert result["series"] == []
 
 
 # --------------------------------------------------------------------------- #
@@ -173,6 +234,42 @@ def test_signal_rsp_spy_yellow_near_low():
     assert evaluate_signal("rsp_spy", _series(values), CFG) == "yellow"
 
 
+def test_signal_nikkei_sp_red_on_new_low():
+    values = [0.8 - i * 0.001 for i in range(30)]  # strictly decreasing -> latest is min
+    assert evaluate_signal("nikkei_sp", _series(values), CFG) == "red"
+
+
+def test_signal_nikkei_sp_yellow_on_downtrend():
+    # latest below the value 8 points ago, but not the window minimum (index 0 lowest).
+    values = [5.0, 20.0, 19.0, 18.0, 17.0, 16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0]
+    assert evaluate_signal("nikkei_sp", _series(values), CFG) == "yellow"
+
+
+def test_signal_nikkei_sp_green_on_uptrend():
+    values = [0.8 + i * 0.001 for i in range(30)]  # strictly increasing
+    assert evaluate_signal("nikkei_sp", _series(values), CFG) == "green"
+
+
+def test_signal_brent_wti_red_on_inversion():
+    values = [3.0, -0.5]  # spread <= 0 -> inversion
+    assert evaluate_signal("brent_wti", _series(values), CFG) == "red"
+
+
+def test_signal_brent_wti_red_on_extreme_widening():
+    values = [3.0, 12.0]  # spread >= 10 -> extreme
+    assert evaluate_signal("brent_wti", _series(values), CFG) == "red"
+
+
+def test_signal_brent_wti_yellow_out_of_band():
+    values = [3.0, 8.0]  # above the green band max (7) but below extreme (10)
+    assert evaluate_signal("brent_wti", _series(values), CFG) == "yellow"
+
+
+def test_signal_brent_wti_green_in_band():
+    values = [2.0, 3.0]  # within the normal band ($1.5-7)
+    assert evaluate_signal("brent_wti", _series(values), CFG) == "green"
+
+
 # --------------------------------------------------------------------------- #
 # Overall signal rule
 # --------------------------------------------------------------------------- #
@@ -198,3 +295,50 @@ def test_overall_green_when_single_yellow():
 def test_overall_gray_when_none_available():
     indicators = [_ind("gray", available=False), _ind("gray", available=False)]
     assert _overall_signal(indicators, CFG) == "gray"
+
+
+# --------------------------------------------------------------------------- #
+# Dashboard: extras are display-only and must not contaminate overall_signal
+# --------------------------------------------------------------------------- #
+def test_dashboard_extras_do_not_contaminate_overall():
+    """Core 3 が全て green のとき、extra の brent_wti が red でも overall は green のまま。"""
+
+    def fred_side_effect(series_id, start, end):
+        data = {
+            # HY OAS 縮小トレンド -> green（新高値でも 50bp 拡大でもない）
+            "BAMLH0A0HYM2": [{"date": "2026-01-07", "value": 3.2}, {"date": "2026-01-14", "value": 3.0}],
+            # 純流動性 上昇 -> green
+            "WALCL": [{"date": "2026-01-07", "value": 7_000_000}, {"date": "2026-01-14", "value": 7_500_000}],
+            "RRPONTSYD": [{"date": "2026-01-06", "value": 400.0}, {"date": "2026-01-13", "value": 400.0}],
+            "WTREGEN": [{"date": "2026-01-07", "value": 700.0}, {"date": "2026-01-14", "value": 700.0}],
+        }
+        return data.get(series_id, [])
+
+    def closes_side_effect(symbol):
+        d0, d1 = "2026-06-30", "2026-07-01"
+        data = {
+            # RSP/SPY 比率が低値から大きく上昇 -> green
+            "RSP": {d0: 150.0, d1: 200.0},
+            "SPY": {d0: 500.0, d1: 500.0},
+            "^N225": {d0: 39000.0, d1: 40000.0},
+            "^GSPC": {d0: 5100.0, d1: 5000.0},
+            "1306": {d0: 2500.0, d1: 2520.0},
+            # ブレント-WTI スプレッド 12 -> red（extra だが overall には影響しない想定）
+            "BZ=F": {d0: 78.0, d1: 78.0},
+            "CL=F": {d0: 66.0, d1: 66.0},
+        }
+        return data.get(symbol, {})
+
+    with patch(
+        "src.services.macro_provider.fetch_fred_series", side_effect=fred_side_effect
+    ), patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_dashboard("2020-01-01", "2030-01-01", CFG)
+
+    by_key = {i["indicator"]: i for i in result["indicators"]}
+    assert len(result["indicators"]) == 6
+    # Core all green, extra brent_wti red -> overall stays green (extras excluded).
+    assert by_key["hy_oas"]["signal"] == "green"
+    assert by_key["net_liquidity"]["signal"] == "green"
+    assert by_key["rsp_spy"]["signal"] == "green"
+    assert by_key["brent_wti"]["signal"] == "red"
+    assert result["overall_signal"] == "green"

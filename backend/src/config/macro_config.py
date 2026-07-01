@@ -25,6 +25,11 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "walcl": "WALCL",
         "rrp": "RRPONTSYD",
         "tga": "WTREGEN",
+        "nikkei": "^N225",
+        "sp500": "^GSPC",
+        "topix_etf": "1306",
+        "brent": "BZ=F",
+        "wti": "CL=F",
     },
     "default_lookback_days": 730,
     "thresholds": {
@@ -40,6 +45,20 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "rsp_spy": {
             "near_low_pct": 2.0,
             "low_lookback_points": 60,
+        },
+        "nikkei_sp": {
+            "low_lookback_points": 26,
+            "downtrend_lookback_points": 8,
+        },
+        "nikkei_topix": {
+            "low_lookback_points": 26,
+            "downtrend_lookback_points": 8,
+        },
+        "brent_wti": {
+            "green_band_min": 1.5,
+            "green_band_max": 7.0,
+            "red_inversion_max": 0.0,
+            "red_extreme_min": 10.0,
         },
     },
     "overall": {
