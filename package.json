@@ -91,10 +91,12 @@
     "@biomejs/biome": "^2.4.14",
     "@biomejs/cli-win32-x64": "^2.4.14",
     "@playwright/test": "^1.52.0",
+    "@resvg/resvg-js": "^2.6.2",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
     "jsdom": "^26.1.0",
+    "png-to-ico": "^2.1.8",
     "typescript": "^5.6.0",
     "vitest": "^3.2.0"
   },
