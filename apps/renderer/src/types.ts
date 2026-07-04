@@ -98,6 +98,20 @@ export interface DrawingObject {
   text?: string;
 }
 
+// --- Candlestick patterns ---
+export type CandlePatternType = 'bullish_engulfing' | 'doji' | 'evening_star' | 'hammer';
+export type PatternSignal = 'bullish' | 'bearish' | 'neutral';
+
+export interface PatternMatch {
+  type: CandlePatternType;
+  signal: PatternSignal;
+  label: string; // 例: '陽線包み'
+  idx: number; // プライマリ OHLC 配列のバー index（パターン確定バー）
+  spanStart: number; // ハイライト枠開始 index（単一足なら idx と同じ）
+  spanEnd: number; // ハイライト枠終了 index（確定バー、宵の明星は idx）
+  t: number; // 確定バーの時刻（ms）
+}
+
 export interface AppState {
   selected: string[];
   timeframe: string;
@@ -111,6 +125,7 @@ export interface AppState {
   indicators: IndicatorState;
   financial: FinancialState;
   indicatorParams: IndicatorParams;
+  patternFilter: CandlePatternType | 'all';
 }
 
 export interface YRange {

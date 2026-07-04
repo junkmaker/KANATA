@@ -3,7 +3,7 @@ import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, PaneId, Ticker, YRange } from '../../types';
+import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, PaneId, PatternMatch, Ticker, YRange } from '../../types';
 import { addAlert } from '../../lib/alertStorage';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
@@ -11,6 +11,7 @@ import { drawStoch } from './subpanes/drawStoch';
 import { drawLine } from './subpanes/drawUtils';
 import { drawVolume } from './subpanes/drawVolume';
 import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers';
+import { drawPatternHighlights, drawPatternMarkers } from './overlays/drawPatternMarkers';
 import { buildSqEventMap } from '../../lib/sqEvents';
 import type { SqEvent } from '../../lib/sqEvents';
 import { barTimestampAt } from '../../lib/futureBars';
@@ -26,6 +27,7 @@ interface ChartProps {
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   tickers: Ticker[];
   data: Record<string, OHLCBar[]>;
+  patternMatches?: Map<number, PatternMatch[]>;
 }
 
 function useSize(ref: React.RefObject<HTMLElement | null>) {
@@ -52,7 +54,7 @@ function getSnapMode(tool: string): SnapMode {
   return 'highlow';
 }
 
-export function Chart({ state, setState, tickers, data }: ChartProps) {
+export function Chart({ state, setState, tickers, data, patternMatches }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -375,6 +377,20 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
       drawLine(ctx, xScale, toY(indi.boll.lower), 'oklch(0.75 0.07 220 / 0.85)', 1);
     }
 
+    // Pattern highlight boxes (multi-bar spans, drawn under candles inside clip)
+    if (patternMatches?.size && primaryData) {
+      drawPatternHighlights({
+        ctx,
+        xScale,
+        yScale,
+        bars: primaryData,
+        matchesByBar: patternMatches,
+        viewStart: view.start,
+        viewEnd: dataEnd,
+        bw,
+      });
+    }
+
     // Candles
     for (let i = view.start; i < dataEnd; i++) {
       const b = primaryData[i];
@@ -431,6 +447,21 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
         viewStart: view.start,
         viewEnd: view.end,
         labelY: PAD_T + 2,
+      });
+    }
+
+    // Candlestick pattern arrows + labels (drawn after restore, over candles)
+    if (patternMatches?.size && primaryData) {
+      drawPatternMarkers({
+        ctx,
+        xScale,
+        yScale,
+        bars: primaryData,
+        matchesByBar: patternMatches,
+        viewStart: view.start,
+        viewEnd: dataEnd,
+        padT: PAD_T,
+        priceBottom: PAD_T + priceH,
       });
     }
 
@@ -713,6 +744,7 @@ export function Chart({ state, setState, tickers, data }: ChartProps) {
     params,
     finHistory,
     sqEventMap,
+    patternMatches,
     dataEnd,
   ]);
 

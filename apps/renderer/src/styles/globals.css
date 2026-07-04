@@ -81,7 +81,8 @@ input { font: inherit; color: inherit; }
   grid-template-columns: var(--panel-w-l) 1fr var(--panel-w-r);
   min-height: 0;
 }
-.main-grid.macro-view {
+.main-grid.macro-view,
+.main-grid.pattern-grid {
   grid-template-columns: 1fr;
   overflow: hidden;
 }
