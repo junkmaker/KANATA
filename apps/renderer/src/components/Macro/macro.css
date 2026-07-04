@@ -155,6 +155,73 @@
   border-radius: 50%;
 }
 
+.macro-info-trigger {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+}
+
+.macro-info-trigger:hover,
+.macro-info-trigger:focus-visible {
+  color: var(--text);
+  border-color: var(--text-soft);
+}
+
+.macro-tooltip {
+  position: fixed;
+  z-index: 1000;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.macro-tooltip-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.macro-tooltip-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.macro-tooltip-text {
+  color: var(--text-soft);
+}
+
+.macro-tooltip-criteria-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.macro-tooltip-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translateY(1px);
+}
+
 .macro-periods {
   display: flex;
   gap: 6px;
