@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useMacroDashboard } from '../../hooks/useMacroDashboard';
 import type { MacroPeriod, MacroSignal } from '../../types';
-import { MacroCard } from './MacroCard';
+import { InfoTooltip } from './InfoTooltip';
+import { MacroCard, MacroInfoBody } from './MacroCard';
+import { OVERALL_INFO } from './macroInfo';
 import { SignalBadge } from './SignalBadge';
 import './macro.css';
 
@@ -26,6 +28,10 @@ export function MacroDashboard() {
             <span className="macro-overall-label">総合シグナル</span>
             <SignalBadge signal={data.overall_signal} />
             <span className="macro-overall-text">{OVERALL_TEXT[data.overall_signal]}</span>
+            <InfoTooltip
+              content={<MacroInfoBody title="総合シグナル" info={OVERALL_INFO} />}
+              label="総合シグナルの解説"
+            />
           </>
         ) : (
           <span className="macro-overall-label">
