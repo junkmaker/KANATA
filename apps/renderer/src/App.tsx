@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Chart } from './components/Chart/Chart';
 import { MacroDashboard } from './components/Macro/MacroDashboard';
+import { PatternView } from './components/Patterns/PatternView';
 import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { RightPanel } from './components/RightPanel/RightPanel';
 import { StatusBar } from './components/StatusBar';
@@ -18,11 +19,13 @@ import './styles/globals.css';
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
 const VIEW_KEY = 'kanata.view';
 
-type View = 'chart' | 'macro';
+type View = 'chart' | 'pattern' | 'macro';
 
 function loadView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'macro' ? 'macro' : 'chart';
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === 'macro' || v === 'pattern') return v;
+    return 'chart';
   } catch {
     return 'chart';
   }
@@ -55,6 +58,7 @@ const DEFAULT_STATE: AppState = {
     macd: { fast: 12, slow: 26, signal: 9 },
     rsi: { period: 14, overbought: 70, oversold: 30 },
   },
+  patternFilter: 'all',
 };
 
 function loadState(): AppState {
@@ -282,6 +286,10 @@ export function App() {
       {view === 'macro' ? (
         <div className="main-grid macro-view">
           <MacroDashboard />
+        </div>
+      ) : view === 'pattern' ? (
+        <div className="main-grid pattern-grid">
+          <PatternView state={state} setState={setState} tickers={displayTickers} data={data} />
         </div>
       ) : (
         <div className="main-grid">

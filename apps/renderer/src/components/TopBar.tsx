@@ -3,7 +3,7 @@ import { fmtPrice } from '../lib/formatters';
 import type { AppState, OHLCBar, Ticker } from '../types';
 import { WindowControls } from './WindowControls';
 
-type View = 'chart' | 'macro';
+type View = 'chart' | 'pattern' | 'macro';
 
 interface TopBarProps {
   state: AppState;
@@ -71,6 +71,13 @@ export function TopBar({
           onClick={() => onViewChange('chart')}
         >
           チャート
+        </button>
+        <button
+          type="button"
+          className={`view-tab ${view === 'pattern' ? 'active' : ''}`}
+          onClick={() => onViewChange('pattern')}
+        >
+          パターン
         </button>
         <button
           type="button"
