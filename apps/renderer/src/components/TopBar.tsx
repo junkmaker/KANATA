@@ -59,7 +59,7 @@ export function TopBar({
           </svg>
         </div>
         <div className="brand-text">
-          <div className="brand-name">KANATA /TERMINAL</div>
+          <div className="brand-name">KANATA</div>
           <div className="brand-sub">chart · v0.4.1</div>
         </div>
       </div>
