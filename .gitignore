@@ -23,6 +23,8 @@ resources/backend/
 
 # Debug / temporary
 package_debug.json
+test-results/
+playwright-report/
 
 # Office documents
 docs/*.docx
