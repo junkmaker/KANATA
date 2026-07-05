@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchFundamentals } from '../../lib/api';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
+import { toggleSelection } from '../../lib/selection';
 import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
 import { AddSymbolForm } from './AddSymbolForm';
 import { WatchlistSelector } from './WatchlistSelector';
@@ -95,14 +96,7 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
   }, [primaryTicker?.code]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (code: string) => {
-    setState((s) => {
-      const sel = s.selected.includes(code)
-        ? s.selected.filter((c) => c !== code)
-        : [...s.selected, code];
-      if (sel.length === 0) return s;
-      if (sel.length > 6) sel.shift();
-      return { ...s, selected: sel };
-    });
+    setState((s) => ({ ...s, selected: toggleSelection(s.selected, code, s.compareMode) }));
   };
 
   const makePrimary = (code: string) => {
