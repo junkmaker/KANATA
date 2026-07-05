@@ -12,6 +12,7 @@ import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
 import { subscribeBackendUrlChange } from './lib/backendUrl';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
+import { clampSelectionForMode } from './lib/selection';
 import { watchlistToTickers } from './lib/watchlistTickers';
 import type { AppState } from './types';
 import './styles/globals.css';
@@ -66,7 +67,7 @@ function loadState(): AppState {
     const s = localStorage.getItem('kanata.state');
     if (s) {
       const saved = JSON.parse(s);
-      return {
+      const merged: AppState = {
         ...DEFAULT_STATE,
         ...saved,
         indicators: { ...DEFAULT_STATE.indicators, ...(saved.indicators || {}) },
@@ -75,6 +76,8 @@ function loadState(): AppState {
           rsi: { ...DEFAULT_STATE.indicatorParams.rsi, ...(saved.indicatorParams?.rsi || {}) },
         },
       };
+      // 比較を非表示のときは単一選択を不変条件として保証する（永続状態が複数でも起動時に正規化）
+      return { ...merged, selected: clampSelectionForMode(merged.selected, merged.compareMode) };
     }
   } catch {
     /* noop */

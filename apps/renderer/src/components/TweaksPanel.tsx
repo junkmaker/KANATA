@@ -1,3 +1,4 @@
+import { clampSelectionForMode } from '../lib/selection';
 import type { AppState } from '../types';
 import { ApiKeyField } from './Settings/ApiKeyField';
 
@@ -52,7 +53,12 @@ export function TweaksPanel({
       <div className="tweaks-row">
         <div className="tweak-label">SQ・ウィッチング</div>
         <div className="tweak-chips">
-          {([['true', '表示'], ['false', '非表示']] as [string, string][]).map(([id, label]) => (
+          {(
+            [
+              ['true', '表示'],
+              ['false', '非表示'],
+            ] as [string, string][]
+          ).map(([id, label]) => (
             <button
               key={id}
               className={`chip${String(state.showSqMarkers) === id ? ' on' : ''}`}
@@ -76,7 +82,13 @@ export function TweaksPanel({
             <button
               key={id}
               className={`chip${state.compareMode === id ? ' on' : ''}`}
-              onClick={() => setState((s) => ({ ...s, compareMode: id }))}
+              onClick={() =>
+                setState((s) => ({
+                  ...s,
+                  compareMode: id,
+                  selected: clampSelectionForMode(s.selected, id),
+                }))
+              }
             >
               {label}
             </button>
