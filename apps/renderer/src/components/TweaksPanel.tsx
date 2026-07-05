@@ -4,8 +4,6 @@ import { ApiKeyField } from './Settings/ApiKeyField';
 interface TweaksPanelProps {
   aesthetic: string;
   setAesthetic: (v: string) => void;
-  density: string;
-  setDensity: (v: string) => void;
   onClose: () => void;
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -14,8 +12,6 @@ interface TweaksPanelProps {
 export function TweaksPanel({
   aesthetic,
   setAesthetic,
-  density,
-  setDensity,
   onClose,
   state,
   setState,
@@ -46,21 +42,6 @@ export function TweaksPanel({
               key={id}
               className={`chip${aesthetic === id ? ' on' : ''}`}
               onClick={() => setAesthetic(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="tweaks-row">
-        <div className="tweak-label">表示密度</div>
-        <div className="tweak-chips">
-          {([['compact', 'コンパクト'], ['comfortable', 'ゆったり']] as [string, string][]).map(([id, label]) => (
-            <button
-              key={id}
-              className={`chip${density === id ? ' on' : ''}`}
-              onClick={() => setDensity(id)}
             >
               {label}
             </button>

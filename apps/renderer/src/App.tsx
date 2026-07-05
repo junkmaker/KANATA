@@ -101,14 +101,6 @@ export function App() {
       return 'dark-blue';
     }
   });
-  const [density, setDensity] = useState(() => {
-    try {
-      return localStorage.getItem('kanata.density') || 'comfortable';
-    } catch {
-      return 'comfortable';
-    }
-  });
-
   const [view, setView] = useState<View>(loadView);
 
   const wl = useWatchlists();
@@ -182,15 +174,6 @@ export function App() {
     }
     document.documentElement.dataset.aesthetic = aesthetic;
   }, [aesthetic]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('kanata.density', density);
-    } catch {
-      /* noop */
-    }
-    document.documentElement.dataset.density = density;
-  }, [density]);
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
@@ -317,8 +300,6 @@ export function App() {
         <TweaksPanel
           aesthetic={aesthetic}
           setAesthetic={setAesthetic}
-          density={density}
-          setDensity={setDensity}
           onClose={() => setTweaksOpen(false)}
           state={state}
           setState={setState}

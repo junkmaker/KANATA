@@ -145,7 +145,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 
 ### フロントエンド (`apps/renderer/src/`)
 
-- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.density` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view`（チャート⇔マクロ）。`view` 切替で main-grid をチャート 3 ペイン or `MacroDashboard` に出し分け（既存フックは Rules of Hooks 順守で無条件に呼び続ける）
+- `App.tsx` — 全状態の単一ソース。`localStorage` キーは `kanata.state` / `kanata.aesthetic` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view`（チャート⇔マクロ）。`view` 切替で main-grid をチャート 3 ペイン or `MacroDashboard` に出し分け（既存フックは Rules of Hooks 順守で無条件に呼び続ける）
 - `components/Macro/` — `MacroDashboard`（総合シグナル + 3 カード + 期間 3M/6M/1Y/2Y 切替、`useMacroDashboard` フック使用）/ `MacroCard` / `MacroLineChart`（軽量 Canvas 折れ線、閾値・安値線オーバーレイ、devicePixelRatio 対応、CSS 変数は `getComputedStyle` で解決）/ `SignalBadge`（緑/黄/赤/グレー）/ `macro.css`
 - `lib/macroApi.ts` — マクロ 4 エンドポイントの fetch ラッパ。**§6 の生レスポンスを返す（envelope を剥がさない）**。`MacroPeriod` を `start` クエリへ変換
 - `hooks/useMacroDashboard.ts` — `period` 依存で dashboard を取得（`status: 'loading' | 'ready' | 'offline'`、cancelled ガード）
@@ -161,7 +161,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `lib/data.ts` — `genSeries`（未知銘柄向けプレースホルダー OHLC）+ `retime()` でタイムフレーム変換。15 銘柄の事前生成は廃止済み
 - `lib/futureBars.ts` — 未来バーの時刻計算ヘルパ。`nextBarTimestamp(prevT, tf)` でタイムフレームごとの次バー時刻を返し、`barTimestampAt(data, idx, tf)` でデータ範囲外のインデックスにも安全に対応する
 - `hooks/useChartData.ts` — `symbols.join(',')` を useEffect 依存にして配列の参照等価性問題を回避している
-- `styles/globals.css` — 4 種カラーテーマ (`data-aesthetic`) + 2 種密度 (`data-density`) を CSS カスタムプロパティで切替
+- `styles/globals.css` — 4 種カラーテーマ (`data-aesthetic`) を CSS カスタムプロパティで切替。表示密度はコンパクト固定（`--row-h` / パネル幅を `:root` に定義）
 
 ### 共有型 (`packages/shared-types/src/index.ts`)
 
