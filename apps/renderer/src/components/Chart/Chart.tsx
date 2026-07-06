@@ -3,7 +3,18 @@ import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
-import type { AlertDirection, AppState, DrawingObject, FinBar, IndiData, OHLCBar, PaneId, PatternMatch, Ticker, YRange } from '../../types';
+import type {
+  AlertDirection,
+  AppState,
+  DrawingObject,
+  FinBar,
+  IndiData,
+  OHLCBar,
+  PaneId,
+  PatternMatch,
+  Ticker,
+  YRange,
+} from '../../types';
 import { addAlert } from '../../lib/alertStorage';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
@@ -28,6 +39,7 @@ interface ChartProps {
   tickers: Ticker[];
   data: Record<string, OHLCBar[]>;
   patternMatches?: Map<number, PatternMatch[]>;
+  allowPaneExpand?: boolean;
 }
 
 function useSize(ref: React.RefObject<HTMLElement | null>) {
@@ -54,7 +66,7 @@ function getSnapMode(tool: string): SnapMode {
   return 'highlow';
 }
 
-export function Chart({ state, setState, tickers, data, patternMatches }: ChartProps) {
+export function Chart({ state, setState, tickers, data, patternMatches, allowPaneExpand = true }: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -90,21 +102,60 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     };
   }, [primary, state.showFinancial]);
 
+  type ExpandablePane = 'stoch' | 'macd' | 'rsi';
+  const [expandedPane, setExpandedPane] = useState<ExpandablePane | null>(null);
+  const isExpanded = allowPaneExpand && expandedPane !== null;
+
+  useEffect(() => {
+    if (expandedPane && !state.indicators[expandedPane]) setExpandedPane(null);
+  }, [state.indicators, expandedPane]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primary/state.timeframeは値を使わずトリガーとしてのみ利用
+  useEffect(() => {
+    setExpandedPane(null);
+  }, [primary, state.timeframe]);
+
   const PAD_L = 12,
     PAD_R = 72,
     PAD_T = 12;
-  const VOL_H = state.showVolume ? 64 : 0;
-  const STOCH_H = state.indicators.stoch ? 72 : 0;
-  const MACD_H = state.indicators.macd ? 72 : 0;
-  const RSI_H = state.indicators.rsi ? 72 : 0;
-  const FIN_H = state.showFinancial ? 96 : 0;
+  const rawVolH = state.showVolume ? 64 : 0;
+  const rawStochH = state.indicators.stoch ? 72 : 0;
+  const rawMacdH = state.indicators.macd ? 72 : 0;
+  const rawRsiH = state.indicators.rsi ? 72 : 0;
+  const rawFinH = state.showFinancial ? 96 : 0;
   const X_AXIS_H = 22;
-  const gapsToLastPane =
-    FIN_H > 0 ? 76 : RSI_H > 0 ? 58 : MACD_H > 0 ? 40 : STOCH_H > 0 ? 22 : VOL_H > 0 ? 4 : 0;
-  const priceH = Math.max(
-    120,
-    size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T - gapsToLastPane,
-  );
+
+  const gapsBeforeExpanded =
+    expandedPane === 'rsi' ? 58 : expandedPane === 'macd' ? 40 : expandedPane === 'stoch' ? 22 : 0;
+  const expandedH = isExpanded
+    ? Math.max(120, size.h - X_AXIS_H - PAD_T - gapsBeforeExpanded - 4)
+    : 0;
+
+  const VOL_H = isExpanded ? 0 : rawVolH;
+  const FIN_H = isExpanded ? 0 : rawFinH;
+  const STOCH_H = isExpanded ? (expandedPane === 'stoch' ? expandedH : 0) : rawStochH;
+  const MACD_H = isExpanded ? (expandedPane === 'macd' ? expandedH : 0) : rawMacdH;
+  const RSI_H = isExpanded ? (expandedPane === 'rsi' ? expandedH : 0) : rawRsiH;
+
+  const gapsToLastPane = isExpanded
+    ? 0
+    : FIN_H > 0
+      ? 76
+      : RSI_H > 0
+        ? 58
+        : MACD_H > 0
+          ? 40
+          : STOCH_H > 0
+            ? 22
+            : VOL_H > 0
+              ? 4
+              : 0;
+  const priceH = isExpanded
+    ? 0
+    : Math.max(
+        120,
+        size.h - VOL_H - STOCH_H - MACD_H - RSI_H - FIN_H - X_AXIS_H - PAD_T - gapsToLastPane,
+      );
   const priceW = size.w - PAD_L - PAD_R;
 
   const volY0 = PAD_T + priceH + 4;
@@ -153,7 +204,9 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     if (!state.showSqMarkers || !primaryData || !SQ_TIMEFRAMES.has(state.timeframe)) {
       return new Map<number, SqEvent[]>();
     }
-    const market = (tickers.find((t) => t.code === primary)?.market === 'JP' ? 'JP' : 'US') as 'JP' | 'US';
+    const market = (tickers.find((t) => t.code === primary)?.market === 'JP' ? 'JP' : 'US') as
+      | 'JP'
+      | 'US';
     return buildSqEventMap(primaryData, state.timeframe, market, MAX_FUTURE_BARS);
   }, [primaryData, state.timeframe, state.showSqMarkers, tickers, primary]);
 
@@ -185,10 +238,14 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
   const macdYRange = useMemo(() => {
     if (!indi.macd) return { min: -0.001, max: 0.001 };
     const { macd: macdLine, signal: signalLine, histogram } = indi.macd;
-    let min = Infinity, max = -Infinity;
+    let min = Infinity,
+      max = -Infinity;
     for (let i = view.start; i < view.end; i++) {
       for (const v of [macdLine[i], signalLine[i], histogram[i]]) {
-        if (v != null) { if (v > max) max = v; if (v < min) min = v; }
+        if (v != null) {
+          if (v > max) max = v;
+          if (v < min) min = v;
+        }
       }
     }
     if (min === Infinity) return { min: -0.001, max: 0.001 };
@@ -225,7 +282,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         id: 'price',
         y0: PAD_T,
         height: priceH,
-        active: true,
+        active: !isExpanded,
         yScale: (v) => PAD_T + (1 - (v - yRange.min) / (yRange.max - yRange.min)) * priceH,
         yInvert: (py) => yRange.max - ((py - PAD_T) / priceH) * (yRange.max - yRange.min),
         fmtVal: (v) => fmtPrice(v, cur),
@@ -234,7 +291,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         id: 'stoch',
         y0: stochY0,
         height: STOCH_H,
-        active: state.indicators.stoch,
+        active: isExpanded ? expandedPane === 'stoch' : state.indicators.stoch,
         yScale: (v) => stochY0 + (1 - v / 100) * (STOCH_H - 4),
         yInvert: (py) => (1 - (py - stochY0) / Math.max(1, STOCH_H - 4)) * 100,
         fmtVal: (v) => v.toFixed(1),
@@ -243,25 +300,41 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         id: 'macd',
         y0: macdY0,
         height: MACD_H,
-        active: state.indicators.macd,
-        yScale: (v) => macdY0 + (1 - (v - macdYRange.min) / (macdYRange.max - macdYRange.min)) * (MACD_H - 4),
-        yInvert: (py) => macdYRange.min + (1 - (py - macdY0) / Math.max(1, MACD_H - 4)) * (macdYRange.max - macdYRange.min),
+        active: isExpanded ? expandedPane === 'macd' : state.indicators.macd,
+        yScale: (v) =>
+          macdY0 + (1 - (v - macdYRange.min) / (macdYRange.max - macdYRange.min)) * (MACD_H - 4),
+        yInvert: (py) =>
+          macdYRange.min +
+          (1 - (py - macdY0) / Math.max(1, MACD_H - 4)) * (macdYRange.max - macdYRange.min),
         fmtVal: (v) => v.toFixed(4),
       },
       {
         id: 'rsi',
         y0: rsiY0,
         height: RSI_H,
-        active: state.indicators.rsi,
+        active: isExpanded ? expandedPane === 'rsi' : state.indicators.rsi,
         yScale: (v) => rsiY0 + (1 - v / 100) * (RSI_H - 4),
         yInvert: (py) => (1 - (py - rsiY0) / Math.max(1, RSI_H - 4)) * 100,
         fmtVal: (v) => v.toFixed(1),
       },
     ];
   }, [
-    priceH, yRange, stochY0, STOCH_H, macdY0, MACD_H, macdYRange, rsiY0, RSI_H,
-    state.indicators.stoch, state.indicators.macd, state.indicators.rsi,
-    tickers, primary,
+    priceH,
+    yRange,
+    stochY0,
+    STOCH_H,
+    macdY0,
+    MACD_H,
+    macdYRange,
+    rsiY0,
+    RSI_H,
+    state.indicators.stoch,
+    state.indicators.macd,
+    state.indicators.rsi,
+    tickers,
+    primary,
+    isExpanded,
+    expandedPane,
   ]);
 
   const getPaneAt = useCallback(
@@ -270,7 +343,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         if (!pane.active) continue;
         if (sy >= pane.y0 && sy < pane.y0 + pane.height) return pane;
       }
-      return paneDefs[0];
+      return paneDefs.find((p) => p.active) ?? paneDefs[0];
     },
     [paneDefs],
   );
@@ -295,18 +368,20 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     ctx.font = '11px "JetBrains Mono", monospace';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = COLORS.muted;
-    const nLines = 6;
-    for (let i = 0; i <= nLines; i++) {
-      const y = PAD_T + (priceH / nLines) * i;
-      ctx.strokeStyle = i === 0 || i === nLines ? COLORS.grid : COLORS.gridSoft;
-      ctx.beginPath();
-      ctx.moveTo(PAD_L, Math.round(y) + 0.5);
-      ctx.lineTo(PAD_L + priceW, Math.round(y) + 0.5);
-      ctx.stroke();
-      const v = yRange.max - (yRange.max - yRange.min) * (i / nLines);
-      ctx.textAlign = 'left';
-      const tk = tickers.find((t) => t.code === primary);
-      ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, y);
+    if (!isExpanded) {
+      const nLines = 6;
+      for (let i = 0; i <= nLines; i++) {
+        const y = PAD_T + (priceH / nLines) * i;
+        ctx.strokeStyle = i === 0 || i === nLines ? COLORS.grid : COLORS.gridSoft;
+        ctx.beginPath();
+        ctx.moveTo(PAD_L, Math.round(y) + 0.5);
+        ctx.lineTo(PAD_L + priceW, Math.round(y) + 0.5);
+        ctx.stroke();
+        const v = yRange.max - (yRange.max - yRange.min) * (i / nLines);
+        ctx.textAlign = 'left';
+        const tk = tickers.find((t) => t.code === primary);
+        ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, y);
+      }
     }
 
     const xAxisGridBottom = FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H;
@@ -336,184 +411,196 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
       });
     }
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(PAD_L, PAD_T, priceW, priceH);
-    ctx.clip();
-
-    // Ichimoku cloud (behind candles)
-    if (state.indicators.ichi && indi.ichi) {
-      const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
+    if (!isExpanded) {
+      ctx.save();
       ctx.beginPath();
-      let first = true;
-      for (let i = view.start; i < dataEnd; i++) {
-        if (senkouA[i] == null || senkouB[i] == null) continue;
-        const x = xScale(i);
-        if (first) {
-          ctx.moveTo(x, yScale(senkouA[i]!));
-          first = false;
-        } else ctx.lineTo(x, yScale(senkouA[i]!));
-      }
-      for (let i = dataEnd - 1; i >= view.start; i--) {
-        if (senkouA[i] == null || senkouB[i] == null) continue;
-        ctx.lineTo(xScale(i), yScale(senkouB[i]!));
-      }
-      ctx.closePath();
-      const midI = Math.floor((view.start + dataEnd) / 2);
-      const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
-      ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
-      ctx.fill();
-      const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
-      drawLine(ctx, xScale, toY(tenkan), COLORS.magenta, 1.25);
-      drawLine(ctx, xScale, toY(kijun), COLORS.accent, 1.25);
-      drawLine(ctx, xScale, toY(chikou), COLORS.muted, 1, [4, 3]);
-    }
+      ctx.rect(PAD_L, PAD_T, priceW, priceH);
+      ctx.clip();
 
-    // Bollinger bands
-    if (state.indicators.boll && indi.boll) {
-      const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
-      drawLine(ctx, xScale, toY(indi.boll.upper), 'oklch(0.75 0.07 220 / 0.85)', 1);
-      drawLine(ctx, xScale, toY(indi.boll.mid), 'oklch(0.70 0.05 220 / 0.7)', 1, [3, 3]);
-      drawLine(ctx, xScale, toY(indi.boll.lower), 'oklch(0.75 0.07 220 / 0.85)', 1);
-    }
-
-    // Pattern highlight boxes (multi-bar spans, drawn under candles inside clip)
-    if (patternMatches?.size && primaryData) {
-      drawPatternHighlights({
-        ctx,
-        xScale,
-        yScale,
-        bars: primaryData,
-        matchesByBar: patternMatches,
-        viewStart: view.start,
-        viewEnd: dataEnd,
-        bw,
-      });
-    }
-
-    // Candles
-    for (let i = view.start; i < dataEnd; i++) {
-      const b = primaryData[i];
-      const x = xScale(i);
-      const up = b.c >= b.o;
-      ctx.strokeStyle = up ? COLORS.bull : COLORS.bear;
-      ctx.fillStyle = up ? COLORS.bull : COLORS.bear;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(Math.round(x) + 0.5, yScale(b.h));
-      ctx.lineTo(Math.round(x) + 0.5, yScale(b.l));
-      ctx.stroke();
-      const yo = yScale(b.o);
-      const yc = yScale(b.c);
-      const top = Math.min(yo, yc);
-      const h = Math.max(1, Math.abs(yc - yo));
-      const bodyW = Math.max(1, bw * 0.72);
-      if (up) {
-        ctx.fillRect(Math.round(x - bodyW / 2), Math.round(top), Math.round(bodyW), Math.round(h));
-      } else {
-        ctx.fillRect(Math.round(x - bodyW / 2), Math.round(top), Math.round(bodyW), Math.round(h));
-      }
-    }
-
-    const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
-    if (state.indicators.sma5 && indi.sma5)
-      drawLine(ctx, xScale, toY(indi.sma5), COLORS.amber, 1.25);
-    if (state.indicators.sma25 && indi.sma25)
-      drawLine(ctx, xScale, toY(indi.sma25), COLORS.accent, 1.25);
-    if (state.indicators.sma75 && indi.sma75)
-      drawLine(ctx, xScale, toY(indi.sma75), COLORS.magenta, 1.25);
-    if (state.indicators.ema20 && indi.ema20)
-      drawLine(ctx, xScale, toY(indi.ema20), COLORS.lime, 1.25, [4, 2]);
-
-    if (state.indicators.psar && indi.psar) {
-      ctx.fillStyle = 'oklch(0.78 0.20 350)';
-      for (let i = view.start; i < dataEnd; i++) {
-        if (indi.psar[i] == null) continue;
-        const x = xScale(i),
-          y = yScale(indi.psar[i]!);
+      // Ichimoku cloud (behind candles)
+      if (state.indicators.ichi && indi.ichi) {
+        const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
         ctx.beginPath();
-        ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+        let first = true;
+        for (let i = view.start; i < dataEnd; i++) {
+          if (senkouA[i] == null || senkouB[i] == null) continue;
+          const x = xScale(i);
+          if (first) {
+            ctx.moveTo(x, yScale(senkouA[i]!));
+            first = false;
+          } else ctx.lineTo(x, yScale(senkouA[i]!));
+        }
+        for (let i = dataEnd - 1; i >= view.start; i--) {
+          if (senkouA[i] == null || senkouB[i] == null) continue;
+          ctx.lineTo(xScale(i), yScale(senkouB[i]!));
+        }
+        ctx.closePath();
+        const midI = Math.floor((view.start + dataEnd) / 2);
+        const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
+        ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
         ctx.fill();
+        const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
+        drawLine(ctx, xScale, toY(tenkan), COLORS.magenta, 1.25);
+        drawLine(ctx, xScale, toY(kijun), COLORS.accent, 1.25);
+        drawLine(ctx, xScale, toY(chikou), COLORS.muted, 1, [4, 3]);
       }
-    }
-    ctx.restore();
 
-    // SQ/witching short labels at top of price pane
-    if (sqEventMap.size > 0) {
-      drawSqMarkerLabels({
-        ctx,
-        xScale,
-        eventsByBar: sqEventMap,
-        viewStart: view.start,
-        viewEnd: view.end,
-        labelY: PAD_T + 2,
-      });
-    }
+      // Bollinger bands
+      if (state.indicators.boll && indi.boll) {
+        const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
+        drawLine(ctx, xScale, toY(indi.boll.upper), 'oklch(0.75 0.07 220 / 0.85)', 1);
+        drawLine(ctx, xScale, toY(indi.boll.mid), 'oklch(0.70 0.05 220 / 0.7)', 1, [3, 3]);
+        drawLine(ctx, xScale, toY(indi.boll.lower), 'oklch(0.75 0.07 220 / 0.85)', 1);
+      }
 
-    // Candlestick pattern arrows + labels (drawn after restore, over candles)
-    if (patternMatches?.size && primaryData) {
-      drawPatternMarkers({
-        ctx,
-        xScale,
-        yScale,
-        bars: primaryData,
-        matchesByBar: patternMatches,
-        viewStart: view.start,
-        viewEnd: dataEnd,
-        padT: PAD_T,
-        priceBottom: PAD_T + priceH,
-      });
-    }
+      // Pattern highlight boxes (multi-bar spans, drawn under candles inside clip)
+      if (patternMatches?.size && primaryData) {
+        drawPatternHighlights({
+          ctx,
+          xScale,
+          yScale,
+          bars: primaryData,
+          matchesByBar: patternMatches,
+          viewStart: view.start,
+          viewEnd: dataEnd,
+          bw,
+        });
+      }
 
-    // Comparison lines
-    if (state.selected.length > 1 && state.compareMode === 'percent') {
-      for (let idx = 1; idx < state.selected.length; idx++) {
-        const code = state.selected[idx];
-        const arr = data[code];
-        if (!arr) continue;
-        const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
-        const off = arr.length - primaryData.length;
-        const basePrice = arr[Math.max(0, view.start + off)]?.c;
-        if (!basePrice) continue;
-        let pmin = Infinity,
-          pmax = -Infinity;
-        for (let i = view.start; i < dataEnd; i++) {
-          const bi = i + off;
-          if (bi < 0 || bi >= arr.length) continue;
-          const pct = (arr[bi].c / basePrice - 1) * 100;
-          if (pct < pmin) pmin = pct;
-          if (pct > pmax) pmax = pct;
-        }
-        const primBase = primaryData[view.start].c;
-        for (let i = view.start; i < dataEnd; i++) {
-          const pct = (primaryData[i].c / primBase - 1) * 100;
-          if (pct < pmin) pmin = pct;
-          if (pct > pmax) pmax = pct;
-        }
-        const pad2 = (pmax - pmin) * 0.1 || 1;
-        pmin -= pad2;
-        pmax += pad2;
-        const pctY = (p: number) => PAD_T + (1 - (p - pmin) / (pmax - pmin)) * priceH;
-        const ys: (number | null)[] = [];
-        for (let i = 0; i < primaryData.length; i++) {
-          const bi = i + off;
-          if (bi < 0 || bi >= arr.length) {
-            ys.push(null);
-            continue;
-          }
-          ys.push(pctY((arr[bi].c / basePrice - 1) * 100));
-        }
-        ctx.save();
+      // Candles
+      for (let i = view.start; i < dataEnd; i++) {
+        const b = primaryData[i];
+        const x = xScale(i);
+        const up = b.c >= b.o;
+        ctx.strokeStyle = up ? COLORS.bull : COLORS.bear;
+        ctx.fillStyle = up ? COLORS.bull : COLORS.bear;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.rect(PAD_L, PAD_T, priceW, priceH);
-        ctx.clip();
-        drawLine(ctx, xScale, ys, color, 1.5);
-        ctx.restore();
+        ctx.moveTo(Math.round(x) + 0.5, yScale(b.h));
+        ctx.lineTo(Math.round(x) + 0.5, yScale(b.l));
+        ctx.stroke();
+        const yo = yScale(b.o);
+        const yc = yScale(b.c);
+        const top = Math.min(yo, yc);
+        const h = Math.max(1, Math.abs(yc - yo));
+        const bodyW = Math.max(1, bw * 0.72);
+        if (up) {
+          ctx.fillRect(
+            Math.round(x - bodyW / 2),
+            Math.round(top),
+            Math.round(bodyW),
+            Math.round(h),
+          );
+        } else {
+          ctx.fillRect(
+            Math.round(x - bodyW / 2),
+            Math.round(top),
+            Math.round(bodyW),
+            Math.round(h),
+          );
+        }
+      }
+
+      const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
+      if (state.indicators.sma5 && indi.sma5)
+        drawLine(ctx, xScale, toY(indi.sma5), COLORS.amber, 1.25);
+      if (state.indicators.sma25 && indi.sma25)
+        drawLine(ctx, xScale, toY(indi.sma25), COLORS.accent, 1.25);
+      if (state.indicators.sma75 && indi.sma75)
+        drawLine(ctx, xScale, toY(indi.sma75), COLORS.magenta, 1.25);
+      if (state.indicators.ema20 && indi.ema20)
+        drawLine(ctx, xScale, toY(indi.ema20), COLORS.lime, 1.25, [4, 2]);
+
+      if (state.indicators.psar && indi.psar) {
+        ctx.fillStyle = 'oklch(0.78 0.20 350)';
+        for (let i = view.start; i < dataEnd; i++) {
+          if (indi.psar[i] == null) continue;
+          const x = xScale(i),
+            y = yScale(indi.psar[i]!);
+          ctx.beginPath();
+          ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      // SQ/witching short labels at top of price pane
+      if (sqEventMap.size > 0) {
+        drawSqMarkerLabels({
+          ctx,
+          xScale,
+          eventsByBar: sqEventMap,
+          viewStart: view.start,
+          viewEnd: view.end,
+          labelY: PAD_T + 2,
+        });
+      }
+
+      // Candlestick pattern arrows + labels (drawn after restore, over candles)
+      if (patternMatches?.size && primaryData) {
+        drawPatternMarkers({
+          ctx,
+          xScale,
+          yScale,
+          bars: primaryData,
+          matchesByBar: patternMatches,
+          viewStart: view.start,
+          viewEnd: dataEnd,
+          padT: PAD_T,
+          priceBottom: PAD_T + priceH,
+        });
+      }
+
+      // Comparison lines
+      if (state.selected.length > 1 && state.compareMode === 'percent') {
+        for (let idx = 1; idx < state.selected.length; idx++) {
+          const code = state.selected[idx];
+          const arr = data[code];
+          if (!arr) continue;
+          const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+          const off = arr.length - primaryData.length;
+          const basePrice = arr[Math.max(0, view.start + off)]?.c;
+          if (!basePrice) continue;
+          let pmin = Infinity,
+            pmax = -Infinity;
+          for (let i = view.start; i < dataEnd; i++) {
+            const bi = i + off;
+            if (bi < 0 || bi >= arr.length) continue;
+            const pct = (arr[bi].c / basePrice - 1) * 100;
+            if (pct < pmin) pmin = pct;
+            if (pct > pmax) pmax = pct;
+          }
+          const primBase = primaryData[view.start].c;
+          for (let i = view.start; i < dataEnd; i++) {
+            const pct = (primaryData[i].c / primBase - 1) * 100;
+            if (pct < pmin) pmin = pct;
+            if (pct > pmax) pmax = pct;
+          }
+          const pad2 = (pmax - pmin) * 0.1 || 1;
+          pmin -= pad2;
+          pmax += pad2;
+          const pctY = (p: number) => PAD_T + (1 - (p - pmin) / (pmax - pmin)) * priceH;
+          const ys: (number | null)[] = [];
+          for (let i = 0; i < primaryData.length; i++) {
+            const bi = i + off;
+            if (bi < 0 || bi >= arr.length) {
+              ys.push(null);
+              continue;
+            }
+            ys.push(pctY((arr[bi].c / basePrice - 1) * 100));
+          }
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(PAD_L, PAD_T, priceW, priceH);
+          ctx.clip();
+          drawLine(ctx, xScale, ys, color, 1.5);
+          ctx.restore();
+        }
       }
     }
 
     // Volume
-    if (state.showVolume) {
+    if (state.showVolume && VOL_H > 0) {
       drawVolume(
         {
           ctx,
@@ -532,7 +619,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     }
 
     // Stochastics
-    if (state.indicators.stoch && indi.stoch) {
+    if (state.indicators.stoch && indi.stoch && STOCH_H > 0) {
       drawStoch(
         {
           ctx,
@@ -550,7 +637,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     }
 
     // MACD
-    if (state.indicators.macd && indi.macd) {
+    if (state.indicators.macd && indi.macd && MACD_H > 0) {
       drawMacd(
         {
           ctx,
@@ -569,7 +656,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     }
 
     // RSI
-    if (state.indicators.rsi && indi.rsi) {
+    if (state.indicators.rsi && indi.rsi && RSI_H > 0) {
       drawRsi(
         {
           ctx,
@@ -588,7 +675,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     }
 
     // Financial pane
-    if (state.showFinancial) {
+    if (state.showFinancial && FIN_H > 0) {
       const finW = priceW;
       const finY = finY0;
       ctx.strokeStyle = COLORS.grid;
@@ -746,6 +833,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     sqEventMap,
     patternMatches,
     dataEnd,
+    isExpanded,
   ]);
 
   // Overlay: crosshair, drawings
@@ -771,7 +859,9 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
   const textInputReadyRef = useRef(false);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; drawingId: number } | null>(null);
-  const [alertForm, setAlertForm] = useState<{ x: number; y: number; drawingId: number } | null>(null);
+  const [alertForm, setAlertForm] = useState<{ x: number; y: number; drawingId: number } | null>(
+    null,
+  );
   const [alertDir, setAlertDir] = useState<AlertDirection>('below');
 
   const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -860,7 +950,11 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
     [view, bw, getPaneAt],
   );
 
-  const snapPoint = (sx: number, sy: number, mode: SnapMode): { idx: number; v: number; paneId: PaneId } => {
+  const snapPoint = (
+    sx: number,
+    sy: number,
+    mode: SnapMode,
+  ): { idx: number; v: number; paneId: PaneId } => {
     const { idx: rawIdx, v: rawV, paneId } = screenToData(sx, sy);
     if (!primaryData?.length) return { idx: rawIdx, v: rawV, paneId };
     const ci = Math.max(0, Math.min(primaryData.length - 1 + MAX_FUTURE_BARS, Math.round(rawIdx)));
@@ -910,7 +1004,13 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           if (Math.abs(sy - dpane.yScale(d.v)) <= TOL) return d.id;
         } else if (d.type === 'vline' && d.idx != null) {
           if (Math.abs(sx - xScale(d.idx)) <= TOL) return d.id;
-        } else if (d.type === 'trend' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+        } else if (
+          d.type === 'trend' &&
+          d.i1 != null &&
+          d.v1 != null &&
+          d.i2 != null &&
+          d.v2 != null
+        ) {
           const p1 = dataToScreen(d.i1, d.v1);
           const p2 = dataToScreen(d.i2, d.v2);
           const dx = p2.x - p1.x;
@@ -923,7 +1023,13 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           const py = p1.y + t * dy;
           const dist = Math.hypot(sx - px, sy - py);
           if (dist <= TOL) return d.id;
-        } else if (d.type === 'rect' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+        } else if (
+          d.type === 'rect' &&
+          d.i1 != null &&
+          d.v1 != null &&
+          d.i2 != null &&
+          d.v2 != null
+        ) {
           const p1 = dataToScreen(d.i1, d.v1);
           const p2 = dataToScreen(d.i2, d.v2);
           const xMin = Math.min(p1.x, p2.x);
@@ -933,7 +1039,13 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           if (sx >= xMin - TOL && sx <= xMax + TOL && sy >= yMin - TOL && sy <= yMax + TOL) {
             return d.id;
           }
-        } else if (d.type === 'ellipse' && d.i1 != null && d.v1 != null && d.i2 != null && d.v2 != null) {
+        } else if (
+          d.type === 'ellipse' &&
+          d.i1 != null &&
+          d.v1 != null &&
+          d.i2 != null &&
+          d.v2 != null
+        ) {
           const p1 = dataToScreen(d.i1, d.v1);
           const p2 = dataToScreen(d.i2, d.v2);
           const cx = (p1.x + p2.x) / 2;
@@ -1159,7 +1271,12 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
       ctx.setLineDash([]);
 
       // スナップインジケーター（プライスペインのみ）
-      if (state.activeTool !== 'pan' && state.activeTool !== 'text' && primaryData?.length && hoverPane.id === 'price') {
+      if (
+        state.activeTool !== 'pan' &&
+        state.activeTool !== 'text' &&
+        primaryData?.length &&
+        hoverPane.id === 'price'
+      ) {
         const mode = getSnapMode(state.activeTool);
         const rawData = screenToData(hover.sx, hover.sy);
         const ci = Math.max(0, Math.min(primaryData.length - 1, Math.round(rawData.idx)));
@@ -1182,7 +1299,13 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
             else if (dL <= SNAP_PX) snapY = lowY;
           }
           const didSnap = Math.abs(snapX - hover.sx) > 0.5 || Math.abs(snapY - hover.sy) > 0.5;
-          if (didSnap && snapX >= PAD_L && snapX <= PAD_L + priceW && snapY >= PAD_T && snapY <= PAD_T + priceH) {
+          if (
+            didSnap &&
+            snapX >= PAD_L &&
+            snapX <= PAD_L + priceW &&
+            snapY >= PAD_T &&
+            snapY <= PAD_T + priceH
+          ) {
             ctx.save();
             ctx.strokeStyle = '#ffffff';
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
@@ -1231,7 +1354,10 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
             const topEv = sqEvs.find((e) => e.severity === 'major') ?? sqEvs[0];
             const isMajor = topEv.severity === 'major';
             const tooltipW = 144;
-            const clampedX = Math.max(PAD_L + tooltipW / 2, Math.min(hover.sx, PAD_L + priceW - tooltipW / 2));
+            const clampedX = Math.max(
+              PAD_L + tooltipW / 2,
+              Math.min(hover.sx, PAD_L + priceW - tooltipW / 2),
+            );
             const ttY = xAxisY - 28;
             ctx.fillStyle = COLORS.panel;
             ctx.fillRect(clampedX - tooltipW / 2, ttY - 9, tooltipW, 18);
@@ -1483,11 +1609,7 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       if (textInput) return;
       const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      )
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
         return;
       setState((s) => {
         if (s.selectedDrawingId == null) return s;
@@ -1570,8 +1692,19 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         <button
           type="button"
           aria-label="メニューを閉じる"
-          style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'transparent', border: 'none', cursor: 'default', padding: 0 }}
-          onMouseDown={() => { setCtxMenu(null); setAlertForm(null); }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'default',
+            padding: 0,
+          }}
+          onMouseDown={() => {
+            setCtxMenu(null);
+            setAlertForm(null);
+          }}
         />
       )}
 
@@ -1594,7 +1727,13 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
         >
           <button
             type="button"
-            style={{ display: 'block', width: '100%', padding: '6px 14px', textAlign: 'left', color: 'var(--text)' }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '6px 14px',
+              textAlign: 'left',
+              color: 'var(--text)',
+            }}
             onMouseDown={(e) => {
               e.stopPropagation();
               setAlertForm({ x: ctxMenu.x, y: ctxMenu.y, drawingId: ctxMenu.drawingId });
@@ -1605,8 +1744,17 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           </button>
           <button
             type="button"
-            style={{ display: 'block', width: '100%', padding: '6px 14px', textAlign: 'left', color: 'var(--bear)' }}
-            onMouseDown={(e) => { e.stopPropagation(); deleteDrawingById(ctxMenu.drawingId); }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '6px 14px',
+              textAlign: 'left',
+              color: 'var(--bear)',
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              deleteDrawingById(ctxMenu.drawingId);
+            }}
           >
             削除
           </button>
@@ -1630,13 +1778,18 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
             fontSize: 12,
           }}
         >
-          <div style={{ color: 'var(--text-soft)', marginBottom: 10, fontWeight: 500 }}>アラートを設定</div>
+          <div style={{ color: 'var(--text-soft)', marginBottom: 10, fontWeight: 500 }}>
+            アラートを設定
+          </div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
             {(['below', 'above'] as AlertDirection[]).map((d) => (
               <button
                 type="button"
                 key={d}
-                onMouseDown={(e) => { e.stopPropagation(); setAlertDir(d); }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setAlertDir(d);
+                }}
                 style={{
                   flex: 1,
                   padding: '5px 0',
@@ -1655,7 +1808,10 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           <div style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
-              onMouseDown={(e) => { e.stopPropagation(); handleSaveAlert(); }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleSaveAlert();
+              }}
               style={{
                 flex: 1,
                 padding: '5px 0',
@@ -1671,7 +1827,10 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
             </button>
             <button
               type="button"
-              onMouseDown={(e) => { e.stopPropagation(); setAlertForm(null); }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                setAlertForm(null);
+              }}
               style={{
                 flex: 1,
                 padding: '5px 0',
@@ -1686,6 +1845,48 @@ export function Chart({ state, setState, tickers, data, patternMatches }: ChartP
           </div>
         </div>
       )}
+
+      {allowPaneExpand &&
+        (['stoch', 'macd', 'rsi'] as const).map((paneId) => {
+        const isThisExpanded = expandedPane === paneId;
+        if (isExpanded && !isThisExpanded) return null;
+        const paneActive =
+          paneId === 'stoch'
+            ? state.indicators.stoch
+            : paneId === 'macd'
+              ? state.indicators.macd
+              : state.indicators.rsi;
+        if (!isExpanded && !paneActive) return null;
+        const y0 = paneId === 'stoch' ? stochY0 : paneId === 'macd' ? macdY0 : rsiY0;
+        const label = { stoch: 'Stochastics', macd: 'MACD', rsi: 'RSI' }[paneId];
+        return (
+          <button
+            key={paneId}
+            type="button"
+            onClick={() => setExpandedPane(isThisExpanded ? null : paneId)}
+            title={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
+            aria-label={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
+            style={{
+              position: 'absolute',
+              top: y0 + 6,
+              left: PAD_L + priceW + 4,
+              width: 24,
+              height: 24,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'oklch(0.24 0.006 250 / 0.85)',
+              border: '1px solid oklch(0.34 0.006 250)',
+              borderRadius: 4,
+              color: COLORS.text,
+              cursor: 'pointer',
+              zIndex: 101,
+            }}
+          >
+            {isThisExpanded ? '⤡' : '⤢'}
+          </button>
+        );
+      })}
 
       <ChartLegend
         state={state}

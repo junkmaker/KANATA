@@ -44,6 +44,7 @@ export function PatternView({ state, setState, tickers, data }: Props) {
               tickers={tickers}
               data={data}
               patternMatches={patternMap}
+              allowPaneExpand={false}
             />
           </div>
           <PatternList matches={filtered} timeframe={state.timeframe} />
