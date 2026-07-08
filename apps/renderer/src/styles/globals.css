@@ -76,7 +76,8 @@ input { font: inherit; color: inherit; }
   min-height: 0;
 }
 .main-grid.macro-view,
-.main-grid.pattern-grid {
+.main-grid.pattern-grid,
+.main-grid.screening-view-grid {
   grid-template-columns: 1fr;
   overflow: hidden;
 }

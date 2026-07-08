@@ -149,6 +149,8 @@ async function launchSidecar(): Promise<string> {
       ...process.env,
       PYTHONUNBUFFERED: '1',
       DATABASE_URL: `sqlite:///${dbPath}`,
+      // スクリーニング結果 JSON の書き込み先(userData/kanata)。Python 側でも mkdir 防御する。
+      KANATA_DATA_DIR: dbDir,
       KANATA_ALLOWED_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173',
       ...(pythonHome ? { PYTHONHOME: pythonHome } : {}),
       ...(fredApiKey ? { FRED_API_KEY: fredApiKey } : {}),

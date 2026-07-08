@@ -226,6 +226,54 @@ export interface MacroDashboard {
   indicators: MacroIndicator[];
 }
 
+// --- N-pattern screening ---
+export interface ScreeningPivot {
+  index: number;
+  date: string;
+  price: number;
+  type: 'low' | 'high';
+}
+
+export interface ScreeningScoreDetail {
+  volume: number;
+  macd: number;
+  pullback_penalty: number;
+  duration_penalty: number;
+}
+
+export interface ScreeningClose {
+  date: string;
+  value: number;
+}
+
+export interface ScreeningResult {
+  ticker: string;
+  name: string;
+  market_cap: number;
+  score: number;
+  score_detail: ScreeningScoreDetail;
+  pivots: ScreeningPivot[];
+  break_date: string;
+  closes: ScreeningClose[];
+}
+
+export interface ScreeningResponse {
+  generated_at: string | null;
+  universe_count: number;
+  scanned_count: number;
+  results: ScreeningResult[];
+}
+
+export type ScanStatus = 'idle' | 'running' | 'done' | 'error';
+
+export interface ScreeningScanStatus {
+  status: ScanStatus;
+  done: number;
+  total: number;
+  started_at: string | null;
+  error: string | null;
+}
+
 export interface WatchlistItem {
   id: number;
   symbol: string;
