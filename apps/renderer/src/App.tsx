@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Chart } from './components/Chart/Chart';
+import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { MacroDashboard } from './components/Macro/MacroDashboard';
 import { PatternView } from './components/Patterns/PatternView';
-import { LeftPanel } from './components/LeftPanel/LeftPanel';
 import { RightPanel } from './components/RightPanel/RightPanel';
+import { ScreeningView } from './components/Screening/ScreeningView';
 import { StatusBar } from './components/StatusBar';
 import { TopBar } from './components/TopBar';
 import { TweaksPanel } from './components/TweaksPanel';
@@ -13,19 +14,19 @@ import { useWatchlists } from './hooks/useWatchlists';
 import { subscribeBackendUrlChange } from './lib/backendUrl';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
 import { clampSelectionForMode } from './lib/selection';
-import { watchlistToTickers } from './lib/watchlistTickers';
+import { itemToTicker, watchlistToTickers } from './lib/watchlistTickers';
 import type { AppState } from './types';
 import './styles/globals.css';
 
 const ACTIVE_LIST_KEY = 'kanata.activeWatchlistId';
 const VIEW_KEY = 'kanata.view';
 
-type View = 'chart' | 'pattern' | 'macro';
+type View = 'chart' | 'pattern' | 'macro' | 'screening';
 
 function loadView(): View {
   try {
     const v = localStorage.getItem(VIEW_KEY);
-    if (v === 'macro' || v === 'pattern') return v;
+    if (v === 'macro' || v === 'pattern' || v === 'screening') return v;
     return 'chart';
   } catch {
     return 'chart';
@@ -105,6 +106,8 @@ export function App() {
     }
   });
   const [view, setView] = useState<View>(loadView);
+  // スクリーニングから選んだウォッチリスト外銘柄(チャート描画のため一時的に加える)
+  const [extraSymbol, setExtraSymbol] = useState<string | null>(null);
 
   const wl = useWatchlists();
   const [activeListId, setActiveListId] = useState<number | null>(loadActiveListId);
@@ -146,8 +149,27 @@ export function App() {
     return watchlistToTickers(activeList);
   }, [wl.status, activeList]);
 
-  // Real data for all watchlist tickers from backend (keeps prices consistent regardless of selection)
-  const allSymbols = useMemo(() => displayTickers.map((t) => t.code), [displayTickers]);
+  // ウォッチリスト外のスクリーニング銘柄を合成 Ticker として一時的に加える
+  const extraTicker = useMemo(() => {
+    if (!extraSymbol) return null;
+    if (displayTickers.some((t) => t.code === extraSymbol)) return null;
+    const market = /^\d{4}$|^\d{3}[A-Z]$/.test(extraSymbol) ? 'JP' : 'US';
+    return itemToTicker({
+      id: -1,
+      symbol: extraSymbol,
+      market,
+      display_name: extraSymbol,
+      position: 0,
+    });
+  }, [extraSymbol, displayTickers]);
+
+  const chartTickers = useMemo(
+    () => (extraTicker ? [...displayTickers, extraTicker] : displayTickers),
+    [displayTickers, extraTicker],
+  );
+
+  // Real data for all tickers from backend (keeps prices consistent regardless of selection)
+  const allSymbols = useMemo(() => chartTickers.map((t) => t.code), [chartTickers]);
   const { realData, status } = useChartData(allSymbols, state.timeframe);
   useAlertCheck(state.drawings, realData, status);
 
@@ -191,15 +213,23 @@ export function App() {
 
   // Ensure the primary selection is always available in the visible tickers
   useEffect(() => {
-    if (displayTickers.length === 0) return;
+    if (chartTickers.length === 0) return;
     setState((s) => {
-      const codes = new Set(displayTickers.map((t) => t.code));
+      const codes = new Set(chartTickers.map((t) => t.code));
       const filtered = s.selected.filter((c) => codes.has(c));
       if (filtered.length === s.selected.length && filtered.length > 0) return s;
-      const next = filtered.length > 0 ? filtered : [displayTickers[0].code];
+      const next = filtered.length > 0 ? filtered : [chartTickers[0].code];
       return { ...s, selected: next };
     });
-  }, [displayTickers]);
+  }, [chartTickers]);
+
+  // スクリーニングの行クリック: 当該銘柄を選択してチャートビューへ遷移
+  const handleSelectFromScreening = (ticker: string) => {
+    const inWatchlist = displayTickers.some((t) => t.code === ticker);
+    setExtraSymbol(inWatchlist ? null : ticker);
+    setState((s) => ({ ...s, selected: [ticker] }));
+    setView('chart');
+  };
 
   const watchlistController = useMemo(
     () => ({
@@ -237,7 +267,7 @@ export function App() {
   );
 
   const primary = state.selected[0];
-  const primaryTicker = displayTickers.find((t) => t.code === primary);
+  const primaryTicker = chartTickers.find((t) => t.code === primary);
   const primarySeries = data[primary];
   const last = primarySeries?.[primarySeries.length - 1];
   const prev = primarySeries?.[primarySeries.length - 2];
@@ -277,14 +307,18 @@ export function App() {
         <div className="main-grid pattern-grid">
           <PatternView state={state} setState={setState} tickers={displayTickers} data={data} />
         </div>
+      ) : view === 'screening' ? (
+        <div className="main-grid screening-view-grid">
+          <ScreeningView onSelectSymbol={handleSelectFromScreening} />
+        </div>
       ) : (
         <div className="main-grid">
           <LeftPanel state={state} setState={setState} />
           <div className="chart-area">
-            {displayTickers.length === 0 ? (
+            {chartTickers.length === 0 ? (
               <div className="chart-empty">ウォッチリストに銘柄を追加してください</div>
             ) : (
-              <Chart state={state} setState={setState} tickers={displayTickers} data={data} />
+              <Chart state={state} setState={setState} tickers={chartTickers} data={data} />
             )}
           </div>
           <div data-testid="watchlist">
