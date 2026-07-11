@@ -37,10 +37,11 @@ def _df(closes, volume=None):
 
 
 def _n_df(volume_spike=False):
-    closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (28, 125.0)], total=40)
+    # D は末尾付近(index 34)に置き、直近性フィルタ(RECENCY_MAX_BARS)を満たす。
+    closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 125.0)], total=40)
     vol = [1000.0] * 40
     if volume_spike:
-        vol[28] = 1600.0
+        vol[34] = 1600.0
     return _df(closes, vol)
 
 
