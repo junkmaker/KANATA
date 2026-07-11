@@ -235,6 +235,8 @@ export interface ScreeningPivot {
 }
 
 export interface ScreeningScoreDetail {
+  trend: number;
+  breakout: number;
   volume: number;
   macd: number;
   pullback_penalty: number;

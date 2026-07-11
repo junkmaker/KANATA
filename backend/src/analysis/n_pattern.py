@@ -13,9 +13,11 @@ import pandas as pd
 # --------------------------------------------------------------------------- #
 # 定数(マジックナンバー禁止 — 閾値・重みはすべてここに集約する)
 # --------------------------------------------------------------------------- #
-BASE_SCORE = 50            # N字4条件成立時の基礎点
-VOLUME_BONUS = 20          # ブレイク時の出来高急増
-MACD_BONUS = 20            # ブレイク時に MACD が GC 方向
+BASE_SCORE = 40            # N字4条件成立時の基礎点(加点余地を確保するため引き下げ)
+TREND_BONUS = 25           # A の手前が下降トレンドでない(上昇継続)ときの加点
+BREAKOUT_BONUS = 15        # ブレイク幅が大きい(継続力が強い)ときの加点
+VOLUME_BONUS = 10          # ブレイク時の出来高急増(偏重緩和のため引き下げ)
+MACD_BONUS = 10            # ブレイク時に MACD が GC 方向(偏重緩和のため引き下げ)
 PULLBACK_PENALTY = 15      # 押し目が浅すぎる
 DURATION_PENALTY = 15      # A→D が短すぎる
 
@@ -31,6 +33,13 @@ VOLUME_LOOKBACK = 20       # 出来高平均の参照本数
 VOLUME_SPIKE_MULT = 1.5    # 直近平均比 +50% 以上でボーナス
 PULLBACK_MIN_RATIO = 0.20  # (B-C)/(B-A) がこれ未満なら減点
 MIN_DURATION_DAYS = 5      # A→D の営業日がこれ未満なら減点
+
+# ブレイク判定の是正(M字・下降バウンス除去)
+BREAKOUT_MARGIN_PCT = 2.0   # ブレイク成立の下限(D >= B×(1+2.0/100))。M字(ダブルトップ)除去のハード条件
+RECENCY_MAX_BARS = 10       # D から末尾までの許容バー数((len-1)-D.index <= 10)。進行中ブレイクのみ採用
+BREAKOUT_STRONG_PCT = 5.0   # 強いブレイク幅の加点閾値((D-B)/B >= 5.0/100)
+TREND_LOOKBACK = 20         # A の手前を参照するバー数(上昇継続文脈の判定)
+TREND_DROP_PCT = 10.0       # A の TREND_LOOKBACK 本前が A より 10% 以上高い＝下降トレンド流入とみなし trend 加点なし
 
 MIN_BARS = 30              # ATR/MACD 計算に必要な最小本数
 PIVOT_COUNT = 4            # N字判定に使うピボット数(A,B,C,D)
@@ -178,6 +187,32 @@ def _macd_bonus(close: pd.Series, d_idx: int) -> int:
     return MACD_BONUS if float(m) > float(s) else 0
 
 
+def _trend_bonus(close: pd.Series, a_idx: int) -> int:
+    """A の手前が下降トレンドでなければ TREND_BONUS。
+
+    A の TREND_LOOKBACK 本前の終値が A より TREND_DROP_PCT% 以上高い場合、
+    下降トレンドの終端バウンスとみなし加点しない。手前のデータが無い/
+    A 以下なら上昇継続とみなし加点する。
+    """
+    ref_idx = a_idx - TREND_LOOKBACK
+    if ref_idx < 0:
+        return TREND_BONUS  # 手前が無い＝下降流入の証拠なし
+    a_price = float(close.iloc[a_idx])
+    ref_price = float(close.iloc[ref_idx])
+    if a_price <= 0:
+        return 0
+    drop = (ref_price - a_price) / a_price * 100.0
+    return 0 if drop >= TREND_DROP_PCT else TREND_BONUS
+
+
+def _breakout_bonus(b_price: float, d_price: float) -> int:
+    """D が B を BREAKOUT_STRONG_PCT% 以上超えていれば BREAKOUT_BONUS。"""
+    if b_price <= 0:
+        return 0
+    ratio = (d_price - b_price) / b_price * 100.0
+    return BREAKOUT_BONUS if ratio >= BREAKOUT_STRONG_PCT else 0
+
+
 def detect_n_pattern(df: pd.DataFrame, zigzag_pct: float | None = None) -> dict | None:
     """N字波動パターンを判定しスコア付きで返す。非該当なら None。
 
@@ -199,12 +234,20 @@ def detect_n_pattern(df: pd.DataFrame, zigzag_pct: float | None = None) -> dict 
     if (a["type"], b["type"], c["type"], d["type"]) != ("low", "high", "low", "high"):
         return None
 
-    # N字4条件: B>A / A<C<B / D>B
-    if not (b["price"] > a["price"] and a["price"] < c["price"] < b["price"] and d["price"] > b["price"]):
+    # N字4条件: B>A / A<C<B / D>=B×(1+BREAKOUT_MARGIN_PCT)
+    # ブレイク幅下限で D≈B のダブルトップ(M字)を除外する
+    break_floor = b["price"] * (1 + BREAKOUT_MARGIN_PCT / 100.0)
+    if not (b["price"] > a["price"] and a["price"] < c["price"] < b["price"] and d["price"] >= break_floor):
+        return None
+
+    # 直近性フィルタ: ブレイク(D)が末尾から離れすぎた過去のものは進行中でないため除外
+    if (len(df) - 1) - d["index"] > RECENCY_MAX_BARS:
         return None
 
     volume = _volume_bonus(df, d["index"])
     macd = _macd_bonus(df["Close"], d["index"])
+    trend = _trend_bonus(df["Close"], a["index"])
+    breakout = _breakout_bonus(b["price"], d["price"])
 
     span = b["price"] - a["price"]
     pullback_ratio = (b["price"] - c["price"]) / span if span > 0 else 0.0
@@ -213,13 +256,15 @@ def detect_n_pattern(df: pd.DataFrame, zigzag_pct: float | None = None) -> dict 
     duration = d["index"] - a["index"]
     duration_penalty = DURATION_PENALTY if duration < MIN_DURATION_DAYS else 0
 
-    raw = BASE_SCORE + volume + macd - pullback - duration_penalty
+    raw = BASE_SCORE + trend + breakout + volume + macd - pullback - duration_penalty
     score = max(0, min(100, raw))
 
     return {
         "detected": True,
         "score": score,
         "score_detail": {
+            "trend": trend,
+            "breakout": breakout,
             "volume": volume,
             "macd": macd,
             "pullback_penalty": pullback,

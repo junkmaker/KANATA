@@ -17,6 +17,8 @@ class ScreeningPivot(BaseModel):
 
 
 class ScoreDetail(BaseModel):
+    trend: int
+    breakout: int
     volume: int
     macd: int
     pullback_penalty: int
