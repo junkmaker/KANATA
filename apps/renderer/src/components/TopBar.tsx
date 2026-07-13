@@ -60,7 +60,7 @@ export function TopBar({
         </div>
         <div className="brand-text">
           <div className="brand-name">KANATA</div>
-          <div className="brand-sub">chart · v0.4.1</div>
+          <div className="brand-sub">v0.11.0</div>
         </div>
       </div>
 
