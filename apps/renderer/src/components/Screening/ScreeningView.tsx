@@ -1,5 +1,7 @@
 import { useScreening } from '../../hooks/useScreening';
+import { useUniverses } from '../../hooks/useUniverses';
 import { ScreeningTable } from './ScreeningTable';
+import { UniverseSelect } from './UniverseSelect';
 import './screening.css';
 
 const MIN_SCORE_OPTIONS = [0, 50, 60, 70, 80];
@@ -19,6 +21,15 @@ type Props = {
 export function ScreeningView({ onSelectSymbol }: Props) {
   const { results, generatedAt, loadStatus, error, scanStatus, minScore, setMinScore, startScan } =
     useScreening();
+  const {
+    universes,
+    selectedId,
+    status: universeStatus,
+    actionError,
+    select,
+    register,
+    remove,
+  } = useUniverses();
 
   const isRunning = scanStatus?.status === 'running';
 
@@ -28,11 +39,20 @@ export function ScreeningView({ onSelectSymbol }: Props) {
         <button
           type="button"
           className="screening-scan-btn"
-          onClick={startScan}
+          onClick={() => startScan(selectedId)}
           disabled={isRunning}
         >
           {isRunning ? 'スキャン中…' : 'スキャン実行'}
         </button>
+        <UniverseSelect
+          universes={universes}
+          selectedId={selectedId}
+          disabled={isRunning || universeStatus !== 'ready'}
+          onSelect={select}
+          onRegister={register}
+          onRemove={remove}
+          actionError={actionError}
+        />
         {isRunning && scanStatus && (
           <span className="screening-progress">
             進捗 {scanStatus.done}/{scanStatus.total}
@@ -55,6 +75,10 @@ export function ScreeningView({ onSelectSymbol }: Props) {
         <div className="screening-error">
           スキャンに失敗しました{scanStatus.error ? `: ${scanStatus.error}` : ''}
         </div>
+      )}
+
+      {loadStatus !== 'offline' && error && (
+        <div className="screening-error">スキャンを開始できません: {error}</div>
       )}
 
       {loadStatus === 'offline' ? (

@@ -12,23 +12,22 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import yfinance as yf
 
 from ..analysis.n_pattern import detect_n_pattern
+from .storage import atomic_write_json, data_dir, now_iso
+from .universe_provider import DEFAULT_UNIVERSE_CSV
 from .yfinance_provider import to_yf_symbol
 
 DEFAULT_MIN_MARKET_CAP = 10_000_000_000  # 100 億円
 SCAN_SLEEP_SECONDS = 0.2                 # yfinance レート制限対策(テストで 0 に patch)
 RESULTS_FILENAME = "n_pattern_results.json"
 CLOSES_TAIL = 120                        # サムネイル用に保持する終値本数
-_UNIVERSE_COLUMNS = ("code", "name", "market_cap")
 
 _state_lock = threading.Lock()
 _scan_state: dict = {
@@ -41,61 +40,47 @@ _scan_state: dict = {
 _thread: threading.Thread | None = None
 
 
-def _now_iso() -> str:
-    """ローカルタイムゾーン付き ISO 文字列(例: 2026-07-08T15:42:10+09:00)。"""
-    return datetime.now().astimezone().isoformat(timespec="seconds")
-
-
-def _backend_data_dir() -> Path:
-    """バンドル済みリソース(CSV)の置き場: backend/data。"""
-    return Path(__file__).resolve().parent.parent.parent / "data"
-
-
-def _results_dir() -> Path:
-    """書き込み可能な結果 JSON の置き場。未設定時は backend/data にフォールバック。"""
-    override = os.environ.get("KANATA_DATA_DIR")
-    base = Path(override) if override else _backend_data_dir()
-    base.mkdir(parents=True, exist_ok=True)
-    return base
-
-
-DEFAULT_UNIVERSE_CSV = str(_backend_data_dir() / "prime_universe.csv")
-
-
 def _results_path() -> Path:
-    return _results_dir() / RESULTS_FILENAME
+    return data_dir() / RESULTS_FILENAME
 
 
 def load_universe(
     csv_path: str | None = None,
     min_market_cap: int = DEFAULT_MIN_MARKET_CAP,
 ) -> list[dict]:
-    """銘柄マスタ CSV を読み、時価総額 >= min_market_cap の行を返す。
+    """銘柄マスタ CSV を読み、時価総額フィルタを適用した行を返す。
 
-    code 列は文字列として読む(ゼロ埋め4桁や 3桁+英字コードを壊さない)。
+    code 列のみ必須(文字列として読む — ゼロ埋め4桁や 3桁+英字コードを壊さない)。
+    name 欠落は code で代用。market_cap は列欠落・空欄なら None(フィルタ非適用)、
+    値があるのに数値化できない行は従来どおりスキップ。
     """
     path = Path(csv_path) if csv_path else Path(DEFAULT_UNIVERSE_CSV)
     if not path.exists():
         raise FileNotFoundError(
-            f"universe CSV not found: {path} (expected columns: code,name,market_cap)"
+            f"universe CSV not found: {path} (expected column: code)"
         )
     df = pd.read_csv(path, dtype={"code": str})
-    missing = [c for c in _UNIVERSE_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(
-            f"universe CSV missing columns {missing}; expected code,name,market_cap"
-        )
+    if "code" not in df.columns:
+        raise ValueError("universe CSV missing column 'code'")
+    has_name = "name" in df.columns
+    has_cap = "market_cap" in df.columns
     rows: list[dict] = []
     for _, r in df.iterrows():
-        try:
-            cap = int(r["market_cap"])
-        except (ValueError, TypeError):
+        code = "" if pd.isna(r["code"]) else str(r["code"]).strip()
+        if not code:
             continue
-        if cap < min_market_cap:
-            continue
-        rows.append(
-            {"code": str(r["code"]).strip(), "name": str(r["name"]).strip(), "market_cap": cap}
-        )
+        name = ""
+        if has_name and not pd.isna(r["name"]):
+            name = str(r["name"]).strip()
+        cap: int | None = None
+        if has_cap and not pd.isna(r["market_cap"]):
+            try:
+                cap = int(r["market_cap"])
+            except (ValueError, TypeError):
+                continue
+            if cap < min_market_cap:
+                continue
+        rows.append({"code": code, "name": name or code, "market_cap": cap})
     return rows
 
 
@@ -124,16 +109,16 @@ def _closes_tail(df: pd.DataFrame) -> list[dict]:
     return out
 
 
-def _write_results(payload: dict) -> None:
-    path = _results_path()
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
-
-
 def load_results() -> dict:
     """最新スキャン結果を返す。ファイルなし/破損時は未スキャン扱い。"""
-    empty = {"generated_at": None, "universe_count": 0, "scanned_count": 0, "results": []}
+    empty = {
+        "generated_at": None,
+        "universe_count": 0,
+        "scanned_count": 0,
+        "universe_id": None,
+        "universe_name": None,
+        "results": [],
+    }
     path = _results_path()
     if not path.exists():
         return empty
@@ -151,6 +136,8 @@ def get_scan_status() -> dict:
 def run_scan(
     csv_path: str | None = None,
     min_market_cap: int = DEFAULT_MIN_MARKET_CAP,
+    universe_id: str | None = None,
+    universe_name: str | None = None,
 ) -> dict:
     """スキャン本体(同期)。ユニバース全銘柄を判定して JSON に保存する。
 
@@ -158,7 +145,7 @@ def run_scan(
     予期せぬ例外はスレッド内 silent failure を避けるため status=error に反映する。
     """
     with _state_lock:
-        _scan_state.update(status="running", done=0, total=0, started_at=_now_iso(), error=None)
+        _scan_state.update(status="running", done=0, total=0, started_at=now_iso(), error=None)
     try:
         universe = load_universe(csv_path, min_market_cap)
         with _state_lock:
@@ -192,12 +179,14 @@ def run_scan(
 
         results.sort(key=lambda r: r["score"], reverse=True)
         payload = {
-            "generated_at": _now_iso(),
+            "generated_at": now_iso(),
             "universe_count": len(universe),
             "scanned_count": len(universe),
+            "universe_id": universe_id,
+            "universe_name": universe_name,
             "results": results,
         }
-        _write_results(payload)
+        atomic_write_json(_results_path(), payload)
         with _state_lock:
             _scan_state.update(status="done")
         return payload
@@ -210,16 +199,18 @@ def run_scan(
 def start_scan_thread(
     csv_path: str | None = None,
     min_market_cap: int = DEFAULT_MIN_MARKET_CAP,
+    universe_id: str | None = None,
+    universe_name: str | None = None,
 ) -> bool:
     """スキャンをバックグラウンドで起動。既に実行中なら False。"""
     global _thread
     with _state_lock:
         if _scan_state["status"] == "running":
             return False
-        _scan_state.update(status="running", done=0, total=0, started_at=_now_iso(), error=None)
+        _scan_state.update(status="running", done=0, total=0, started_at=now_iso(), error=None)
 
     def _worker() -> None:
-        run_scan(csv_path, min_market_cap)
+        run_scan(csv_path, min_market_cap, universe_id, universe_name)
 
     _thread = threading.Thread(target=_worker, daemon=True)
     _thread.start()

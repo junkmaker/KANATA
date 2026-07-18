@@ -14,7 +14,7 @@ interface UseScreeningResult {
   scanStatus: ScreeningScanStatus | null;
   minScore: number;
   setMinScore: (n: number) => void;
-  startScan: () => Promise<void>;
+  startScan: (universeId?: string) => Promise<void>;
 }
 
 export function useScreening(): UseScreeningResult {
@@ -82,9 +82,9 @@ export function useScreening(): UseScreeningResult {
     };
   }, [isRunning]);
 
-  const startScan = useCallback(async () => {
+  const startScan = useCallback(async (universeId?: string) => {
     try {
-      await startScreeningScan();
+      await startScreeningScan(universeId);
       const s = await fetchScanStatus();
       setScanStatus(s);
       setError(null);

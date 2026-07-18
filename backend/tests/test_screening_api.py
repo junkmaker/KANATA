@@ -147,6 +147,57 @@ def test_scan_all_fetch_fail_completes_empty(client, screening_env, monkeypatch)
     assert screening_provider.get_scan_status()["status"] == "done"
 
 
+# --------------------------------------------------------------------------- #
+# Universe selection (registered universes)
+# --------------------------------------------------------------------------- #
+def test_scan_with_registered_universe(client, screening_env, monkeypatch):
+    # 登録済みユニバースを universe_id 指定でスキャン → payload に反映される。
+    # スキャン実行中の削除は無害: csv_path はスレッド起動前に解決済みで、
+    # load_universe はスキャン冒頭の一回しか読まない。
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: None)
+    created = client.post(
+        "/api/screening/universes",
+        json={"name": "Custom", "csv_text": "code\n7203\n6758\n"},
+    ).json()
+
+    resp = client.post("/api/screening/n-pattern/scan", json={"universe_id": created["id"]})
+    assert resp.status_code == 202
+    if screening_provider._thread:
+        screening_provider._thread.join(timeout=5)
+
+    body = client.get("/api/screening/n-pattern").json()
+    assert body["universe_id"] == created["id"]
+    assert body["universe_name"] == "Custom"
+    assert body["universe_count"] == 2
+
+
+def test_scan_without_market_cap_column(client, screening_env, monkeypatch):
+    # market_cap 列の無い CSV → フィルタ非適用で全銘柄スキャン、market_cap は None。
+    csv_path = screening_env / "no_cap.csv"
+    csv_path.write_text("code,name\n7203,Toyota\n", encoding="utf-8")
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
+
+    payload = screening_provider.run_scan(csv_path=str(csv_path))
+    assert payload["universe_count"] == 1
+    assert payload["results"][0]["market_cap"] is None
+
+
+def test_scan_unknown_universe_returns_404(client, screening_env):
+    resp = client.post("/api/screening/n-pattern/scan", json={"universe_id": "nope"})
+    assert resp.status_code == 404
+
+
+def test_scan_without_body_uses_default_universe(client, screening_env, monkeypatch):
+    # 後方互換: ボディ無し POST は内蔵デフォルトでスキャンされる。
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: None)
+    resp = client.post("/api/screening/n-pattern/scan")
+    assert resp.status_code == 202
+    if screening_provider._thread:
+        screening_provider._thread.join(timeout=10)
+    body = client.get("/api/screening/n-pattern").json()
+    assert body["universe_id"] == "default"
+
+
 def test_scan_result_has_thumbnail_closes(client, screening_env, monkeypatch):
     csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
