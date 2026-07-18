@@ -1,5 +1,5 @@
 import type { MacroDashboard, MacroIndicator, MacroPeriod } from '../types';
-import { getBackendUrl } from './backendUrl';
+import { fetchJson } from './backendFetch';
 
 // Macro endpoints return raw §6 objects (NOT the {success,data,error} envelope).
 // Do not reuse the watchlist `unwrap` helper here.
@@ -16,13 +16,6 @@ function startForPeriod(period: MacroPeriod): string {
   const start = new Date();
   start.setDate(start.getDate() - days);
   return start.toISOString().slice(0, 10);
-}
-
-async function fetchJson<T>(path: string): Promise<T> {
-  const base = await getBackendUrl();
-  const res = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(15_000) });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
 }
 
 export async function fetchMacroDashboard(period: MacroPeriod): Promise<MacroDashboard> {

@@ -251,7 +251,7 @@ export interface ScreeningClose {
 export interface ScreeningResult {
   ticker: string;
   name: string;
-  market_cap: number;
+  market_cap: number | null;
   score: number;
   score_detail: ScreeningScoreDetail;
   pivots: ScreeningPivot[];
@@ -263,7 +263,18 @@ export interface ScreeningResponse {
   generated_at: string | null;
   universe_count: number;
   scanned_count: number;
+  universe_id: string | null;
+  universe_name: string | null;
   results: ScreeningResult[];
+}
+
+export interface ScreeningUniverse {
+  id: string;
+  name: string;
+  symbol_count: number;
+  has_market_cap: boolean;
+  created_at: string | null;
+  builtin: boolean;
 }
 
 export type ScanStatus = 'idle' | 'running' | 'done' | 'error';

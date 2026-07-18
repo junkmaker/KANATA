@@ -135,6 +135,10 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `services/macro_provider.py` — 単位換算・週次リサンプル・純流動性・RSP/SPY inner join・シグナル判定のコア。**`WALCL` は百万$ → 十億$（÷1000）、純流動性は兆$ 表示（÷1000）**。RSP/SPY は yfinance のミリ秒 `t` で inner join。`evaluate_signal` / `build_dashboard`（総合シグナル）は config ルール準拠
 - `config/macro_thresholds.json` + `config/macro_config.py` — series ID・閾値・参照期間・総合シグナルルールを JSON で外出し。`MACRO_CONFIG_PATH` 環境変数で差し替え可、未検出時は内蔵デフォルト。**ハードコード禁止、閾値変更は JSON 編集のみ**
 - `schemas/macro.py` — §6 レスポンス契約の Pydantic v2 モデル（`response_model` 用）。日付は ISO 文字列、値は数値型
+- `routes/screening.py` — N字スクリーニング。`GET /api/screening/n-pattern`（キャッシュ済み結果 + `min_score` フィルタ）/ `POST .../scan`（202 でバックグラウンド起動、ボディ省略可・`{"universe_id"}` でユニバース指定、未知 id は 404、実行中は 409）/ `GET .../status`（進捗ポーリング）+ ユニバース管理 3 本（`GET/POST /api/screening/universes`、`DELETE /api/screening/universes/{id}`）。macro 同様エンベロープ無し、エラーは `HTTPException` + `detail`
+- `services/storage.py` — ファイル永続化の共有ヘルパ（`now_iso` / `backend_data_dir` / `data_dir`（`KANATA_DATA_DIR` 解決）/ `atomic_write_json`）。他 services を import しないリーフモジュール
+- `services/screening_provider.py` — ユニバース CSV 読込（必須列は `code` のみ。`name` 欠落→code 代用、`market_cap` 欠落/空欄→None でフィルタ非適用）・スキャン実行（スレッド）・結果 JSON 永続化（`<KANATA_DATA_DIR>/n_pattern_results.json`、atomic write）
+- `services/universe_provider.py` — スクリーニング用ユニバースの登録・一覧・削除・解決。索引は `<KANATA_DATA_DIR>/universes/universes.json`、CSV 本体は `universes/<id>.csv` に `code,name,market_cap` へ正規化保存。登録は JSON ボディ `{name, csv_text}`（multipart 不使用）、2MB / 10,000 行上限、内蔵デフォルト（`prime_universe.csv`、id=`default`）は削除不可。FastAPI 非依存でカスタム例外を routes 層が HTTPException に変換。**依存方向は screening_provider → universe_provider の一方向のみ**（`DEFAULT_UNIVERSE_CSV` は universe_provider 側で定義）
 
 #### FRED_API_KEY の設定
 
@@ -151,6 +155,10 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `hooks/useMacroDashboard.ts` — `period` 依存で dashboard を取得（`status: 'loading' | 'ready' | 'offline'`、cancelled ガード）
 - `lib/backendUrl.ts` — `window.kanata.getBackendUrl()` IPC 経由でバックエンド URL を取得・キャッシュ。`VITE_API_URL` または `http://127.0.0.1:8000` にフォールバック
 - `hooks/useWatchlists.ts` — バックエンド `/api/watchlists*` を叩くフック。`status: 'loading' | 'ready' | 'offline'`
+- `components/Screening/` — `ScreeningView`（ツールバー + 結果テーブル、`useScreening` / `useUniverses` 使用）/ `ScreeningTable`（market_cap null は "—" 表示）/ `UniverseSelect`（ユニバース select + CSV登録/削除ボタン。Presentational、ファイルは `File.text()` で読んで JSON 送信）/ `screening.css`
+- `lib/backendFetch.ts` — 生オブジェクト系（macro / screening）共通の `fetchJson` GET ラッパ。エンベロープ系（watchlist）では使わない
+- `lib/screeningApi.ts` — スクリーニング + ユニバース API の fetch ラッパ（エンベロープを剥がさない。エラーは `detail` を Error message に載せる）
+- `hooks/useUniverses.ts` — ユニバース一覧・登録・削除・選択状態。選択 id は `localStorage` キー `kanata.screening.universeId` に永続化（削除済み id は default にフォールバック）
 - `lib/watchlistApi.ts` — 8 本の fetch ラッパ。`{success, data, error}` エンベロープを剥がす
 - `lib/watchlistTickers.ts` — `Watchlist.items` を表示用 `Ticker` に変換し、未知銘柄は `genSeries` で合成 OHLC を生成
 - `lib/migrateLocalState.ts` — 既存 `kanata.state.selected` を「Migrated from local」リストに一度だけ移行（フラグ: `kanata.migrated.v1`）

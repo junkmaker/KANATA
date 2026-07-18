@@ -6,7 +6,9 @@ type Props = {
   onSelectSymbol: (ticker: string) => void;
 };
 
-function formatMarketCap(cap: number): string {
+function formatMarketCap(cap: number | null): string {
+  // market_cap 列の無いユニバースでは null(未取得)になる。
+  if (cap === null) return '—';
   if (cap >= 1e12) return `${(cap / 1e12).toFixed(1)}兆`;
   if (cap >= 1e8) return `${Math.round(cap / 1e8)}億`;
   return String(cap);
