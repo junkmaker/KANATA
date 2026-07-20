@@ -438,6 +438,31 @@ input { font: inherit; color: inherit; }
 .add-symbol-error { font-size: 10px; color: var(--bear); margin-top: 4px; padding: 0 2px; }
 .watchlist-error { font-size: 10px; color: var(--bear); padding: 4px 12px 0; }
 
+/* ── Extra ticker banner (screening selection not in the active watchlist) ── */
+.extra-ticker-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--panel-2);
+}
+.extra-ticker-meta { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1; }
+.extra-ticker-code { font-weight: 600; }
+.extra-ticker-name { color: var(--text-dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extra-ticker-add-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 3px 8px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.extra-ticker-add-btn:disabled { opacity: 0.5; cursor: default; }
+
 .suggest-list {
   list-style: none;
   margin: 4px 0 0;

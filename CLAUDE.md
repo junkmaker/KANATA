@@ -155,7 +155,8 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `hooks/useMacroDashboard.ts` — `period` 依存で dashboard を取得（`status: 'loading' | 'ready' | 'offline'`、cancelled ガード）
 - `lib/backendUrl.ts` — `window.kanata.getBackendUrl()` IPC 経由でバックエンド URL を取得・キャッシュ。`VITE_API_URL` または `http://127.0.0.1:8000` にフォールバック
 - `hooks/useWatchlists.ts` — バックエンド `/api/watchlists*` を叩くフック。`status: 'loading' | 'ready' | 'offline'`
-- `components/Screening/` — `ScreeningView`（ツールバー + 結果テーブル、`useScreening` / `useUniverses` 使用）/ `ScreeningTable`（market_cap null は "—" 表示）/ `UniverseSelect`（ユニバース select + CSV登録/削除ボタン。Presentational、ファイルは `File.text()` で読んで JSON 送信）/ `screening.css`
+- `components/Screening/` — `ScreeningView`（ツールバー + 結果テーブル、`useScreening` / `useUniverses` 使用）/ `ScreeningTable`（market_cap null は "—" 表示。行クリックで `onSelectSymbol(ticker, name)` を呼び名前も渡す）/ `UniverseSelect`（ユニバース select + CSV登録/削除ボタン。Presentational、ファイルは `File.text()` で読んで JSON 送信）/ `screening.css`
+- `lib/extraTicker.ts` — スクリーニングで選んだウォッチリスト外銘柄を合成 `Ticker` 化（`buildExtraTicker` / `inferMarketForCode`）。`RightPanel` の `ExtraTickerBanner`（backend `ready` かつアクティブリストありの時のみ表示）から「＋リストに追加」で `wl.addItem` へ永続化
 - `lib/backendFetch.ts` — 生オブジェクト系（macro / screening）共通の `fetchJson` GET ラッパ。エンベロープ系（watchlist）では使わない
 - `lib/screeningApi.ts` — スクリーニング + ユニバース API の fetch ラッパ（エンベロープを剥がさない。エラーは `detail` を Error message に載せる）
 - `hooks/useUniverses.ts` — ユニバース一覧・登録・削除・選択状態。選択 id は `localStorage` キー `kanata.screening.universeId` に永続化（削除済み id は default にフォールバック）
