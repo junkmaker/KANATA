@@ -3,7 +3,7 @@ import { ScreeningThumbnail } from './ScreeningThumbnail';
 
 type Props = {
   results: ScreeningResult[];
-  onSelectSymbol: (ticker: string) => void;
+  onSelectSymbol: (ticker: string, name: string) => void;
 };
 
 function formatMarketCap(cap: number | null): string {
@@ -36,7 +36,11 @@ export function ScreeningTable({ results, onSelectSymbol }: Props) {
         </thead>
         <tbody>
           {sorted.map((r) => (
-            <tr key={r.ticker} onClick={() => onSelectSymbol(r.ticker)} className="screening-row">
+            <tr
+              key={r.ticker}
+              onClick={() => onSelectSymbol(r.ticker, r.name)}
+              className="screening-row"
+            >
               <td className="screening-code">{r.ticker}</td>
               <td className="screening-name">{r.name}</td>
               <td className="num">{formatMarketCap(r.market_cap)}</td>

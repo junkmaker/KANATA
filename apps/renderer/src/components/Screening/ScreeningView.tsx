@@ -15,7 +15,7 @@ function formatScanTime(iso: string | null): string {
 }
 
 type Props = {
-  onSelectSymbol: (ticker: string) => void;
+  onSelectSymbol: (ticker: string, name: string) => void;
 };
 
 export function ScreeningView({ onSelectSymbol }: Props) {

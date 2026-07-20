@@ -12,9 +12,10 @@ import { useAlertCheck } from './hooks/useAlertCheck';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
 import { subscribeBackendUrlChange } from './lib/backendUrl';
+import { buildExtraTicker, inferMarketForCode } from './lib/extraTicker';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
 import { clampSelectionForMode } from './lib/selection';
-import { itemToTicker, watchlistToTickers } from './lib/watchlistTickers';
+import { watchlistToTickers } from './lib/watchlistTickers';
 import type { AppState } from './types';
 import './styles/globals.css';
 
@@ -107,7 +108,7 @@ export function App() {
   });
   const [view, setView] = useState<View>(loadView);
   // スクリーニングから選んだウォッチリスト外銘柄(チャート描画のため一時的に加える)
-  const [extraSymbol, setExtraSymbol] = useState<string | null>(null);
+  const [extra, setExtra] = useState<{ code: string; name: string } | null>(null);
 
   const wl = useWatchlists();
   const [activeListId, setActiveListId] = useState<number | null>(loadActiveListId);
@@ -151,17 +152,10 @@ export function App() {
 
   // ウォッチリスト外のスクリーニング銘柄を合成 Ticker として一時的に加える
   const extraTicker = useMemo(() => {
-    if (!extraSymbol) return null;
-    if (displayTickers.some((t) => t.code === extraSymbol)) return null;
-    const market = /^\d{4}$|^\d{3}[A-Z]$/.test(extraSymbol) ? 'JP' : 'US';
-    return itemToTicker({
-      id: -1,
-      symbol: extraSymbol,
-      market,
-      display_name: extraSymbol,
-      position: 0,
-    });
-  }, [extraSymbol, displayTickers]);
+    if (!extra) return null;
+    if (displayTickers.some((t) => t.code === extra.code)) return null;
+    return buildExtraTicker(extra.code, extra.name);
+  }, [extra, displayTickers]);
 
   const chartTickers = useMemo(
     () => (extraTicker ? [...displayTickers, extraTicker] : displayTickers),
@@ -224,11 +218,17 @@ export function App() {
   }, [chartTickers]);
 
   // スクリーニングの行クリック: 当該銘柄を選択してチャートビューへ遷移
-  const handleSelectFromScreening = (ticker: string) => {
+  const handleSelectFromScreening = (ticker: string, name: string) => {
     const inWatchlist = displayTickers.some((t) => t.code === ticker);
-    setExtraSymbol(inWatchlist ? null : ticker);
+    setExtra(inWatchlist ? null : { code: ticker, name });
     setState((s) => ({ ...s, selected: [ticker] }));
     setView('chart');
+  };
+
+  // スクリーニング銘柄バナーの「＋リストに追加」: アクティブリストへ永続追加
+  const handleAddExtra = async () => {
+    if (!extra || !activeList) return;
+    await wl.addItem(activeList.id, extra.code, inferMarketForCode(extra.code), extra.name);
   };
 
   const watchlistController = useMemo(
@@ -328,6 +328,8 @@ export function App() {
               tickers={displayTickers}
               data={data}
               watchlist={watchlistController}
+              extraTicker={extraTicker}
+              onAddExtra={handleAddExtra}
             />
           </div>
         </div>

@@ -5,6 +5,7 @@ import { fmtPrice } from '../../lib/formatters';
 import { toggleSelection } from '../../lib/selection';
 import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
 import { AddSymbolForm } from './AddSymbolForm';
+import { ExtraTickerBanner } from './ExtraTickerBanner';
 import { WatchlistSelector } from './WatchlistSelector';
 
 interface WatchlistController {
@@ -28,6 +29,8 @@ interface RightPanelProps {
   tickers: Ticker[];
   data: Record<string, OHLCBar[]>;
   watchlist: WatchlistController;
+  extraTicker: Ticker | null;
+  onAddExtra: () => Promise<void>;
 }
 
 function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -41,7 +44,15 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
   );
 }
 
-export function RightPanel({ state, setState, tickers, data, watchlist }: RightPanelProps) {
+export function RightPanel({
+  state,
+  setState,
+  tickers,
+  data,
+  watchlist,
+  extraTicker,
+  onAddExtra,
+}: RightPanelProps) {
   const [q, setQ] = useState('');
   const [marketFilter, setMarketFilter] = useState('ALL');
   const [editing, setEditing] = useState(false);
@@ -273,6 +284,10 @@ export function RightPanel({ state, setState, tickers, data, watchlist }: RightP
           ))}
         </div>
       </div>
+
+      {extraTicker && watchlist.status === 'ready' && watchlist.activeId !== null && (
+        <ExtraTickerBanner ticker={extraTicker} onAdd={onAddExtra} />
+      )}
 
       <div
         className="ticker-list"
