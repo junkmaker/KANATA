@@ -200,12 +200,14 @@ export function RSI(data: OHLCBar[], period = 14): (number | null)[] {
   return out;
 }
 
+export const ICHI_DISPLACEMENT = 26;
+
 export function ICHI(
   data: OHLCBar[],
   tenkanP = 9,
   kijunP = 26,
   senkouBP = 52,
-  disp = 26,
+  disp = ICHI_DISPLACEMENT,
 ): ICHIResult {
   const n = data.length;
   const hh = (i: number, p: number) => {

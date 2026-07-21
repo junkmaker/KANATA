@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
-import { BOLL, EMA, ICHI, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
+import { BOLL, EMA, ICHI, ICHI_DISPLACEMENT, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
 import type {
   AlertDirection,
   AppState,
@@ -76,11 +76,18 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
   const primaryData = data[primary];
 
   const [view, setView] = useState({ start: 1200, end: 1500 });
+  const ichiRef = useRef(state.indicators.ichi);
+  useEffect(() => {
+    ichiRef.current = state.indicators.ichi;
+  });
   useEffect(() => {
     if (!primaryData) return;
-    const end = primaryData.length;
-    const start = Math.max(0, end - 220);
+    const futureMargin = ichiRef.current ? ICHI_DISPLACEMENT : 0;
+    const end = primaryData.length + futureMargin;
+    const start = Math.max(0, primaryData.length - 220);
     setView({ start, end });
+    // primary/primaryData?.length の変化時のみビューをリセットする。
+    // ichi トグルはパン・ズーム位置を保持するため依存に含めず ref で読む
   }, [primary, primaryData?.length]);
 
   const [finHistory, setFinHistory] = useState<FinBar[] | null>(null);
@@ -212,6 +219,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
 
   // dataEnd: 実データ範囲の末尾（未来バーを含まない）
   const dataEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
+  // cloudEnd: 一目均衡表の雲（未来 ICHI_DISPLACEMENT 本分）を含む末尾
+  const cloudEnd = primaryData ? Math.min(view.end, primaryData.length + ICHI_DISPLACEMENT) : view.end;
 
   const yRange = useMemo<YRange>(() => {
     if (!primaryData) return { min: 0, max: 1 };
@@ -224,16 +233,31 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
       if (b.h > max) max = b.h;
       if (b.l < min) min = b.l;
     }
-    if (min === Infinity) return { min: 0, max: 1 };
     if (state.indicators.boll && indi.boll) {
       for (let i = view.start; i < end; i++) {
         if (indi.boll.upper[i] != null && indi.boll.upper[i]! > max) max = indi.boll.upper[i]!;
         if (indi.boll.lower[i] != null && indi.boll.lower[i]! < min) min = indi.boll.lower[i]!;
       }
     }
+    if (state.indicators.ichi && indi.ichi) {
+      const { senkouA, senkouB } = indi.ichi;
+      for (let i = view.start; i < cloudEnd; i++) {
+        const a = senkouA[i],
+          b = senkouB[i];
+        if (a != null) {
+          if (a > max) max = a;
+          if (a < min) min = a;
+        }
+        if (b != null) {
+          if (b > max) max = b;
+          if (b < min) min = b;
+        }
+      }
+    }
+    if (min === Infinity) return { min: 0, max: 1 };
     const pad = (max - min) * 0.08;
     return { min: min - pad, max: max + pad };
-  }, [primaryData, view, state.indicators.boll, indi]);
+  }, [primaryData, view, state.indicators.boll, state.indicators.ichi, indi, cloudEnd]);
 
   const macdYRange = useMemo(() => {
     if (!indi.macd) return { min: -0.001, max: 0.001 };
@@ -422,7 +446,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         const { tenkan, kijun, senkouA, senkouB, chikou } = indi.ichi;
         ctx.beginPath();
         let first = true;
-        for (let i = view.start; i < dataEnd; i++) {
+        for (let i = view.start; i < cloudEnd; i++) {
           if (senkouA[i] == null || senkouB[i] == null) continue;
           const x = xScale(i);
           if (first) {
@@ -430,15 +454,25 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
             first = false;
           } else ctx.lineTo(x, yScale(senkouA[i]!));
         }
-        for (let i = dataEnd - 1; i >= view.start; i--) {
+        for (let i = cloudEnd - 1; i >= view.start; i--) {
           if (senkouA[i] == null || senkouB[i] == null) continue;
           ctx.lineTo(xScale(i), yScale(senkouB[i]!));
         }
         ctx.closePath();
-        const midI = Math.floor((view.start + dataEnd) / 2);
-        const green = (senkouA[midI] ?? 0) >= (senkouB[midI] ?? 0);
-        ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
-        ctx.fill();
+        // 中点付近が senkouA/B 未算出（範囲外）の可能性があるため、
+        // 実際に値が揃っている直近のインデックスを探して色判定に使う
+        let colorIdx = -1;
+        for (let i = cloudEnd - 1; i >= view.start; i--) {
+          if (senkouA[i] != null && senkouB[i] != null) {
+            colorIdx = i;
+            break;
+          }
+        }
+        if (colorIdx >= 0) {
+          const green = senkouA[colorIdx]! >= senkouB[colorIdx]!;
+          ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
+          ctx.fill();
+        }
         const toY = (arr: (number | null)[]) => arr.map((v) => (v == null ? null : yScale(v)));
         drawLine(ctx, xScale, toY(tenkan), COLORS.magenta, 1.25);
         drawLine(ctx, xScale, toY(kijun), COLORS.accent, 1.25);
@@ -1624,7 +1658,9 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     return () => window.removeEventListener('keydown', onKey);
   }, [textInput, setState]);
 
-  const hoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : dataEnd - 1;
+  const rawHoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : dataEnd - 1;
+  // 未来領域（一目均衡表の雲など）にカーソルが乗っても、凡例には直近の実データを表示し続ける
+  const hoverIdx = Math.min(rawHoverIdx, dataEnd - 1);
   const hoverBar = primaryData && primaryData[hoverIdx];
 
   return (
