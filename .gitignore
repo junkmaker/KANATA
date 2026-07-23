@@ -34,3 +34,6 @@ docs/*.xlsx
 
 # gpaphify
 graphify-out/
+
+# obsidian
+.obsidian/
