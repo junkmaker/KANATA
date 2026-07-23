@@ -975,21 +975,24 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
   };
 
   const screenToData = useCallback(
-    (sx: number, sy: number) => {
+    (sx: number, sy: number, forcePaneId?: PaneId) => {
       const idx = view.start + (sx - PAD_L) / bw;
-      const pane = getPaneAt(sy);
+      const pane = forcePaneId
+        ? (paneDefs.find((p) => p.id === forcePaneId) ?? getPaneAt(sy))
+        : getPaneAt(sy);
       const v = pane.yInvert(sy);
       return { idx, v, paneId: pane.id as PaneId };
     },
-    [view, bw, getPaneAt],
+    [view, bw, getPaneAt, paneDefs],
   );
 
   const snapPoint = (
     sx: number,
     sy: number,
     mode: SnapMode,
+    forcePaneId?: PaneId,
   ): { idx: number; v: number; paneId: PaneId } => {
-    const { idx: rawIdx, v: rawV, paneId } = screenToData(sx, sy);
+    const { idx: rawIdx, v: rawV, paneId } = screenToData(sx, sy, forcePaneId);
     if (!primaryData?.length) return { idx: rawIdx, v: rawV, paneId };
     const ci = Math.max(0, Math.min(primaryData.length - 1 + MAX_FUTURE_BARS, Math.round(rawIdx)));
     // サブペインではバーインデックスのみスナップ（OHLC スナップなし）
@@ -1037,7 +1040,13 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         if (d.type === 'hline' && d.v != null) {
           if (Math.abs(sy - dpane.yScale(d.v)) <= TOL) return d.id;
         } else if (d.type === 'vline' && d.idx != null) {
-          if (Math.abs(sx - xScale(d.idx)) <= TOL) return d.id;
+          if (
+            Math.abs(sx - xScale(d.idx)) <= TOL &&
+            sy >= dpane.y0 &&
+            sy < dpane.y0 + dpane.height
+          ) {
+            return d.id;
+          }
         } else if (
           d.type === 'trend' &&
           d.i1 != null &&
@@ -1045,8 +1054,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
           d.i2 != null &&
           d.v2 != null
         ) {
-          const p1 = dataToScreen(d.i1, d.v1);
-          const p2 = dataToScreen(d.i2, d.v2);
+          const p1 = dataToScreen(d.i1, d.v1, dpane.id);
+          const p2 = dataToScreen(d.i2, d.v2, dpane.id);
           const dx = p2.x - p1.x;
           const dy = p2.y - p1.y;
           const len2 = dx * dx + dy * dy;
@@ -1064,8 +1073,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
           d.i2 != null &&
           d.v2 != null
         ) {
-          const p1 = dataToScreen(d.i1, d.v1);
-          const p2 = dataToScreen(d.i2, d.v2);
+          const p1 = dataToScreen(d.i1, d.v1, dpane.id);
+          const p2 = dataToScreen(d.i2, d.v2, dpane.id);
           const xMin = Math.min(p1.x, p2.x);
           const xMax = Math.max(p1.x, p2.x);
           const yMin = Math.min(p1.y, p2.y);
@@ -1080,8 +1089,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
           d.i2 != null &&
           d.v2 != null
         ) {
-          const p1 = dataToScreen(d.i1, d.v1);
-          const p2 = dataToScreen(d.i2, d.v2);
+          const p1 = dataToScreen(d.i1, d.v1, dpane.id);
+          const p2 = dataToScreen(d.i2, d.v2, dpane.id);
           const cx = (p1.x + p2.x) / 2;
           const cy = (p1.y + p2.y) / 2;
           const rx = Math.abs(p2.x - p1.x) / 2;
@@ -1094,7 +1103,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
           if (Math.abs(norm - 1) <= TOL / avgR) return d.id;
           if (norm <= 1) return d.id;
         } else if (d.type === 'text' && d.idx != null && d.v != null) {
-          const p = dataToScreen(d.idx, d.v);
+          const p = dataToScreen(d.idx, d.v, dpane.id);
           const w = (d.text?.length ?? 1) * 7 + 16;
           const h = 14;
           if (sx >= p.x - 4 && sx <= p.x + w && sy >= p.y - h / 2 && sy <= p.y + h / 2) {
@@ -1431,20 +1440,21 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     const rect = e.currentTarget.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
-    const { idx, v } = screenToData(sx, sy);
+    const { idx } = screenToData(sx, sy);
     const tool = state.activeTool;
     if (tool === 'pan' || !tool) {
       const hitId = hitTest(sx, sy);
       if (hitId != null) {
         const d = state.drawings.find((x) => x.id === hitId);
         if (d) {
+          const { v: startV } = screenToData(sx, sy, d.pane);
           setState((s) => ({ ...s, selectedDrawingId: hitId }));
           setDragging({
             type: 'move-drawing',
             startX: sx,
             startY: sy,
             startIdx: idx,
-            startV: v,
+            startV,
             snapshot: d,
           });
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -1532,7 +1542,12 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
       }
       setView({ start: ns, end: ne });
     } else if (dragging?.type === 'drawing' && tempDrawing) {
-      const { idx: si, v: sv } = snapPoint(sx, sy, getSnapMode(tempDrawing.type));
+      const { idx: si, v: sv } = snapPoint(
+        sx,
+        sy,
+        getSnapMode(tempDrawing.type),
+        tempDrawing.pane,
+      );
       setTempDrawing({ ...tempDrawing, i2: si, v2: sv });
     } else if (
       dragging?.type === 'move-drawing' &&
@@ -1540,7 +1555,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
       dragging.startIdx != null &&
       dragging.startV != null
     ) {
-      const { idx, v } = screenToData(sx, sy);
+      const { idx, v } = screenToData(sx, sy, dragging.snapshot.pane);
       const dIdx = idx - dragging.startIdx;
       const dV = v - dragging.startV;
       const snap = dragging.snapshot;
