@@ -27,3 +27,28 @@ export const COMPARE_COLORS = [
   'oklch(0.72 0.16 290)',
   'oklch(0.76 0.11 180)',
 ];
+
+// 描画ツールのカラーパレット（固定 5 色）
+export const DRAWING_COLORS = ['#FFFFFF', '#FFFF00', '#00FFFF', '#FFC0CB', '#89CC40'] as const;
+
+// 描画の半透明塗り用。hex は rgba へ、oklch など末尾 ) の色はアルファチャンネルを差し込む。
+export function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('#')) {
+    const hex = color.slice(1);
+    const full =
+      hex.length === 3
+        ? hex
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : hex;
+    const r = parseInt(full.slice(0, 2), 16);
+    const g = parseInt(full.slice(2, 4), 16);
+    const b = parseInt(full.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  if (color.endsWith(')') && !color.includes('/')) {
+    return color.replace(/\)$/, ` / ${alpha})`);
+  }
+  return color;
+}

@@ -119,6 +119,7 @@ export interface AppState {
   activeTool: string;
   drawings: DrawingObject[];
   selectedDrawingId: number | null;
+  drawingColor: string;
   showVolume: boolean;
   showFinancial: boolean;
   showSqMarkers: boolean;

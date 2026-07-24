@@ -1,3 +1,4 @@
+import { DRAWING_COLORS } from '../../lib/colors';
 import type { AppState } from '../../types';
 
 interface LeftPanelProps {
@@ -86,6 +87,7 @@ function Toggle({
 export function LeftPanel({ state, setState }: LeftPanelProps) {
   const setTool = (t: string) =>
     setState((s) => ({ ...s, activeTool: s.activeTool === t ? 'pan' : t }));
+  const setDrawingColor = (c: string) => setState((s) => ({ ...s, drawingColor: c }));
   const setInd = (k: keyof AppState['indicators'], v: boolean) =>
     setState((s) => ({ ...s, indicators: { ...s.indicators, [k]: v } }));
   const setFin = (k: keyof AppState['financial'], v: boolean) =>
@@ -159,6 +161,21 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         <div className="tool-grid">
           {tools.map((t) => (
             <ToolBtn key={t.id} {...t} activeTool={state.activeTool} setTool={setTool} />
+          ))}
+        </div>
+        <div className="draw-color-row">
+          <span className="draw-color-label">色</span>
+          {DRAWING_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`swatch${state.drawingColor === c ? ' active' : ''}`}
+              style={{ background: c }}
+              title={c}
+              aria-label={`描画色 ${c}`}
+              aria-pressed={state.drawingColor === c}
+              onClick={() => setDrawingColor(c)}
+            />
           ))}
         </div>
         {state.drawings.length > 0 && (
