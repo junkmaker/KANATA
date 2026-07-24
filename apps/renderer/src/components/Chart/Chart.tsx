@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchQuarterlyFin } from '../../lib/api';
-import { COLORS, COMPARE_COLORS } from '../../lib/colors';
+import { COLORS, COMPARE_COLORS, DRAWING_COLORS, withAlpha } from '../../lib/colors';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
 import { BOLL, EMA, ICHI, ICHI_DISPLACEMENT, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
 import type {
@@ -919,6 +919,14 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     setCtxMenu(null);
   };
 
+  const setDrawingColorById = (id: number, color: string) => {
+    setState((s) => ({
+      ...s,
+      drawings: s.drawings.map((d) => (d.id === id ? { ...d, color } : d)),
+    }));
+    setCtxMenu(null);
+  };
+
   const handleSaveAlert = () => {
     if (!alertForm) return;
     const drawing = state.drawings.find((d) => d.id === alertForm.drawingId);
@@ -961,7 +969,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
             v: textInput.v,
             pane: textInput.paneId,
             text: text.trim(),
-            color: COLORS.accent,
+            color: s.drawingColor,
             ticker: primary,
             id: Math.random(),
           },
@@ -1234,7 +1242,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
           const y = Math.min(p1.y, p2.y);
           const w = Math.abs(p2.x - p1.x);
           const h = Math.abs(p2.y - p1.y);
-          ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.12)');
+          ctx.fillStyle = withAlpha(d.color || COLORS.accent, 0.12);
           ctx.fillRect(x, y, w, h);
           ctx.strokeStyle = d.color || COLORS.accent;
           ctx.lineWidth = isSelected ? 2.5 : 1.5;
@@ -1283,7 +1291,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         const p = dataToScreen(d.idx, d.v, d.pane ?? 'price');
         if (isSelected) {
           const w = (d.text?.length ?? 1) * 7 + 12;
-          ctx.fillStyle = (d.color || COLORS.accent).replace(')', ' / 0.18)');
+          ctx.fillStyle = withAlpha(d.color || COLORS.accent, 0.18);
           ctx.fillRect(p.x + 2, p.y - 8, w, 16);
         }
         ctx.fillStyle = d.color || COLORS.accent;
@@ -1476,7 +1484,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
             type: 'hline',
             v: sv,
             pane: paneId,
-            color: COLORS.amber,
+            color: s.drawingColor,
             ticker: primary,
             id: Math.random(),
           },
@@ -1493,7 +1501,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
             type: 'vline',
             idx: si,
             pane: paneId,
-            color: COLORS.amber,
+            color: s.drawingColor,
             ticker: primary,
             id: Math.random(),
           },
@@ -1509,7 +1517,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         i2: si,
         v2: sv,
         pane: paneId,
-        color: COLORS.accent,
+        color: state.drawingColor,
         ticker: primary,
         id: Math.random(),
       });
@@ -1776,6 +1784,29 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
             fontSize: 12,
           }}
         >
+          <div style={{ display: 'flex', gap: 6, padding: '6px 14px' }}>
+            {DRAWING_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={`色 ${c}`}
+                title={c}
+                style={{
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: c,
+                  border: '1px solid var(--border)',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  setDrawingColorById(ctxMenu.drawingId, c);
+                }}
+              />
+            ))}
+          </div>
           <button
             type="button"
             style={{

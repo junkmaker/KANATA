@@ -12,6 +12,7 @@ import { useAlertCheck } from './hooks/useAlertCheck';
 import { useChartData } from './hooks/useChartData';
 import { useWatchlists } from './hooks/useWatchlists';
 import { subscribeBackendUrlChange } from './lib/backendUrl';
+import { DRAWING_COLORS } from './lib/colors';
 import { buildExtraTicker, inferMarketForCode } from './lib/extraTicker';
 import { migrateLegacyWatchlist } from './lib/migrateLocalState';
 import { clampSelectionForMode } from './lib/selection';
@@ -41,6 +42,7 @@ const DEFAULT_STATE: AppState = {
   activeTool: 'pan',
   drawings: [],
   selectedDrawingId: null,
+  drawingColor: DRAWING_COLORS[0],
   showVolume: true,
   showFinancial: true,
   showSqMarkers: true,

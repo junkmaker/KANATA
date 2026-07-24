@@ -276,6 +276,17 @@ input { font: inherit; color: inherit; }
 .tool-btn.active .tool-icon { color: var(--accent); }
 .drawing-count { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 4px; }
 
+/* Drawing color swatches */
+.draw-color-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.draw-color-label { font-size: 11px; color: var(--muted); margin-right: 2px; }
+.draw-color-row .swatch {
+  width: 16px; height: 16px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.draw-color-row .swatch:hover { border-color: var(--text); }
+.draw-color-row .swatch.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--text); }
+
 /* Toggles */
 .toggle-row {
   display: flex; align-items: center; gap: 8px;
