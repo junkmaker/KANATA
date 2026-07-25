@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { DataStatus } from '../hooks/useChartData';
 import { fmtPrice } from '../lib/formatters';
 import type { AppState, OHLCBar, Ticker } from '../types';
@@ -44,6 +45,24 @@ export function TopBar({
   onViewChange,
   onOpenSettings,
 }: TopBarProps) {
+  // バージョンは package.json を単一の情報源とし、メインプロセスから受け取る
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.kanata
+      ?.getAppVersion()
+      .then((v) => {
+        if (!cancelled) setAppVersion(v);
+      })
+      .catch(() => {
+        /* 取得できないときはバージョン非表示のまま */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const marketTime = new Date().toLocaleTimeString('en-GB', { hour12: false });
   const dotColor = STATUS_COLOR[dataStatus];
 
@@ -60,7 +79,7 @@ export function TopBar({
         </div>
         <div className="brand-text">
           <div className="brand-name">KANATA</div>
-          <div className="brand-sub">v0.11.0</div>
+          <div className="brand-sub">{appVersion ? `v${appVersion}` : ' '}</div>
         </div>
       </div>
 
