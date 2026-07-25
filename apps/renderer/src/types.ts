@@ -120,6 +120,8 @@ export interface AppState {
   drawings: DrawingObject[];
   selectedDrawingId: number | null;
   drawingColor: string;
+  /** 描画オブジェクト（トレンドライン等）を表示するか。false でも drawings は保持される */
+  showDrawings: boolean;
   showVolume: boolean;
   showFinancial: boolean;
   showSqMarkers: boolean;

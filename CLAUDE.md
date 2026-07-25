@@ -180,7 +180,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 
 ### 型定義 (`apps/renderer/src/types.ts`)
 
-`OHLCBar` / `Ticker` / `AppState` / `DrawingObject` / 各インジケーター結果型が集中管理されている。`AppState` は `drawings: DrawingObject[]` と `selectedDrawingId: number | null` を持つ。新しい描画ツールやインジケーターを追加する際はここを起点に変更する。
+`OHLCBar` / `Ticker` / `AppState` / `DrawingObject` / 各インジケーター結果型が集中管理されている。`AppState` は `drawings: DrawingObject[]` と `selectedDrawingId: number | null` を持つ。新しい描画ツールやインジケーターを追加する際はここを起点に変更する。`AppState.showDrawings` は描画レイヤーの表示フラグ。false でも `drawings` は保持され、アラートも従来どおり発火する。
 
 ## 実装上の注意点
 
@@ -191,6 +191,8 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - **タイムフレーム文字列は前後で違う**。フロントは `5m/15m/60m/1D/1W/1M`、yfinance は `5m/15m/60m/1d/1wk/1mo`。変換は必ず `INTERVAL_MAP` 経由にする
 - **JP 銘柄コードは 4 桁数字**（例 `7203`）。yfinance に渡す前に `.T` を付ける処理が `to_yf_symbol` に集約されているので、新規ルートで yfinance を呼ぶ場合も同関数を使う
 - **描画ツールは OHLC インデックスと価格で保存**（`DrawingObject`）、座標ではない。タイムフレーム変更でも位置が維持される設計
+- **描画の表示/非表示は `state.showDrawings`**。左パネル「描画ツール」ヘッダの目アイコンまたは `H` キーで切替。非表示中は `Chart.tsx` のオーバーレイ描画・`hitTest`・`onPointerDown` のツール判定の 3 箇所が抑制される（描画を止めるだけだと見えない線を掴めてしまい、掴めなくするだけだと見えない線を新規作成できてしまう）。非表示化時は `toggleDrawingsVisibility` が `activeTool` をパンへ戻す。この状態は永続化せず、`loadState` が起動時に必ず `true` へ戻す
+- **チャートの単独キーショートカットを無視させたい領域には `data-chart-shortcuts="off"` を付ける**（`SHORTCUT_OPT_OUT_SELECTOR`）。フォーム要素の判定は `isTypingTarget` に集約されており、`select` もブラウザの type-ahead と衝突するため入力対象として扱う
 - **未来バーへの描画**: `Chart.tsx` の `MAX_FUTURE_BARS = 120` で最大 120 バー先の空白領域にパン・描画できる。未来インデックス（`idx >= data.length`）の時刻計算は `lib/futureBars.ts` の `barTimestampAt` に集約されており、新規でタイムスタンプが必要な場合も同関数を使う
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - **Chart サブペインの Y 座標チェーン**（[Chart.tsx:70-74](apps/renderer/src/components/Chart/Chart.tsx#L70-L74)）に手を入れない。ペインの高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する

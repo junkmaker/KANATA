@@ -1,4 +1,5 @@
 import { DRAWING_COLORS } from '../../lib/colors';
+import { applyToolSelection, toggleDrawingsVisibility } from '../../lib/drawingVisibility';
 import type { AppState } from '../../types';
 
 interface LeftPanelProps {
@@ -53,6 +54,26 @@ function ToolBtn({
   );
 }
 
+/** 描画の表示状態を示す目アイコン。非表示のときは斜線を重ねる */
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M1 8s2.6-4.4 7-4.4S15 8 15 8s-2.6 4.4-7 4.4S1 8 1 8Z" />
+      <circle cx="8" cy="8" r="2" />
+      {hidden && <path d="M2.5 13.5 13.5 2.5" />}
+    </svg>
+  );
+}
+
 function Toggle({
   label,
   value,
@@ -85,8 +106,8 @@ function Toggle({
 }
 
 export function LeftPanel({ state, setState }: LeftPanelProps) {
-  const setTool = (t: string) =>
-    setState((s) => ({ ...s, activeTool: s.activeTool === t ? 'pan' : t }));
+  const setTool = (t: string) => setState((s) => applyToolSelection(s, t));
+  const toggleDrawings = () => setState(toggleDrawingsVisibility);
   const setDrawingColor = (c: string) => setState((s) => ({ ...s, drawingColor: c }));
   const setInd = (k: keyof AppState['indicators'], v: boolean) =>
     setState((s) => ({ ...s, indicators: { ...s.indicators, [k]: v } }));
@@ -153,9 +174,26 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
       <Section
         title="描画ツール"
         right={
-          <button type="button" className="link-btn" onClick={clearDrawings} title="描画を全て消す">
-            全消去
-          </button>
+          <div className="section-actions">
+            <button
+              type="button"
+              className="link-btn icon-btn"
+              onClick={toggleDrawings}
+              aria-label="描画の表示"
+              aria-pressed={state.showDrawings}
+              title={state.showDrawings ? '描画を非表示にする (H)' : '描画を表示する (H)'}
+            >
+              <EyeIcon hidden={!state.showDrawings} />
+            </button>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={clearDrawings}
+              title="描画を全て消す"
+            >
+              全消去
+            </button>
+          </div>
         }
       >
         <div className="tool-grid">
@@ -179,7 +217,10 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
           ))}
         </div>
         {state.drawings.length > 0 && (
-          <div className="drawing-count">チャートに {state.drawings.length} 個の描画</div>
+          <div className={`drawing-count${state.showDrawings ? '' : ' is-hidden'}`}>
+            チャートに {state.drawings.length} 個の描画
+            {state.showDrawings ? '' : '（非表示中）'}
+          </div>
         )}
       </Section>
 

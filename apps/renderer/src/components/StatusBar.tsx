@@ -20,6 +20,7 @@ export function StatusBar({ state }: StatusBarProps) {
       </span>
       <span>
         DRAW <b>{state.drawings.length}</b>
+        {state.showDrawings ? '' : ' (非表示)'}
       </span>
       <span style={{ marginLeft: 'auto' }}>
         ドラッグでパン · スクロールでズーム · 行をダブルクリックでメインに設定
