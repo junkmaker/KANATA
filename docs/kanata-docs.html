@@ -307,6 +307,7 @@
   }
   .s200 { background: oklch(0.38 0.10 150/0.25); color: oklch(0.80 0.13 150); }
   .s201 { background: oklch(0.38 0.10 200/0.25); color: oklch(0.78 0.14 200); }
+  .s202 { background: oklch(0.38 0.10 230/0.25); color: oklch(0.78 0.14 230); }
   .s400 { background: oklch(0.38 0.10 60 /0.25); color: oklch(0.80 0.15 60); }
   .s404 { background: oklch(0.38 0.10 85 /0.25); color: oklch(0.80 0.15 85); }
   .s409 { background: oklch(0.38 0.10 22 /0.25); color: oklch(0.78 0.15 22); }
@@ -409,6 +410,14 @@
     <a class="nav-link nav-link-sub" href="#ep-fin-quarterly">5-1 四半期財務</a>
     <a class="nav-link nav-link-sub" href="#ep-fin-summary">5-2 サマリー</a>
     <a class="nav-link" href="#ep-search">6. シンボル検索</a>
+    <a class="nav-link" href="#ep-macro">7. マクロ経済指標</a>
+    <a class="nav-link nav-link-sub" href="#ep-macro-indicators">7-1 個別指標</a>
+    <a class="nav-link nav-link-sub" href="#ep-macro-dashboard">7-2 ダッシュボード</a>
+    <a class="nav-link" href="#ep-screening">8. N字スクリーニング</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-results">8-1 結果取得</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-scan">8-2 スキャン開始</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-status">8-3 進捗確認</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-universes">8-4 ユニバース管理</a>
 
     <div class="nav-section-label">型 / 仕様</div>
     <a class="nav-link" href="#api-types">型定義</a>
@@ -427,12 +436,16 @@
     <a class="nav-link" href="#arch-state">4. 状態管理</a>
     <a class="nav-link" href="#arch-backend">5. バックエンド構成</a>
     <a class="nav-link" href="#arch-datamodel">6. データモデル</a>
+    <a class="nav-link" href="#arch-macro">7. マクロ経済ダッシュボード</a>
+    <a class="nav-link" href="#arch-screening">8. N字スクリーニング</a>
+    <a class="nav-link" href="#arch-patterns">9. パターン認識</a>
+    <a class="nav-link" href="#arch-settings">10. 設定・FREDキー管理</a>
 
     <div class="nav-section-label">詳細仕様</div>
-    <a class="nav-link" href="#arch-ipc">7. IPC チャンネル</a>
-    <a class="nav-link" href="#arch-timeframe">8. タイムフレーム変換</a>
-    <a class="nav-link" href="#arch-libs">9. フロントエンドライブラリ</a>
-    <a class="nav-link" href="#arch-types">10. 主要型定義</a>
+    <a class="nav-link" href="#arch-ipc">11. IPC チャンネル</a>
+    <a class="nav-link" href="#arch-timeframe">12. タイムフレーム変換</a>
+    <a class="nav-link" href="#arch-libs">13. フロントエンドライブラリ</a>
+    <a class="nav-link" href="#arch-types">14. 主要型定義</a>
     <a class="nav-link" href="#arch-infra">インフラサマリー</a>
   </div>
 </nav>
@@ -710,6 +723,188 @@
 
   <hr>
 
+  <h2 id="ep-macro">7. マクロ経済指標</h2>
+  <p>ベースパス <code>/api/macro/</code>。全エンドポイント共通クエリ <code>start</code> / <code>end</code>（ISO 日付、省略時は既定 730 日前〜当日）。<strong>{success, data, error} エンベロープは使わず、生オブジェクトを直接返す</strong>（Quotes / Fundamentals / Screening と同じ方針）。キャッシュキーは <code>macro:{name}:{start}:{end}</code>、TTL は全指標共通で 1時間（<code>_DASHBOARD_TTL_SECONDS = 3600</code>）。</p>
+
+  <h3 id="ep-macro-indicators">7-1. 個別指標</h3>
+  <table>
+    <tr><th>エンドポイント</th><th>indicator</th><th>内容</th></tr>
+    <tr><td><code>GET /api/macro/hy-oas</code></td><td><code>hy_oas</code></td><td>ハイイールド債 OAS スプレッド（FRED <code>BAMLH0A0HYM2</code>）</td></tr>
+    <tr><td><code>GET /api/macro/net-liquidity</code></td><td><code>net_liquidity</code></td><td>Fed 純流動性（<code>WALCL − RRPONTSYD − WTREGEN</code>、兆$ 表示）</td></tr>
+    <tr><td><code>GET /api/macro/rsp-spy</code></td><td><code>rsp_spy</code></td><td>RSP/SPY 比率（等金額加重 vs 時価総額加重、市場の内側の強さ）</td></tr>
+    <tr><td><code>GET /api/macro/nikkei-sp</code></td><td><code>nikkei_sp</code></td><td>日経平均トレンド（表示専用・momentum 系）</td></tr>
+    <tr><td><code>GET /api/macro/nikkei-topix</code></td><td><code>nikkei_topix</code></td><td>日経平均/TOPIX 比（表示専用・momentum 系）</td></tr>
+    <tr><td><code>GET /api/macro/brent-wti</code></td><td><code>brent_wti</code></td><td>Brent/WTI 原油スプレッド（表示専用・momentum 系）</td></tr>
+  </table>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし）</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">type</span> <span class="ty">Signal</span> = <span class="st">'green'</span> | <span class="st">'yellow'</span> | <span class="st">'red'</span> | <span class="st">'gray'</span>;
+
+<span class="kw">interface</span> <span class="ty">SeriesPoint</span> { date: <span class="kw">string</span>; value: <span class="kw">number</span>; }
+
+<span class="kw">interface</span> <span class="ty">LatestPoint</span> {
+  date: <span class="kw">string</span>;
+  value: <span class="kw">number</span>;
+  change: <span class="kw">number</span> | <span class="kw">null</span>;
+  provisional: <span class="kw">boolean</span>;
+}
+
+<span class="kw">interface</span> <span class="ty">IndicatorMeta</span> {
+  source: <span class="kw">string</span>;
+  stale: <span class="kw">boolean</span>;    <span class="cm">// FRED取得失敗時、直近14日以内のキャッシュ値で代替した場合 true</span>
+  available: <span class="kw">boolean</span>; <span class="cm">// FRED_API_KEY 未設定など取得不能時 false</span>
+}
+
+<span class="kw">interface</span> <span class="ty">IndicatorResponse</span> {
+  indicator: <span class="kw">string</span>;
+  unit: <span class="kw">string</span>;
+  lens: <span class="kw">string</span>;
+  signal: <span class="ty">Signal</span>;
+  latest: <span class="ty">LatestPoint</span> | <span class="kw">null</span>;
+  thresholds: <span class="kw">Record</span>&lt;<span class="kw">string</span>, <span class="kw">string</span> | <span class="kw">null</span>&gt;;
+  series: <span class="ty">SeriesPoint</span>[];
+  meta: <span class="ty">IndicatorMeta</span>;
+}</code></pre>
+  <p class="callout">FRED バックエンドの3指標（<code>hy_oas</code> / <code>net_liquidity</code> の WALCL・RRP・TGA）は <code>FRED_API_KEY</code> 未設定でも 500 を返さず、該当指標を <code>meta.available=false</code>, <code>signal="gray"</code> で返す（部分稼働）。<code>rsp_spy</code> と日本株/原油系3指標は yfinance のみで完結するためキー不要。</p>
+
+  <h3 id="ep-macro-dashboard">7-2. 総合ダッシュボード</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/macro/dashboard</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし）</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">DashboardResponse</span> {
+  overall_signal: <span class="ty">Signal</span>;
+  indicators: <span class="ty">IndicatorResponse</span>[]; <span class="cm">// hy_oas, net_liquidity, rsp_spy, nikkei_sp, nikkei_topix, brent_wti の順</span>
+}</code></pre>
+  <p class="callout"><code>overall_signal</code> は <strong>hy_oas / net_liquidity / rsp_spy の3指標（コア）のみ</strong>から算出される。<code>nikkei_sp</code> / <code>nikkei_topix</code> / <code>brent_wti</code>（momentum 系の追加3指標）は表示専用で総合シグナルには寄与しない。判定ルール: 利用可能な指標が0件 → <code>gray</code>。いずれか <code>red</code> → <code>red</code>（<code>red_if_any_red</code>）。<code>yellow</code> が2件以上 → <code>yellow</code>（<code>yellow_if_yellow_count_gte</code>）。それ以外 → <code>green</code>。</p>
+
+  <h4>閾値設定（<code>config/macro_thresholds.json</code>）</h4>
+  <p>シリーズ ID・ルックバック期間・閾値は JSON で外出し。<strong>ハードコード禁止、変更は JSON 編集のみ</strong>（<code>MACRO_CONFIG_PATH</code> 環境変数で差し替え可）。</p>
+  <table>
+    <tr><th>指標</th><th>キー</th><th>値</th></tr>
+    <tr><td rowspan="3">hy_oas</td><td><code>yellow_lookback_points</code></td><td>20</td></tr>
+    <tr><td><code>yellow_widening_bp</code></td><td>50.0</td></tr>
+    <tr><td><code>red_lookback_points</code></td><td>60</td></tr>
+    <tr><td rowspan="2">net_liquidity</td><td><code>yellow_lookback_points</code></td><td>8</td></tr>
+    <tr><td><code>red_lookback_points</code></td><td>26</td></tr>
+    <tr><td rowspan="2">rsp_spy</td><td><code>near_low_pct</code></td><td>2.0</td></tr>
+    <tr><td><code>low_lookback_points</code></td><td>60</td></tr>
+    <tr><td rowspan="2">nikkei_sp / nikkei_topix</td><td><code>low_lookback_points</code></td><td>26</td></tr>
+    <tr><td><code>downtrend_lookback_points</code></td><td>8</td></tr>
+    <tr><td rowspan="3">brent_wti</td><td><code>green_band_min</code> / <code>green_band_max</code></td><td>1.5 〜 7.0</td></tr>
+    <tr><td><code>red_inversion_max</code></td><td>0.0</td></tr>
+    <tr><td><code>red_extreme_min</code></td><td>10.0</td></tr>
+    <tr><td rowspan="2">overall</td><td><code>red_if_any_red</code></td><td>true</td></tr>
+    <tr><td><code>yellow_if_yellow_count_gte</code></td><td>2</td></tr>
+  </table>
+  <p><code>default_lookback_days</code>: 730日。単位換算: <code>WALCL</code> は百万$ → 十億$（÷1000）、純流動性表示は兆$（さらに ÷1000）。RSP/SPY は yfinance のミリ秒 <code>t</code> で inner join。</p>
+
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s502">502</span></td><td><code>"Data fetch failed: {error}"</code></td><td>FRED/yfinance 取得中の予期しない例外</td></tr>
+  </table>
+
+  <hr>
+
+  <h2 id="ep-screening">8. N字スクリーニング</h2>
+  <p>ベースパス <code>/api/screening/</code>。Macro 同様 <strong>{success, data, error} エンベロープなし</strong>、エラーは <code>HTTPException</code> + <code>detail</code>。真実源はキャッシュ済み結果 JSON ファイル（<code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code>）であり、スキャン進捗（ジョブ状態）はプロセスのメモリ内のみで管理される（<strong>アプリ再起動で idle に戻る</strong>）。</p>
+
+  <h3 id="ep-scr-results">8-1. 結果取得</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/screening/n-pattern?min_score={n}</span>
+  </div>
+  <p>クエリ <code>min_score</code>（デフォルト 50）でキャッシュ済み結果をフィルタして返す。スキャン未実行時は空配列。</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">ScreeningPivot</span> { index: <span class="kw">number</span>; date: <span class="kw">string</span>; price: <span class="kw">number</span>; type: <span class="st">'low'</span> | <span class="st">'high'</span>; }
+
+<span class="kw">interface</span> <span class="ty">ScreeningScoreDetail</span> {
+  trend: <span class="kw">number</span>; breakout: <span class="kw">number</span>; volume: <span class="kw">number</span>; macd: <span class="kw">number</span>;
+  pullback_penalty: <span class="kw">number</span>; duration_penalty: <span class="kw">number</span>;
+}
+
+<span class="kw">interface</span> <span class="ty">ScreeningResult</span> {
+  ticker: <span class="kw">string</span>;
+  name: <span class="kw">string</span>;
+  market_cap: <span class="kw">number</span> | <span class="kw">null</span>;
+  score: <span class="kw">number</span>;
+  score_detail: <span class="ty">ScreeningScoreDetail</span>;
+  pivots: <span class="ty">ScreeningPivot</span>[];
+  break_date: <span class="kw">string</span>;
+  closes: { date: <span class="kw">string</span>; value: <span class="kw">number</span> }[]; <span class="cm">// 直近120本の終値サムネイル</span>
+}
+
+<span class="kw">interface</span> <span class="ty">ScreeningResponse</span> {
+  generated_at: <span class="kw">string</span> | <span class="kw">null</span>;
+  universe_count: <span class="kw">number</span>;
+  scanned_count: <span class="kw">number</span>;
+  universe_id: <span class="kw">string</span> | <span class="kw">null</span>;
+  universe_name: <span class="kw">string</span> | <span class="kw">null</span>;
+  results: <span class="ty">ScreeningResult</span>[]; <span class="cm">// score 降順ソート済み</span>
+}</code></pre>
+
+  <h3 id="ep-scr-scan">8-2. スキャン開始</h3>
+  <div class="endpoint-title">
+    <span class="method POST">POST</span>
+    <span class="endpoint-path">/api/screening/n-pattern/scan</span>
+  </div>
+  <p>ボディ省略可。指定時は <code>{"universe_id": string}</code> でユニバースを指定（省略/<code>null</code> は内蔵デフォルト）。バックグラウンドスレッドでスキャンを起動し即座に応答する。</p>
+  <p><strong>レスポンス</strong> <span class="status s202">202</span> — <code>{ "status": "running" }</code></p>
+  <table>
+    <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
+    <tr><td><span class="status s404">404</span></td><td>未知の <code>universe_id</code></td><td><code>UniverseNotFound</code></td></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>"not started"</code></td><td>既に実行中（多重起動防止）</td></tr>
+  </table>
+
+  <h3 id="ep-scr-status">8-3. 進捗確認</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/screening/n-pattern/status</span>
+  </div>
+  <p><strong>レスポンス</strong> <span class="status s200">200</span>（ポーリング用）</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">type</span> <span class="ty">ScanStatus</span> = <span class="st">'idle'</span> | <span class="st">'running'</span> | <span class="st">'done'</span> | <span class="st">'error'</span>;
+
+<span class="kw">interface</span> <span class="ty">ScreeningScanStatus</span> {
+  status: <span class="ty">ScanStatus</span>;
+  done: <span class="kw">number</span>;
+  total: <span class="kw">number</span>;
+  started_at: <span class="kw">string</span> | <span class="kw">null</span>;
+  error: <span class="kw">string</span> | <span class="kw">null</span>;
+}</code></pre>
+
+  <h3 id="ep-scr-universes">8-4. ユニバース管理</h3>
+  <table>
+    <tr><th>エンドポイント</th><th>用途</th><th>ステータス</th></tr>
+    <tr><td><code>GET /api/screening/universes</code></td><td>一覧取得（内蔵デフォルト先頭 + 登録済み）</td><td><span class="status s200">200</span></td></tr>
+    <tr><td><code>POST /api/screening/universes</code></td><td>CSV 登録（JSON ボディ <code>{name, csv_text}</code>、multipart 不使用）</td><td><span class="status s201">201</span></td></tr>
+    <tr><td><code>DELETE /api/screening/universes/{universe_id}</code></td><td>登録済みユニバースを削除</td><td><span class="status s200">200</span></td></tr>
+  </table>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">ScreeningUniverse</span> {
+  id: <span class="kw">string</span>;
+  name: <span class="kw">string</span>;
+  symbol_count: <span class="kw">number</span>;
+  has_market_cap: <span class="kw">boolean</span>;
+  created_at: <span class="kw">string</span> | <span class="kw">null</span>;
+  builtin: <span class="kw">boolean</span>; <span class="cm">// true は内蔵デフォルト（id="default"）、削除不可</span>
+}</code></pre>
+  <h4>CSV バリデーション制約</h4>
+  <table>
+    <tr><th>制約</th><th>値</th></tr>
+    <tr><td>必須列</td><td><code>code</code> のみ（<code>name</code> 欠落時は code 代用、<code>market_cap</code> 欠落/空欄はフィルタ非適用）</td></tr>
+    <tr><td>最大サイズ</td><td>2MB（<code>MAX_CSV_BYTES</code>）</td></tr>
+    <tr><td>最大行数</td><td>10,000行（<code>MAX_ROWS</code>）</td></tr>
+    <tr><td><code>code</code> 列</td><td>ASCII のみ（非 ASCII は 400）、BOM 自動除去</td></tr>
+    <tr><td>名前重複</td><td>内蔵デフォルト名と登録済み名を含めて一意（409）</td></tr>
+  </table>
+  <table>
+    <tr><th>HTTP</th><th>原因</th></tr>
+    <tr><td><span class="status s400">400</span></td><td><code>UniverseValidationError</code>（CSV不正）/ <code>BuiltinUniverseError</code>（内蔵デフォルト削除試行）</td></tr>
+    <tr><td><span class="status s404">404</span></td><td><code>UniverseNotFound</code>（未知の universe_id）</td></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>DuplicateUniverseName</code>（同名ユニバースが既存）</td></tr>
+  </table>
+  <p>スキャン定数: 最低時価総額 <code>DEFAULT_MIN_MARKET_CAP = 100億円</code>、yfinance レート制限対策の待機 <code>SCAN_SLEEP_SECONDS = 0.2秒</code>/銘柄、サムネイル終値本数 <code>CLOSES_TAIL = 120</code>。</p>
+
+  <hr>
+
   <h2 id="api-types">型定義</h2>
 
   <h3>Watchlist</h3>
@@ -791,6 +986,16 @@
     <tr><td>Watchlist フック</td><td><code>apps/renderer/src/hooks/useWatchlists.ts</code></td></tr>
     <tr><td>Chart データフック</td><td><code>apps/renderer/src/hooks/useChartData.ts</code></td></tr>
     <tr><td>Search フック</td><td><code>apps/renderer/src/hooks/useDebouncedSearch.ts</code></td></tr>
+    <tr><td>Macro ルート</td><td><code>backend/src/routes/macro.py</code></td></tr>
+    <tr><td>Macro ロジック / FRED 連携</td><td><code>backend/src/services/macro_provider.py</code>, <code>backend/src/services/fred_provider.py</code></td></tr>
+    <tr><td>Macro 閾値設定</td><td><code>backend/src/config/macro_thresholds.json</code>, <code>backend/src/config/macro_config.py</code></td></tr>
+    <tr><td>Macro スキーマ</td><td><code>backend/src/schemas/macro.py</code></td></tr>
+    <tr><td>Macro API クライアント / フック</td><td><code>apps/renderer/src/lib/macroApi.ts</code>, <code>apps/renderer/src/hooks/useMacroDashboard.ts</code></td></tr>
+    <tr><td>Screening ルート</td><td><code>backend/src/routes/screening.py</code></td></tr>
+    <tr><td>Screening / ユニバース ロジック</td><td><code>backend/src/services/screening_provider.py</code>, <code>backend/src/services/universe_provider.py</code>, <code>backend/src/services/storage.py</code></td></tr>
+    <tr><td>Screening スキーマ</td><td><code>backend/src/schemas/screening.py</code></td></tr>
+    <tr><td>Screening API クライアント / フック</td><td><code>apps/renderer/src/lib/screeningApi.ts</code>, <code>apps/renderer/src/hooks/useScreening.ts</code>, <code>apps/renderer/src/hooks/useUniverses.ts</code></td></tr>
+    <tr><td>生オブジェクト共通フェッチラッパ</td><td><code>apps/renderer/src/lib/backendFetch.ts</code></td></tr>
   </table>
 
 </section>
@@ -810,7 +1015,7 @@ graph TB
         subgraph MAIN["Main Process"]
             IDX["index.ts\nBrowserWindow (frameless)"]
             SIDECAR["pythonSidecar.ts\nサブプロセス管理"]
-            IPC["ipc/bridge.ts\nipcMain handler (9チャンネル)"]
+            IPC["ipc/bridge.ts\nipcMain handler (12チャンネル)"]
             PRE["preload.ts\ncontextBridge"]
         end
         subgraph RENDERER["Renderer Process"]
@@ -877,15 +1082,19 @@ sequenceDiagram
   <div class="mermaid-wrap">
     <div class="mermaid">
 graph TD
-    APP["App.tsx\nAppState / localStorage\nuseWatchlists / useChartData"]
-    APP --> TOPBAR["TopBar\nブランド / 現在値 / ステータス"]
-    APP --> MAIN["main-grid"]
+    APP["App.tsx\nAppState / View / localStorage\nuseWatchlists / useChartData / useAlertCheck"]
+    APP --> TOPBAR["TopBar\nブランド / 現在値 / ビュー切替 / ステータス"]
+    APP --> MAIN["main-grid\n(view で4種を出し分け)"]
     APP --> STATUSBAR["StatusBar\nTF / ツール / 描画数"]
-    APP --> TWEAKS["TweaksPanel\nテーマ / 密度 / 比較モード"]
+    APP --> TWEAKS["TweaksPanel\nテーマ / 比較モード / 設定"]
     TOPBAR --> WC["WindowControls\n最小化 / 最大化 / 閉じる"]
-    MAIN --> LP["LeftPanel\nTF選択 / 描画ツール\nインジケータ トグル"]
-    MAIN --> CHART["Chart.tsx\nCanvas 2D (1697行)"]
-    MAIN --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
+    TWEAKS --> APIKEY["ApiKeyField\nFRED キー設定/削除"]
+    MAIN -- "view=chart" --> LP["LeftPanel\nTF選択 / 描画ツール\nインジケータ トグル"]
+    MAIN -- "view=chart" --> CHART["Chart.tsx\nCanvas 2D (1697行)"]
+    MAIN -- "view=chart" --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
+    MAIN -- "view=pattern" --> PV["PatternView\nPatternFilterBar / PatternList"]
+    MAIN -- "view=macro" --> MD["MacroDashboard\nMacroCard / MacroLineChart / SignalBadge"]
+    MAIN -- "view=screening" --> SV["ScreeningView\nScreeningTable / UniverseSelect"]
     CHART --> CANDLE["ローソク足\nグリッド / 価格軸"]
     CHART --> OVERLAY["オーバーレイ指標\nSMA / EMA / BOLL / PSAR / 一目"]
     CHART --> SQMARK["SQ/ウィッチングマーカー\noverlays/drawSqMarkers.ts"]
@@ -900,6 +1109,7 @@ graph TD
     RP --> ASF["AddSymbolForm\n検索 / 銘柄追加"]
     RP --> TICKER["銘柄行リスト\nスパークライン / 価格"]
     RP --> FIN["基礎情報パネル\nROE / ROIC / PER 等"]
+    RP --> EXTRA["ExtraTickerBanner\nスクリーニング外銘柄の一時追加"]
     </div>
   </div>
 
@@ -910,30 +1120,37 @@ graph TD
     <div class="mermaid">
 graph LR
     subgraph APP["App.tsx"]
-        STATE["AppState\nselected / timeframe\nactiveTool / drawings\nselectedDrawingId\nindicators / indicatorParams\nshowVolume / showFinancial\nshowSqMarkers / financial"]
+        STATE["AppState\nselected / timeframe / compareMode\nactiveTool / drawings / selectedDrawingId\ndrawingColor / indicators / indicatorParams\nshowVolume / showFinancial\nshowSqMarkers / financial / patternFilter"]
+        VIEW["View\nchart / pattern / macro / screening"]
         AES["Aesthetic\ndark-blue / neutral\namber-crt / midnight"]
-        DEN["Density\ncompact / comfortable"]
         AWL["activeWatchlistId"]
     end
     subgraph HOOKS["Custom Hooks"]
         USEWD["useWatchlists\nwatchlists / status / CRUD"]
         USECD["useChartData\nrealData / status / errors"]
         USEDS["useDebouncedSearch\nresults / loading\n280ms debounce"]
+        USEAC["useAlertCheck\ndrawings のアラート条件判定"]
+        USEMD["useMacroDashboard\nperiod 別 dashboard 取得"]
+        USESC["useScreening\n結果 / スキャン進捗ポーリング"]
+        USEUN["useUniverses\nユニバース一覧 / 選択永続化"]
     end
     subgraph LS["localStorage"]
         LS1["kanata.state"]
         LS2["kanata.aesthetic"]
-        LS3["kanata.density"]
-        LS4["kanata.activeWatchlistId"]
+        LS3["kanata.activeWatchlistId"]
+        LS4["kanata.view"]
         LS5["kanata.alerts"]
+        LS6["kanata.migrated.v1"]
+        LS7["kanata.screening.universeId"]
     end
     STATE <--> LS1
     AES <--> LS2
-    DEN <--> LS3
-    AWL <--> LS4
+    AWL <--> LS3
+    VIEW <--> LS4
     USEWD -- "watchlists" --> APP
     USECD -- "realData" --> APP
     USEDS -- "results" --> ASF["AddSymbolForm"]
+    USEUN -- "universeId" --> LS7
     </div>
   </div>
 
@@ -948,15 +1165,24 @@ graph TB
         SR["search.py\nGET /api/search"]
         WR["watchlists.py\n8 エンドポイント"]
         FR["fundamentals.py\nGET /api/fundamentals/:symbol"]
+        MR["macro.py\n7 エンドポイント"]
+        SCR["screening.py\n6 エンドポイント"]
         HR["/api/health"]
     end
     subgraph SERVICES["Services"]
         YFP["yfinance_provider.py\nto_yf_symbol()\nINTERVAL_MAP / fetch_ohlcv()"]
         CACHE["cache.py\nTTLCache (in-memory)"]
+        MP["macro_provider.py\n単位換算 / シグナル判定\nbuild_dashboard()"]
+        FP["fred_provider.py\nFRED observations 取得\nstale フォールバック"]
+        SP["screening_provider.py\nrun_scan() / load_results()"]
+        UP["universe_provider.py\nCSV 登録・削除・解決"]
+        STOR["storage.py\natomic_write_json / data_dir"]
     end
     subgraph SCHEMAS["Schemas (Pydantic v2)"]
         COMMON["common.py\nApiResponse[T]\nok() / fail()"]
         WSCH["watchlist.py\nWatchlistRead / Create\nUpdate / ..."]
+        MSCH["macro.py\nIndicatorResponse\nDashboardResponse"]
+        SSCH["screening.py\nScreeningResultsResponse\nUniverseInfo"]
     end
     subgraph DB["Database (SQLAlchemy 2.x)"]
         DBMOD["models.py\nWatchlist / WatchlistItem"]
@@ -970,6 +1196,15 @@ graph TB
     FR --> CACHE
     WR --> WSCH
     WR --> DBMOD
+    MR --> MSCH
+    MR --> MP
+    MP --> FP
+    MP --> YFP
+    SCR --> SSCH
+    SCR --> SP
+    SP --> UP
+    SP --> STOR
+    UP --> STOR
     DBMOD --> DBCONN
     DBCONN --> SQLITE[(kanata.db)]
     DBINIT --> DBCONN
@@ -1006,7 +1241,128 @@ erDiagram
 
   <hr>
 
-  <h2 id="arch-ipc">7. IPC チャンネル一覧</h2>
+  <h2 id="arch-macro">7. マクロ経済ダッシュボード</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TB
+    subgraph FRONTEND["Frontend"]
+        MD["MacroDashboard\n期間切替 3M/6M/1Y/2Y"]
+        UMD["useMacroDashboard\nperiod 依存 fetch"]
+        MC["MacroCard x6"]
+        MLC["MacroLineChart\n軽量 Canvas 折れ線"]
+        SB["SignalBadge\n緑/黄/赤/グレー"]
+    end
+    subgraph BACKEND["Backend"]
+        MR["routes/macro.py\n7 エンドポイント"]
+        MP["macro_provider.py\n単位換算 / 週次リサンプル\n純流動性 / overall_signal"]
+        FP["fred_provider.py\nTTLCache 6h + stale 14d"]
+    end
+    subgraph EXTERNAL["外部"]
+        FRED["FRED API\nHY OAS / WALCL / RRP / TGA"]
+        YF["yfinance\nRSP/SPY / 日経/TOPIX / Brent/WTI"]
+    end
+    MD --> UMD --> MR
+    MR --> MP
+    MD --> MC --> MLC
+    MC --> SB
+    MP --> FP --> FRED
+    MP --> YF
+    </div>
+  </div>
+  <p><code>overall_signal</code> は米国流動性の既存3指標（HY OAS / 純流動性 / RSP-SPY）のみで算出し、日本株・原油の追加3指標は表示専用（総合シグナルに寄与しない）。<code>FRED_API_KEY</code> 未設定時も HY OAS / 純流動性は <code>meta.available=false</code> で部分稼働する。</p>
+
+  <hr>
+
+  <h2 id="arch-screening">8. N字スクリーニング</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant SV as ScreeningView
+    participant API as screeningApi.ts
+    participant R as routes/screening.py
+    participant SP as screening_provider.py
+    participant TH as バックグラウンドスレッド
+    participant FS as n_pattern_results.json
+
+    SV->>API: POST /scan (universe_id)
+    API->>R: リクエスト
+    R->>SP: start_scan_thread()
+    SP->>TH: スレッド起動 (202)
+    TH-->>SP: 銘柄ごとに detect_n_pattern()
+    loop ポーリング
+        SV->>API: GET /status
+        API->>R: リクエスト
+        R->>SP: get_scan_status()
+        SP-->>SV: done/total/status
+    end
+    TH->>FS: atomic_write_json(結果)
+    SV->>API: GET /n-pattern
+    API->>R: リクエスト
+    R->>SP: load_results()
+    SP->>FS: 読込
+    FS-->>SV: 結果一覧
+    </div>
+  </div>
+  <p>ジョブ状態はモジュールレベルの<code>dict</code> + <code>Lock</code>によるメモリ管理のみで、プロセス再起動で <code>idle</code> に戻る。結果の真実源はメモリではなく <code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code>。ユニバースは <code>screening_provider → universe_provider → storage</code> の一方向依存で CSV 管理される。</p>
+
+  <hr>
+
+  <h2 id="arch-patterns">9. パターン認識</h2>
+  <table>
+    <tr><th>パターン</th><th>シグナル</th><th>説明</th></tr>
+    <tr><td><code>bullish_engulfing</code></td><td>bullish</td><td>陽線が前日の陰線を包む2本足パターン</td></tr>
+    <tr><td><code>doji</code></td><td>neutral</td><td>始値と終値がほぼ同値の迷い足</td></tr>
+    <tr><td><code>evening_star</code></td><td>bearish</td><td>3本足の天井反転パターン（宵の明星）</td></tr>
+    <tr><td><code>hammer</code></td><td>bullish</td><td>下ヒゲの長い底値反転足（ハンマー）</td></tr>
+  </table>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph LR
+    PV["PatternView"] --> PFB["PatternFilterBar\npatternFilter 選択"]
+    PV --> PL["PatternList"]
+    PV --> DP["candlePatterns.ts\ndetectPatterns()"]
+    DP --> BE["bullish_engulfing"]
+    DP --> DJ["doji"]
+    DP --> ES["evening_star"]
+    DP --> HM["hammer"]
+    DP --> PM["PatternMatch[]\nidx / spanStart / spanEnd / t"]
+    PM --> PL
+    PM --> CHART["Chart.tsx\nハイライト枠描画"]
+    </div>
+  </div>
+  <p>検出は100%フロントエンド側（<code>lib/candlePatterns.ts</code>）で完結し、バックエンド呼び出しは発生しない。</p>
+
+  <hr>
+
+  <h2 id="arch-settings">10. 設定・FREDキー管理</h2>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+sequenceDiagram
+    participant TP as TweaksPanel
+    participant AK as ApiKeyField
+    participant IPC as ipc/bridge.ts
+    participant SEC as lib/secrets.ts
+    participant SS as Electron safeStorage (DPAPI)
+    participant SC as pythonSidecar.ts
+
+    TP->>AK: 表示
+    AK->>IPC: FRED_KEY_STATUS
+    IPC->>SEC: 設定状態確認
+    SEC-->>AK: {configured, encryptionAvailable}
+    AK->>IPC: FRED_KEY_SET(key)
+    IPC->>SEC: safeStorage.encryptString(key)
+    SEC->>SS: fred-api-key.bin へ暗号化保存
+    IPC->>SC: restartSidecar()
+    AK->>IPC: FRED_KEY_CLEAR
+    IPC->>SEC: fred-api-key.bin 削除
+    IPC->>SC: restartSidecar()
+    </div>
+  </div>
+  <p>FRED キーは平文フォールバックせず、<code>safeStorage.isEncryptionAvailable()</code> が false の場合は保存を拒否する。設定・削除のいずれも <code>restartSidecar()</code> をトリガーし、新しい環境変数でサイドカーを再起動する。</p>
+
+  <hr>
+
+  <h2 id="arch-ipc">11. IPC チャンネル一覧</h2>
   <p><code>PreloadApi</code>（<code>packages/shared-types</code>）が全チャンネルの型を定義し、<code>window.kanata</code> 経由でレンダラーに公開。</p>
   <table>
     <tr><th>チャンネル定数</th><th>チャンネル名</th><th>方向</th><th>用途</th></tr>
@@ -1019,11 +1375,15 @@ erDiagram
     <tr><td><code>WINDOW_CLOSE</code></td><td><code>kanata:window-close</code></td><td>invoke</td><td>ウィンドウ閉じる</td></tr>
     <tr><td><code>WINDOW_IS_MAXIMIZED</code></td><td><code>kanata:window-is-maximized</code></td><td>invoke</td><td>最大化状態を取得</td></tr>
     <tr><td><code>WINDOW_MAXIMIZE_CHANGED</code></td><td><code>kanata:window-maximize-changed</code></td><td>push</td><td>最大化状態変化イベント</td></tr>
+    <tr><td><code>FRED_KEY_STATUS</code></td><td><code>kanata:fred-key-status</code></td><td>invoke</td><td>FRED キー設定状況取得（<code>{configured, encryptionAvailable}</code>）</td></tr>
+    <tr><td><code>FRED_KEY_SET</code></td><td><code>kanata:fred-key-set</code></td><td>invoke</td><td>FRED キーを <code>safeStorage</code> で暗号化保存 + サイドカー再起動</td></tr>
+    <tr><td><code>FRED_KEY_CLEAR</code></td><td><code>kanata:fred-key-clear</code></td><td>invoke</td><td>FRED キー削除 + サイドカー再起動</td></tr>
   </table>
+  <p>全12チャンネル。</p>
 
   <hr>
 
-  <h2 id="arch-timeframe">8. タイムフレーム変換</h2>
+  <h2 id="arch-timeframe">12. タイムフレーム変換</h2>
   <div class="mermaid-wrap">
     <div class="mermaid">
 graph LR
@@ -1037,7 +1397,7 @@ graph LR
 
   <hr>
 
-  <h2 id="arch-libs">9. フロントエンド ライブラリ一覧</h2>
+  <h2 id="arch-libs">13. フロントエンド ライブラリ一覧</h2>
   <p><code>apps/renderer/src/lib/</code> 配下のユーティリティ群：</p>
   <table>
     <tr><th>ファイル</th><th>役割</th></tr>
@@ -1056,16 +1416,22 @@ graph LR
     <tr><td><code>alertStorage.ts</code></td><td><code>kanata.alerts</code> localStorage への CRUD ラッパ</td></tr>
     <tr><td><code>watchlistApi.ts</code></td><td>Watchlist 8 エンドポイントのフェッチラッパ</td></tr>
     <tr><td><code>watchlistTickers.ts</code></td><td><code>Watchlist.items</code> → 表示用 <code>Ticker</code> 変換</td></tr>
+    <tr><td><code>backendFetch.ts</code></td><td>エンベロープ無し系（macro / screening）共通の <code>fetchJson</code> GET ラッパ</td></tr>
+    <tr><td><code>macroApi.ts</code></td><td>マクロ 4 系エンドポイントのフェッチラッパ（生レスポンスをそのまま返す）</td></tr>
+    <tr><td><code>screeningApi.ts</code></td><td>スクリーニング + ユニバース API のフェッチラッパ</td></tr>
+    <tr><td><code>candlePatterns.ts</code></td><td>ローソク足パターン検出（<code>bullish_engulfing</code> / <code>doji</code> / <code>evening_star</code> / <code>hammer</code>）</td></tr>
+    <tr><td><code>extraTicker.ts</code></td><td><code>buildExtraTicker()</code> — スクリーニングで選んだウォッチリスト外銘柄の合成 <code>Ticker</code> 化</td></tr>
+    <tr><td><code>selection.ts</code></td><td><code>clampSelectionForMode()</code> — 比較モード非表示時の単一選択正規化</td></tr>
   </table>
 
   <hr>
 
-  <h2 id="arch-types">10. 主要型定義</h2>
+  <h2 id="arch-types">14. 主要型定義</h2>
   <p><code>apps/renderer/src/types.ts</code> 集中管理の主要型：</p>
   <table>
     <tr><th>型</th><th>説明</th></tr>
     <tr><td><code>OHLCBar</code></td><td><code>{t, o, h, l, c, v}</code> — OHLCV バーデータ</td></tr>
-    <tr><td><code>AppState</code></td><td>アプリ全体状態（<code>showSqMarkers</code> を含む）</td></tr>
+    <tr><td><code>AppState</code></td><td>アプリ全体状態（14 フィールド。<code>compareMode</code> / <code>drawingColor</code> / <code>showSqMarkers</code> / <code>patternFilter</code> 等を含む。<code>density</code> は存在しない）</td></tr>
     <tr><td><code>DrawingObject</code></td><td>描画ツールオブジェクト（種別・OHLC インデックス・価格）</td></tr>
     <tr><td><code>AlertObject</code></td><td>アラート設定 <code>{id, drawingId, symbol, direction, triggered, createdAt}</code></td></tr>
     <tr><td><code>IndicatorState</code></td><td>各インジケーターの表示 on/off フラグ</td></tr>
@@ -1076,6 +1442,23 @@ graph LR
     <tr><td><code>FinBar</code></td><td><code>{t, roe, roic, per}</code> — 四半期財務バー</td></tr>
     <tr><td><code>FinMetrics</code></td><td><code>{roe, roic, per, pbr, div, mcap}</code> — サマリー基礎情報</td></tr>
     <tr><td><code>SqEvent</code></td><td><code>{date, type, market, label, shortLabel, severity}</code></td></tr>
+    <tr><td><code>CandlePatternType</code></td><td><code>'bullish_engulfing' | 'doji' | 'evening_star' | 'hammer'</code></td></tr>
+    <tr><td><code>PatternSignal</code></td><td><code>'bullish' | 'bearish' | 'neutral'</code></td></tr>
+    <tr><td><code>PatternMatch</code></td><td><code>{type, signal, label, idx, spanStart, spanEnd, t}</code> — 検出パターン1件</td></tr>
+    <tr><td><code>MacroSignal</code></td><td><code>'green' | 'yellow' | 'red' | 'gray'</code></td></tr>
+    <tr><td><code>MacroPeriod</code></td><td><code>'3M' | '6M' | '1Y' | '2Y'</code></td></tr>
+    <tr><td><code>MacroSeriesPoint</code> / <code>MacroLatest</code></td><td>マクロ指標の時系列点 / 最新値（<code>change</code> / <code>provisional</code> 含む）</td></tr>
+    <tr><td><code>MacroIndicatorMeta</code></td><td><code>{source, stale, available}</code></td></tr>
+    <tr><td><code>MacroIndicator</code></td><td>個別マクロ指標レスポンス（<code>signal</code> / <code>thresholds</code> / <code>series</code> / <code>meta</code>）</td></tr>
+    <tr><td><code>MacroDashboard</code></td><td><code>{overall_signal, indicators}</code></td></tr>
+    <tr><td><code>ScreeningPivot</code></td><td><code>{index, date, price, type}</code> — 押し目/高値ピボット</td></tr>
+    <tr><td><code>ScreeningScoreDetail</code></td><td>trend/breakout/volume/macd と減点（pullback/duration）の内訳</td></tr>
+    <tr><td><code>ScreeningClose</code></td><td><code>{date, value}</code> — サムネイル用終値点</td></tr>
+    <tr><td><code>ScreeningResult</code></td><td>1銘柄分のスクリーニング結果（score / pivots / closes 等）</td></tr>
+    <tr><td><code>ScreeningResponse</code></td><td>スキャン結果全体（<code>generated_at</code> / <code>universe_id</code> / <code>results</code>）</td></tr>
+    <tr><td><code>ScreeningUniverse</code></td><td>ユニバース情報（<code>id</code> / <code>symbol_count</code> / <code>builtin</code> 等）</td></tr>
+    <tr><td><code>ScanStatus</code></td><td><code>'idle' | 'running' | 'done' | 'error'</code></td></tr>
+    <tr><td><code>ScreeningScanStatus</code></td><td>スキャン進捗（<code>status</code> / <code>done</code> / <code>total</code> / <code>error</code>）</td></tr>
   </table>
 
   <hr>
@@ -1100,7 +1483,7 @@ graph LR
     </div>
     <div class="infra-card">
       <div class="label">外部データ</div>
-      <div class="value">yfinance (pip)<br>TTLCache<br>Redis 未使用</div>
+      <div class="value">yfinance (pip)<br>FRED API (任意)<br>TTLCache / Redis 未使用</div>
     </div>
     <div class="infra-card">
       <div class="label">認証</div>
