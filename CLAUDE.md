@@ -234,8 +234,22 @@ release.yml（タグ push をトリガー）
 
 ### バージョン更新手順
 
-1. `package.json` の `"version"` を変更
-2. `main` に push → タグ自動生成 → リリース自動実行
+`main` で以下を実行するだけでリリースが始まる（`scripts/release.cjs`）。
+
+```bash
+npm run release -- 1.1.0            # 通常のリリース
+npm run release -- 1.1.0 --dry-run  # チェックと生成メッセージの確認のみ
+```
+
+スクリプトが行うこと:
+
+1. 事前チェック（semver `x.y.z` / 現行版より新しい / `main` ブランチ / 作業ツリーがクリーン / `origin/main` に遅れていない / `v{version}` タグ未存在）
+2. `npm run typecheck`（`--with-tests` を付けると `npm test` も実行）
+3. リリースノート本文の生成（前タグ`..HEAD` の `--no-merges` コミット件名。`--notes "<本文>"` で上書き可）
+4. 内容を表示して確認プロンプト（`--yes` でスキップ）
+5. `npm version <x.y.z> --no-git-tag-version` で `package.json` + `package-lock.json` を更新し、`chore: v{version}` でコミットして `origin main` へ push
+
+push 後はタグ自動生成 → リリース自動実行。**コミット本文が GitHub Release のリリースノートになる**（[release.yml](.github/workflows/release.yml) が `git log -1 --pretty=%b` を読む）ため、bump コミットは必ず `main` の tip に置く。純粋関数のテストは `npm run test:scripts`。
 
 ## ブランディング
 
