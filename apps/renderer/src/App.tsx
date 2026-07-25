@@ -43,6 +43,7 @@ const DEFAULT_STATE: AppState = {
   drawings: [],
   selectedDrawingId: null,
   drawingColor: DRAWING_COLORS[0],
+  showDrawings: true,
   showVolume: true,
   showFinancial: true,
   showSqMarkers: true,
@@ -81,7 +82,12 @@ function loadState(): AppState {
         },
       };
       // 比較を非表示のときは単一選択を不変条件として保証する（永続状態が複数でも起動時に正規化）
-      return { ...merged, selected: clampSelectionForMode(merged.selected, merged.compareMode) };
+      // 描画の非表示は永続化しない：非表示のまま再起動して「描画が消えた」と誤解されるのを防ぐ
+      return {
+        ...merged,
+        showDrawings: true,
+        selected: clampSelectionForMode(merged.selected, merged.compareMode),
+      };
     }
   } catch {
     /* noop */

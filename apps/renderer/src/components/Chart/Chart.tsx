@@ -16,6 +16,13 @@ import type {
   YRange,
 } from '../../types';
 import { addAlert } from '../../lib/alertStorage';
+import {
+  isDrawingsToggleKey,
+  isTypingTarget,
+  PAN_TOOL,
+  SHORTCUT_OPT_OUT_SELECTOR,
+  toggleDrawingsVisibility,
+} from '../../lib/drawingVisibility';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -1038,6 +1045,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
 
   const hitTest = useCallback(
     (sx: number, sy: number): number | null => {
+      // 非表示中は見えない描画を掴めないようにする（選択・移動・右クリックメニューを封じる）
+      if (!state.showDrawings) return null;
       const TOL = 5;
       const drawings = state.drawings || [];
       for (let i = drawings.length - 1; i >= 0; i--) {
@@ -1121,7 +1130,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
       }
       return null;
     },
-    [state.drawings, primary, dataToScreen, xScale, paneDefs],
+    [state.drawings, state.showDrawings, primary, dataToScreen, xScale, paneDefs],
   );
 
   useEffect(() => {
@@ -1136,7 +1145,10 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    const allDrawings = [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])];
+    // 非表示中は描画レイヤーだけを空にする（state.drawings は保持したまま）
+    const allDrawings = state.showDrawings
+      ? [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])]
+      : [];
     const HANDLE_COLOR = '#fff';
     allDrawings.forEach((d) => {
       if (d.ticker && d.ticker !== primary) return;
@@ -1429,6 +1441,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     state.selectedDrawingId,
     state.activeTool,
     state.showSqMarkers,
+    state.showDrawings,
     tempDrawing,
     view,
     primary,
@@ -1449,7 +1462,9 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
     const { idx } = screenToData(sx, sy);
-    const tool = state.activeTool;
+    // 非表示中はどのツールを選んでいてもパン扱いにする。
+    // 描かれても画面に出ず hitTest も効かないため、回収できない描画が増えるのを防ぐ
+    const tool = state.showDrawings ? state.activeTool : PAN_TOOL;
     if (tool === 'pan' || !tool) {
       const hitId = hitTest(sx, sy);
       if (hitId != null) {
@@ -1663,19 +1678,30 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       if (textInput) return;
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      const target = e.target as HTMLElement | null;
+      if (isTypingTarget(target)) return;
+      // 設定パネルなど、チャート操作から外れた領域での単独キーは無視する
+      if (target?.closest?.(SHORTCUT_OPT_OUT_SELECTOR)) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        setState((s) => {
+          if (s.selectedDrawingId == null) return s;
+          return {
+            ...s,
+            drawings: s.drawings.filter((d) => d.id !== s.selectedDrawingId),
+            selectedDrawingId: null,
+          };
+        });
         return;
-      setState((s) => {
-        if (s.selectedDrawingId == null) return s;
-        return {
-          ...s,
-          drawings: s.drawings.filter((d) => d.id !== s.selectedDrawingId),
-          selectedDrawingId: null,
-        };
-      });
+      }
+
+      if (isDrawingsToggleKey(e)) {
+        setState(toggleDrawingsVisibility);
+        // 非表示にした瞬間に浮いたままにならないよう、描画に紐づくポップアップを閉じる
+        setCtxMenu(null);
+        setAlertForm(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -18,7 +18,7 @@ export function TweaksPanel({
   setState,
 }: TweaksPanelProps) {
   return (
-    <div className="tweaks-panel">
+    <div className="tweaks-panel" data-chart-shortcuts="off">
       <div className="tweaks-head">
         <span>設定</span>
         <button className="link-btn" onClick={onClose}>

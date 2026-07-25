@@ -241,6 +241,18 @@ input { font: inherit; color: inherit; }
 }
 .link-btn:hover { color: var(--text); border-color: var(--accent); }
 
+/* Section header action group (icon toggle + text button) */
+.section-actions { display: flex; align-items: center; gap: 4px; }
+.link-btn.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 5px;
+  color: var(--text-soft);
+}
+.link-btn.icon-btn[aria-pressed="false"] { color: var(--muted); opacity: 0.65; }
+.link-btn.icon-btn:hover { color: var(--text); border-color: var(--accent); opacity: 1; }
+
 /* Timeframe buttons */
 .tf-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .tf-btn {
@@ -275,6 +287,7 @@ input { font: inherit; color: inherit; }
 .tool-btn.active { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 16%, var(--panel-2)); color: var(--text); }
 .tool-btn.active .tool-icon { color: var(--accent); }
 .drawing-count { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 4px; }
+.drawing-count.is-hidden { color: var(--amber); }
 
 /* Drawing color swatches */
 .draw-color-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
