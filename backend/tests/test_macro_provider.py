@@ -13,6 +13,7 @@ from src.services.macro_provider import (
     build_dashboard,
     build_net_liquidity,
     build_nikkei_sp,
+    build_nikkei_topix,
     build_rsp_spy,
     evaluate_signal,
 )
@@ -192,6 +193,125 @@ def test_brent_wti_degrades_to_unavailable_on_fetch_error():
     assert result["meta"]["available"] is False
     assert result["signal"] == "gray"
     assert result["series"] == []
+
+
+# --------------------------------------------------------------------------- #
+# 外れ値除去（ベンダーのスケール異常）
+# --------------------------------------------------------------------------- #
+def _daily(values: list[float], start_day: int = 1) -> dict[str, float]:
+    """{'2026-01-01': v, ...} 形式の連続日次終値を作る。"""
+    return {f"2026-01-{start_day + i:02d}": v for i, v in enumerate(values)}
+
+
+def test_pair_drops_vendor_scale_outlier():
+    """分母系列の 1/10 スケール異常（実測: 1306.T 2026-03-30/31 相当）を除去する。"""
+    num = _daily([40000.0] * 21)
+    den_values = [2500.0] * 21
+    den_values[10] = 250.0  # 1/10 に壊れた 1 点
+    den_values[11] = 252.0  # 連続 2 日壊れるケースを再現
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    series = result["series"]
+    assert len(series) == 19  # 21 - 異常2点
+    assert "2026-01-11" not in [p["date"] for p in series]
+    assert "2026-01-12" not in [p["date"] for p in series]
+    assert max(p["value"] for p in series) == pytest.approx(16.0, abs=1e-6)
+
+
+def test_pair_keeps_normal_volatility():
+    """通常のボラティリティ（±20%程度）は除去しない。"""
+    num = _daily([40000.0] * 21)
+    den_values = [2500.0 + (300.0 if i % 2 else -300.0) for i in range(21)]
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    assert len(result["series"]) == 21
+
+
+def test_pair_keeps_permanent_level_shift():
+    """恒久的な水準変化（未調整の分割など）は誤ってスパイク扱いしない。"""
+    num = _daily([40000.0] * 30)
+    den_values = [25000.0] * 15 + [2500.0] * 15  # 途中で 1/10 に恒久シフト
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    assert len(result["series"]) == 30
+
+
+def test_pair_short_series_is_untouched():
+    """窓を満たせない短い系列はフィルタを通さずそのまま返す。"""
+    d1, d2 = "2026-06-30", "2026-07-01"
+
+    def closes_side_effect(symbol):
+        if symbol == "^N225":
+            return {d1: 40000.0, d2: 40000.0}
+        return {d1: 2500.0, d2: 250.0}  # 短すぎて異常判定できない
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    assert len(result["series"]) == 2
+
+
+def test_pair_despike_can_be_disabled_by_config():
+    """sanitize.enabled=false で従来どおり素通しになる。"""
+    num = _daily([40000.0] * 21)
+    den_values = [2500.0] * 21
+    den_values[10] = 250.0
+    cfg = {**CFG, "sanitize": {**CFG.get("sanitize", {}), "enabled": False}}
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", cfg)
+
+    assert len(result["series"]) == 21
+
+
+def test_pair_marks_stale_when_despike_drops_latest_trading_day():
+    """直近日が _despike で落ちた場合、series の最新日は実際の最新取引日より古くなるため stale=True。"""
+    num = _daily([40000.0] * 21)
+    den_values = [2500.0] * 21
+    den_values[20] = 250.0  # 最新日がスケール異常
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    series = result["series"]
+    assert len(series) == 20  # 最新日が異常値として除去された
+    assert series[-1]["date"] == "2026-01-20"
+    assert result["meta"]["stale"] is True
+
+
+def test_pair_not_stale_when_no_days_are_dropped():
+    """異常値が無ければ series の最新日＝実際の最新取引日となるため stale=False のまま。"""
+    num = _daily([40000.0] * 21)
+    den = _daily([2500.0] * 21)
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else den
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    assert result["meta"]["stale"] is False
 
 
 # --------------------------------------------------------------------------- #

@@ -40,6 +40,11 @@
       "red_extreme_min": 10.0
     }
   },
+  "sanitize": {
+    "spike_window_half_points": 5,
+    "spike_ratio_factor": 3.0,
+    "enabled": true
+  },
   "overall": {
     "red_if_any_red": true,
     "yellow_if_yellow_count_gte": 2
