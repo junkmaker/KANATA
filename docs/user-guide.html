@@ -233,6 +233,40 @@
   .swatch-row { display: flex; gap: 8px; align-items: center; margin: 8px 0 18px; }
   .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border); display: inline-block; }
 
+  /* ── Screenshots ── */
+  figure.shot {
+    margin: 14px 0 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+  }
+
+  figure.shot a.shot-link {
+    display: block;
+    cursor: zoom-in;
+  }
+
+  figure.shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    background: var(--code-bg);
+  }
+
+  /* 左パネル・設定パネルなど縦長の切り出しは幅を抑える */
+  figure.shot.narrow { max-width: 320px; }
+
+  figure.shot figcaption {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.55;
+    padding: 8px 4px 2px;
+  }
+
+  figure.shot figcaption b { color: oklch(0.70 0.10 220); font-weight: 600; }
+
   /* ── Section nav numbers ── */
   .sec-num { color: var(--muted); font-family: var(--font-mono); font-weight: 400; margin-right: 8px; }
 
@@ -279,7 +313,7 @@
     <a class="nav-link" href="#s6">6. パターン分析</a>
     <a class="nav-link" href="#s7">7. マクロダッシュボード</a>
     <a class="nav-link" href="#s8">8. スクリーニング</a>
-    <a class="nav-link" href="#s9">9. 設定パネル（TWEAKS）</a>
+    <a class="nav-link" href="#s9">9. 設定パネル</a>
     <a class="nav-link" href="#s10">10. アンインストール方法</a>
   </div>
 </nav>
@@ -324,6 +358,13 @@
 
   <h3 id="s2-1">2.1 起動と初期画面</h3>
   <p>アプリを起動すると、以下の3パネル構成の画面が表示されます（既定の「チャート」表示モードの場合）。</p>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/overview.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/overview.png" alt="KANATA 起動直後のチャート画面。左に時間軸・描画ツール・テクニカル指標、中央にローソク足チャート、右にウォッチリストが並ぶ"></a>
+    <figcaption>起動直後の画面（チャート表示モード）。<b>左パネル</b>に時間軸・描画ツール・テクニカル指標、<b>中央</b>にローソク足チャートとサブペイン、<b>右パネル</b>にウォッチリストとファンダメンタルズが並びます。細部を確認したいときは、本ガイドのスクリーンショットをクリックすると等倍で開けます。</figcaption>
+  </figure>
+
+  <p>各エリアの配置を模式図で示すと次のようになります。</p>
 
 <pre><code>┌──────────────────────────────────────────────────────────┐
 │  上部バー — ブランドロゴ・表示モードタブ・現在値・ステータス│
@@ -406,14 +447,14 @@
 
   <div class="callout callout-note">
     <p><strong>比較表示の仕様（変化率モード）</strong></p>
-    <p>追加銘柄の折れ線は<strong>絶対株価ではなく、表示範囲の左端を基準（0%）とした上昇率・下落率</strong>で描画されます。そのため、株価水準が異なる銘柄（例：¥17,000 台と ¥10,000 台）でも、同期間の値動きが似ていれば折れ線の高さが近くなります。比較モードは設定パネル（上部バーの歯車アイコン「設定」）の「比較モード」で <code>変化率</code>（上昇率比較）または <code>比較を非表示</code> を切り替えられます。詳細は <a href="#s9">9. 設定パネル（TWEAKS）</a> を参照してください。</p>
+    <p>追加銘柄の折れ線は<strong>絶対株価ではなく、表示範囲の左端を基準（0%）とした上昇率・下落率</strong>で描画されます。そのため、株価水準が異なる銘柄（例：¥17,000 台と ¥10,000 台）でも、同期間の値動きが似ていれば折れ線の高さが近くなります。比較モードは設定パネル（上部バーの歯車アイコン「設定」）の「比較モード」で <code>変化率</code>（上昇率比較）または <code>比較を非表示</code> を切り替えられます。詳細は <a href="#s9">9. 設定パネル</a> を参照してください。</p>
   </div>
 
   <h4>プライマリ銘柄を変更する</h4>
   <ul><li>銘柄行を<strong>ダブルクリック</strong>すると、その銘柄がプライマリ（先頭）に設定されます。</li></ul>
 
   <h4>時間軸を切り替える</h4>
-  <p>左パネルの「<strong>TIMEFRAME</strong>」セクションから、見たい時間軸のボタンをクリックします。</p>
+  <p>左パネルの「<strong>タイムフレーム</strong>」セクションから、見たい時間軸のボタンをクリックします。</p>
 
   <div class="table-wrap"><table>
     <tr><th>ボタン</th><th>時間軸</th></tr>
@@ -436,6 +477,12 @@
   <h2 id="s3"><span class="sec-num">3</span>各エリア・ボタンの機能</h2>
 
   <h3 id="s3-1">3.1 上部バー（Top Bar）</h3>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/topbar.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/topbar.png" alt="上部バー。左からブランドロゴとバージョン、表示モードタブ、銘柄コードと OHLC・前日比、右端に接続ステータス・現在時刻・歯車アイコン・ウィンドウ操作ボタン"></a>
+    <figcaption>上部バー。左端から <b>ロゴ・バージョン</b> → <b>表示モードタブ</b> → <b>銘柄コード・銘柄名・現在値・前日比</b>、右端に <b>接続ステータス（LIVE）</b>・現在時刻（JST）・<b>歯車アイコン（設定）</b>・ウィンドウ操作ボタンが並びます。</figcaption>
+  </figure>
+
   <div class="table-wrap"><table>
     <tr><th>要素</th><th>機能</th></tr>
     <tr><td>KANATA ロゴ・バージョン</td><td>ブランドロゴ・バージョン表示</td></tr>
@@ -444,31 +491,36 @@
     <tr><td>O / H / L / C</td><td>始値 / 高値 / 安値 / 終値</td></tr>
     <tr><td>+xx.xx (+x.xx%)</td><td>前日比（価格・割合）。上昇時は緑、下落時は赤で表示</td></tr>
     <tr><td>ステータス</td><td>バックエンドの接続状態（LIVE / LOADING / ERROR）+ 現在時刻（JST）</td></tr>
-    <tr><td>歯車アイコン（設定）</td><td>設定パネル（TWEAKS）を開閉する（<a href="#s9">9. 設定パネル（TWEAKS）</a>）</td></tr>
+    <tr><td>歯車アイコン（設定）</td><td>設定パネルを開閉する（<a href="#s9">9. 設定パネル</a>）</td></tr>
     <tr><td>ウィンドウ操作ボタン</td><td>最小化 / 最大化・元に戻す / 閉じる（フレームレスウィンドウ用の独自ボタン）</td></tr>
   </table></div>
 
   <h3 id="s3-2">3.2 左パネル</h3>
 
-  <h4>TIMEFRAME（時間軸）</h4>
+  <figure class="shot narrow">
+    <a class="shot-link" href="images/left-panel.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/left-panel.png" alt="左パネル全体。上から時間軸ボタン、描画ツールと色スウォッチ、テクニカル分析のトグル一覧、ファンダメンタルズ、出来高"></a>
+    <figcaption>左パネル全体。上から <b>タイムフレーム</b> → <b>描画ツール</b>（＋色スウォッチ）→ <b>テクニカル分析</b>（移動平均／オーバーレイ／オシレーター）→ <b>ファンダメンタルズ</b> → <b>出来高</b> の順に並びます。点灯しているドットが有効な指標です。</figcaption>
+  </figure>
+
+  <h4>タイムフレーム</h4>
   <p><code>5m</code> / <code>15m</code> / <code>60m</code> / <code>1D</code> / <code>1W</code> / <code>1M</code> の6ボタン。クリックでチャートの時間軸を切り替えます。現在選択中の時間軸は背景色で強調されます。</p>
   <div class="callout callout-note">
-    <p>SQ・ウィッチング日のマーカー表示は <code>1D</code>（日足）でのみ有効です。表示/非表示は <a href="#s9">9. 設定パネル（TWEAKS）</a> から切り替えます。</p>
+    <p>SQ・ウィッチング日のマーカー表示は <code>1D</code>（日足）でのみ有効です。表示/非表示は <a href="#s9">9. 設定パネル</a> から切り替えます。</p>
   </div>
 
-  <h4>DRAWING TOOLS（描画ツール）</h4>
+  <h4>描画ツール</h4>
   <div class="table-wrap"><table>
-    <tr><th>ボタン</th><th>ツール名</th><th>操作方法</th></tr>
-    <tr><td>Pan</td><td>パン（移動・選択）</td><td>ドラッグでチャートをスクロール（デフォルト）。既存の描画をクリックすると選択、ドラッグで移動できる</td></tr>
-    <tr><td>Trend</td><td>トレンドライン</td><td>ドラッグで始点〜終点を結ぶ直線を引く</td></tr>
-    <tr><td>Hline</td><td>水平線</td><td>クリックした価格に水平の破線を引く</td></tr>
-    <tr><td>Vline</td><td>垂直線</td><td>クリックした時点に垂直の破線を引く</td></tr>
-    <tr><td>Rect</td><td>矩形</td><td>ドラッグで半透明の矩形エリアを描く</td></tr>
-    <tr><td>Ellipse</td><td>楕円</td><td>ドラッグで楕円を描く</td></tr>
-    <tr><td>Text</td><td>テキスト</td><td>クリック後、テキストを入力して注釈を追加する</td></tr>
-    <tr><td>CLEAR</td><td>全消去</td><td>すべての描画オブジェクトを一括削除する</td></tr>
+    <tr><th>ボタン</th><th>操作方法</th></tr>
+    <tr><td>パン / 選択</td><td>ドラッグでチャートをスクロール（デフォルト）。既存の描画をクリックすると選択、ドラッグで移動できる</td></tr>
+    <tr><td>トレンドライン</td><td>ドラッグで始点〜終点を結ぶ直線を引く</td></tr>
+    <tr><td>水平線</td><td>クリックした価格に水平の破線を引く</td></tr>
+    <tr><td>垂直線</td><td>クリックした時点に垂直の破線を引く</td></tr>
+    <tr><td>長方形</td><td>ドラッグで半透明の矩形エリアを描く</td></tr>
+    <tr><td>楕円</td><td>ドラッグで楕円を描く</td></tr>
+    <tr><td>テキスト</td><td>クリック後、テキストを入力して注釈を追加する</td></tr>
+    <tr><td>全消去</td><td>すべての描画オブジェクトを一括削除する</td></tr>
   </table></div>
-  <p>ツールをクリックして有効化すると、チャート上の操作がそのツールの動作に切り替わります。もう一度クリックすると Pan（移動）モードに戻ります。</p>
+  <p>ツールをクリックして有効化すると、チャート上の操作がそのツールの動作に切り替わります。もう一度クリックすると「パン / 選択」モードに戻ります。</p>
 
   <h4>描画の色を選ぶ</h4>
   <p>ツール一覧の下に「<strong>色</strong>」という行があり、5色の丸いスウォッチボタンから新しく描く図形の色を選べます。選択した色は次に描画する図形すべてに適用されます。</p>
@@ -482,27 +534,32 @@
   </div>
   <p>既存の図形の色を変更する方法は <a href="#s5">5. 描画ツール</a> を参照してください。</p>
 
-  <h4>TECHNICAL ANALYSIS（テクニカル指標）</h4>
+  <h4>テクニカル分析</h4>
   <p>各指標左のドットをクリックしてオン/オフを切り替えます。点灯しているものが有効です。詳細は「<a href="#s4">4. テクニカル指標</a>」を参照してください。</p>
 
-  <h4>FUNDAMENTALS（ファンダメンタルズ）</h4>
+  <h4>ファンダメンタルズ</h4>
   <ul>
-    <li><strong>Show fundamentals pane</strong> トグル: チャート下部にファンダメンタルズパネルを表示/非表示します。</li>
+    <li><strong>ファンダメンタルズを表示</strong> トグル: チャート下部にファンダメンタルズパネルを表示/非表示します。</li>
     <li>有効時は ROE / ROIC / PER の表示チェックボックスが現れます。</li>
   </ul>
 
-  <h4>VOLUME（出来高）</h4>
-  <ul><li><strong>Show volume</strong> トグル: チャート下部に出来高バーを表示/非表示します。</li></ul>
+  <h4>出来高</h4>
+  <ul><li><strong>出来高を表示</strong> トグル: チャート下部に出来高バーを表示/非表示します。</li></ul>
 
   <h3 id="s3-3">3.3 メインチャート</h3>
 
+  <figure class="shot">
+    <a class="shot-link" href="images/chart-area.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/chart-area.png" alt="メインチャート。ローソク足と移動平均線、SQ マーカーの縦線、下に出来高・ストキャスティクス・ファンダメンタルズのサブペインが並ぶ"></a>
+    <figcaption>メインチャート。ローソク足に移動平均線が重なり、縦線が <b>SQ・ウィッチング日マーカー</b>です。下へ順に <b>出来高</b>・<b>ストキャスティクス</b>・<b>MACD</b>・<b>RSI</b>・<b>ファンダメンタルズ</b>のサブペインが並びます。左上の <b>凡例（Legend）</b>に OHLC と各指標の現在値が表示されます。</figcaption>
+  </figure>
+
   <h4>チャート構成（上から順に表示）</h4>
 <pre><code>メインチャート（ローソク足 + 移動平均線 + オーバーレイ指標 + SQ/ウィッチングマーカー）
-Volume バー        [Show volume が有効な場合]
-Stochastics        [Stoch が有効な場合]
-MACD               [MACD が有効な場合]
-RSI                [RSI が有効な場合]
-Fundamentals       [Show fundamentals が有効な場合]</code></pre>
+出来高              [「出来高を表示」が有効な場合]
+ストキャスティクス  [「ストキャスティクス 14,3,3」が有効な場合]
+MACD                [「MACD」が有効な場合]
+RSI                 [「RSI」が有効な場合]
+ファンダメンタルズ  [「ファンダメンタルズを表示」が有効な場合]</code></pre>
 
   <h4>チャート左上の情報（Legend）</h4>
   <p>カーソル位置または最新バーの OHLC 値と各指標の現在値が表示されます。</p>
@@ -513,7 +570,7 @@ V: 出来高
 [各指標の現在値]</code></pre>
 
   <h4>SQ・ウィッチング日マーカー</h4>
-  <p>日足（1D）表示時、SQ（第2金曜・日本株）やダブル/クアドルプル・ウィッチング（第3金曜・米国株）に該当するバーに縦線が引かれます。四半期に該当するメジャーSQ／クアドルプル・ウィッチングは太い線、それ以外は細い線で区別されます。該当バーにカーソルを合わせると名称がツールチップで表示されます。表示/非表示は <a href="#s9">9. 設定パネル（TWEAKS）</a> から切り替えます。</p>
+  <p>日足（1D）表示時、SQ（第2金曜・日本株）やダブル/クアドルプル・ウィッチング（第3金曜・米国株）に該当するバーに縦線が引かれます。四半期に該当するメジャーSQ／クアドルプル・ウィッチングは太い線、それ以外は細い線で区別されます。該当バーにカーソルを合わせると名称がツールチップで表示されます。表示/非表示は <a href="#s9">9. 設定パネル</a> から切り替えます。</p>
 
   <h4>カーソル操作</h4>
   <ul>
@@ -523,25 +580,30 @@ V: 出来高
 
   <h3 id="s3-4">3.4 右パネル</h3>
 
+  <figure class="shot narrow">
+    <a class="shot-link" href="images/right-panel.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/right-panel.png" alt="右パネル。上部にウォッチリスト切替ドロップダウンと編集・追加ボタン、検索ボックス、市場フィルタ、下に銘柄リストとファンダメンタルズ"></a>
+    <figcaption>右パネル。上から <b>リスト切替ドロップダウン</b>・<b>編集</b>・<b>＋</b> → <b>検索ボックス</b> → <b>市場フィルタ（全て / JP / US）</b> → <b>銘柄リスト</b>（選択マーク・スパークライン・価格・変動率）→ <b>ファンダメンタルズ</b>の順です。</figcaption>
+  </figure>
+
   <h4>ウォッチリスト操作ボタン</h4>
   <div class="table-wrap"><table>
     <tr><th>ボタン/要素</th><th>機能</th></tr>
     <tr><td>ドロップダウン（リスト名）</td><td>複数のウォッチリストを切り替える。各リストの銘柄数が表示される</td></tr>
-    <tr><td>Edit</td><td>編集モードのオン/オフ切り替え。有効時に銘柄追加フォームと削除ボタンが表示される</td></tr>
+    <tr><td>編集</td><td>編集モードのオン/オフ切り替え。有効時はボタン表示が「完了」に変わり、銘柄追加フォームと削除ボタンが表示される</td></tr>
     <tr><td>+</td><td>新規ウォッチリストを作成する</td></tr>
   </table></div>
 
   <h4>編集モード中の追加操作</h4>
   <div class="table-wrap"><table>
     <tr><th>操作</th><th>機能</th></tr>
-    <tr><td>Rename ボタン</td><td>ウォッチリストの名前を変更する</td></tr>
-    <tr><td>Delete ボタン</td><td>現在のウォッチリストを削除する（最後の1件は削除不可）</td></tr>
+    <tr><td>名前変更 ボタン</td><td>ウォッチリストの名前を変更する</td></tr>
+    <tr><td>削除 ボタン</td><td>現在のウォッチリストを削除する（最後の1件は削除不可）</td></tr>
   </table></div>
 
   <h4>検索・フィルター</h4>
   <ul>
     <li><strong>検索ボックス</strong>: 銘柄コード・銘柄名・セクターで絞り込み検索ができます。</li>
-    <li><strong>[ALL] [JP] [US]</strong> タブ: 市場（全市場 / 日本株 / 米国株）でフィルタリングします。</li>
+    <li><strong>[全て] [JP] [US]</strong> タブ: 市場（全市場 / 日本株 / 米国株）でフィルタリングします。</li>
   </ul>
 
   <h4>銘柄リスト</h4>
@@ -565,7 +627,7 @@ V: 出来高
   <h4>追加銘柄バナー（スクリーニングから遷移した場合）</h4>
   <p>ウォッチリストに存在しない銘柄をスクリーニング結果から選んだ場合、右パネル上部に一時的なバナーが表示されます。「<strong>＋リストに追加</strong>」ボタンで現在のウォッチリストへ正式に登録できます（<a href="#s2-3">2.3</a> 参照）。</p>
 
-  <h4>FUNDAMENTALS（基本情報）</h4>
+  <h4>ファンダメンタルズ（基本情報）</h4>
   <p>プライマリ銘柄のファンダメンタル情報を表示します：</p>
   <div class="table-wrap"><table>
     <tr><th>指標</th><th>内容</th></tr>
@@ -580,6 +642,11 @@ V: 出来高
 
   <h3 id="s3-5">3.5 下部ステータスバー</h3>
   <p>チャートの現在の状態をテキストで常時表示します。</p>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/statusbar.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/statusbar.png" alt="下部ステータスバー。左に TF・SYM・TOOL・DRAW、右に操作ヒント"></a>
+    <figcaption>下部ステータスバー。左に <b>TF</b>（時間軸）・<b>SYM</b>（選択銘柄）・<b>TOOL</b>（描画ツール）・<b>DRAW</b>（描画数）、右端に操作ヒントが表示されます。</figcaption>
+  </figure>
 <pre><code>TF 1D  |  SYM AAPL · MSFT  |  TOOL PAN  |  DRAW 3
 Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   <div class="table-wrap"><table>
@@ -591,68 +658,73 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   </table></div>
 
   <h2 id="s4"><span class="sec-num">4</span>テクニカル指標</h2>
-  <p>左パネルの「TECHNICAL ANALYSIS」セクションで各指標をオン/オフします。</p>
+  <p>左パネルの「テクニカル分析」セクションで各指標をオン/オフします。</p>
 
-  <h3>Moving Averages（移動平均線）</h3>
+  <h3>移動平均</h3>
   <p>メインチャートに重ねて表示されます。</p>
   <div class="table-wrap"><table>
     <tr><th>指標</th><th>説明</th><th>表示色</th></tr>
-    <tr><td>SMA 5</td><td>5期間の単純移動平均</td><td>琥珀色</td></tr>
-    <tr><td>SMA 25</td><td>25期間の単純移動平均</td><td>水色</td></tr>
-    <tr><td>SMA 75</td><td>75期間の単純移動平均</td><td>マゼンタ</td></tr>
-    <tr><td>EMA 20</td><td>20期間の指数移動平均（破線）</td><td>ライム</td></tr>
+    <tr><td>単純移動平均線 5期間</td><td>5期間の単純移動平均</td><td>琥珀色</td></tr>
+    <tr><td>単純移動平均線 25期間</td><td>25期間の単純移動平均</td><td>水色</td></tr>
+    <tr><td>単純移動平均線 75期間</td><td>75期間の単純移動平均</td><td>マゼンタ</td></tr>
+    <tr><td>指数平滑移動平均線 20期間</td><td>20期間の指数移動平均（破線）</td><td>ライム</td></tr>
   </table></div>
 
-  <h3>Overlays（オーバーレイ）</h3>
+  <h3>オーバーレイ</h3>
   <p>メインチャートに重ねて表示されます。</p>
   <div class="table-wrap"><table>
     <tr><th>指標</th><th>説明</th></tr>
-    <tr><td>Bollinger Bands 20,2</td><td>期間20・標準偏差2のボリンジャーバンド</td></tr>
-    <tr><td>Parabolic SAR</td><td>トレンド転換シグナルをドットで表示</td></tr>
-    <tr><td>Ichimoku</td><td>一目均衡表（転換線・基準線・遅行線・雲）</td></tr>
+    <tr><td>ボリンジャーバンド 20,2</td><td>期間20・標準偏差2のボリンジャーバンド</td></tr>
+    <tr><td>パラボリック SAR</td><td>トレンド転換シグナルをドットで表示</td></tr>
+    <tr><td>一目均衡表</td><td>一目均衡表（転換線・基準線・遅行線・雲）</td></tr>
   </table></div>
 
-  <h3>Oscillators（オシレーター）</h3>
+  <h3>オシレーター</h3>
   <p>メインチャートの下のサブペインに表示されます。</p>
   <div class="table-wrap"><table>
     <tr><th>指標</th><th>説明</th><th>カスタムパラメータ</th></tr>
-    <tr><td>Stochastics 14,3,3</td><td>ストキャスティクス（%K・%D）</td><td>なし</td></tr>
-    <tr><td>MACD</td><td>MACDライン・シグナルライン・ヒストグラム</td><td>Fast / Slow / Signal 期間</td></tr>
-    <tr><td>RSI</td><td>相対力指数（0〜100）</td><td>Period / Overbought / Oversold</td></tr>
+    <tr><td>ストキャスティクス 14,3,3</td><td>ストキャスティクス（%K・%D）</td><td>なし</td></tr>
+    <tr><td>MACD</td><td>MACDライン・シグナルライン・ヒストグラム</td><td>短期 / 長期 / シグナル</td></tr>
+    <tr><td>RSI</td><td>相対力指数（0〜100）</td><td>期間 / OB / OS</td></tr>
   </table></div>
 
-  <h4>MACD パラメータの変更（デフォルト: Fast=12, Slow=26, Signal=9）</h4>
-  <p>左パネルの各入力欄に数値を直接入力して変更します。設定可能範囲：Fast/Slow は 1〜200、Signal は 1〜50。</p>
+  <h4>MACD パラメータの変更（デフォルト: 短期=12, 長期=26, シグナル=9）</h4>
+  <p>左パネルの各入力欄に数値を直接入力して変更します。設定可能範囲：短期/長期 は 1〜200、シグナル は 1〜50。</p>
 
-  <h4>RSI パラメータの変更（デフォルト: Period=14, OB=70, OS=30）</h4>
-  <p>設定可能範囲：Period は 2〜200、Overbought は 50〜99、Oversold は 1〜49。</p>
+  <h4>RSI パラメータの変更（デフォルト: 期間=14, OB=70, OS=30）</h4>
+  <p>設定可能範囲：期間 は 2〜200、OB は 50〜99、OS は 1〜49。</p>
 
   <h4>クイックプリセット</h4>
-  <p>設定パネル（TWEAKS）の「クイックプリセット」から、よく使う指標の組み合わせをワンクリックで適用できます。詳細は <a href="#s9">9. 設定パネル（TWEAKS）</a> を参照してください。</p>
+  <p>設定パネルの「クイックプリセット」から、よく使う指標の組み合わせをワンクリックで適用できます。詳細は <a href="#s9">9. 設定パネル</a> を参照してください。</p>
 
   <h2 id="s5"><span class="sec-num">5</span>描画ツール</h2>
 
   <h3>基本的な使い方</h3>
   <ol>
-    <li>左パネルの「DRAWING TOOLS」から使いたいツールをクリックして選択します。</li>
+    <li>左パネルの「描画ツール」から使いたいツールをクリックして選択します。</li>
     <li>必要に応じて「色」のスウォッチから描画色（白・黄・シアン・ピンク・ライムグリーン の5色）を選びます。</li>
     <li>チャート上で操作します（下表参照）。</li>
-    <li>描画が完了したら「Pan」ボタンをクリックして通常の移動モードに戻ります。</li>
+    <li>描画が完了したら「パン / 選択」ボタンをクリックして通常の移動モードに戻ります。</li>
   </ol>
 
   <h3>各ツールの操作</h3>
   <div class="table-wrap"><table>
     <tr><th>ツール</th><th>チャート上での操作</th><th>結果</th></tr>
-    <tr><td>Trend（トレンドライン）</td><td>ドラッグ（始点→終点）</td><td>2点間を結ぶ直線</td></tr>
-    <tr><td>Hline（水平線）</td><td>任意の場所をクリック</td><td>クリックした価格に水平の破線</td></tr>
-    <tr><td>Vline（垂直線）</td><td>任意の場所をクリック</td><td>クリックした時点に垂直の破線</td></tr>
-    <tr><td>Rect（矩形）</td><td>ドラッグ</td><td>半透明の矩形エリア</td></tr>
-    <tr><td>Ellipse（楕円）</td><td>ドラッグ</td><td>楕円形</td></tr>
-    <tr><td>Text（テキスト）</td><td>クリック後、ダイアログに入力</td><td>テキスト注釈</td></tr>
+    <tr><td>トレンドライン</td><td>ドラッグ（始点→終点）</td><td>2点間を結ぶ直線</td></tr>
+    <tr><td>水平線</td><td>任意の場所をクリック</td><td>クリックした価格に水平の破線</td></tr>
+    <tr><td>垂直線</td><td>任意の場所をクリック</td><td>クリックした時点に垂直の破線</td></tr>
+    <tr><td>長方形</td><td>ドラッグ</td><td>半透明の矩形エリア</td></tr>
+    <tr><td>楕円</td><td>ドラッグ</td><td>楕円形</td></tr>
+    <tr><td>テキスト</td><td>クリック後、ダイアログに入力</td><td>テキスト注釈</td></tr>
   </table></div>
 
+  <figure class="shot">
+    <a class="shot-link" href="images/drawing.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/drawing.png" alt="チャート上にトレンドラインを1本引いた状態。クロスヘアと右端の価格ラベル、下端の日時ラベルも表示されている"></a>
+    <figcaption>トレンドラインを1本引いた状態。始点から終点へドラッグすると直線が引かれます。あわせて <b>クロスヘア</b>（十字カーソル）と、右端の <b>価格ラベル</b>・下端の <b>日時ラベル</b>も表示されています。</figcaption>
+  </figure>
+
   <h3>描画の選択・移動</h3>
-  <p>Pan（パン）ツールが有効な状態で、チャート上の描画をクリックすると選択されます（選択中は線が太く表示されます）。選択したままドラッグすると、その描画を移動できます。何もない場所をクリックすると選択が解除されます。</p>
+  <p>「パン / 選択」ツールが有効な状態で、チャート上の描画をクリックすると選択されます（選択中は線が太く表示されます）。選択したままドラッグすると、その描画を移動できます。何もない場所をクリックすると選択が解除されます。</p>
 
   <h3>描画の色変更・アラート設定・削除（右クリックメニュー）</h3>
   <p>チャート上の描画を<strong>右クリック</strong>すると、その場にメニューが開きます。</p>
@@ -666,7 +738,7 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   <h3>描画の削除（その他の方法）</h3>
   <ul>
     <li>描画を選択した状態で <strong>Delete</strong> または <strong>Backspace</strong> キーを押すと削除されます（テキスト入力中は無効）。</li>
-    <li><strong>CLEAR ボタン</strong>（左パネル下部）でチャート上のすべての描画をまとめて削除します。</li>
+    <li><strong>「全消去」ボタン</strong>（左パネル下部）でチャート上のすべての描画をまとめて削除します。</li>
   </ul>
 
   <h2 id="s6"><span class="sec-num">6</span>パターン分析</h2>
@@ -677,6 +749,11 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
     <li>上部にパターン種別の絞り込みチップ、下にチャートとパターン一覧が並びます。</li>
     <li>銘柄が未選択の場合は「銘柄を選択してください」と表示されます。</li>
   </ul>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/pattern.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/pattern.png" alt="パターン分析ビュー。上部に絞り込みチップ、中央のチャートに検出パターンのマーカー、右に検出パターン一覧"></a>
+    <figcaption>パターン分析ビュー。上部の <b>絞り込みチップ</b>で種別を切り替え、チャート上には検出パターンの<b>マーカー</b>（▲強気 / ▼弱気）が表示されます。右の一覧には日付・種別・強弱が新しい順に並びます。</figcaption>
+  </figure>
 
   <h4>絞り込みチップ</h4>
   <div class="table-wrap"><table>
@@ -691,6 +768,11 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
 
   <h2 id="s7"><span class="sec-num">7</span>マクロダッシュボード</h2>
   <p>上部バーの「<strong>マクロ</strong>」タブに切り替えると、マクロ経済指標のダッシュボードが表示されます。</p>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/macro.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/macro.png" alt="マクロダッシュボード。上部に総合シグナル、6つの指標カード、下部に期間切り替えボタン。FRED キー未設定のため HY OAS と Fed 純流動性は取得不可と表示されている"></a>
+    <figcaption>マクロダッシュボード。上部に <b>総合シグナル</b>、その下に <b>6つの指標カード</b>、最下部に <b>期間切り替え（3M / 6M / 1Y / 2Y）</b>が並びます。この例は <code>FRED_API_KEY</code> 未設定の状態で、FRED を使う HY OAS と Fed純流動性が「データ取得不可」になり、yfinance ベースの4指標のみ稼働しています（部分稼働）。</figcaption>
+  </figure>
 
   <h3>総合シグナル</h3>
   <p>画面上部に「総合シグナル」バッジが表示され、各指標の組み合わせから市場環境を4段階で判定します。</p>
@@ -715,7 +797,7 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   </table></div>
 
   <div class="callout callout-note">
-    <p>FRED を参照する指標（HY OAS・Fed純流動性）は <code>FRED_API_KEY</code> が未設定の場合「データ取得不可」「FRED_API_KEY 未設定」と表示されます。設定パネルからキーを登録できます（<a href="#s9">9. 設定パネル（TWEAKS）</a>）。yfinance ベースの4指標はキー不要で常に稼働します。</p>
+    <p>FRED を参照する指標（HY OAS・Fed純流動性）は <code>FRED_API_KEY</code> が未設定の場合「データ取得不可」「FRED_API_KEY 未設定」と表示されます。設定パネルからキーを登録できます（<a href="#s9">9. 設定パネル</a>）。yfinance ベースの4指標はキー不要で常に稼働します。</p>
     <p>データが更新中で確定値でない場合は「速報値」、キャッシュの取得に失敗し古いデータを暫定表示している場合はその旨のマークが付きます。</p>
   </div>
 
@@ -724,6 +806,11 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
 
   <h2 id="s8"><span class="sec-num">8</span>スクリーニング</h2>
   <p>上部バーの「<strong>スクリーニング</strong>」タブに切り替えると、N字パターンによる銘柄スクリーニング機能が使えます。</p>
+
+  <figure class="shot">
+    <a class="shot-link" href="images/screening.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/screening.png" alt="スクリーニングビュー。上部ツールバーにスキャン実行・ユニバース選択・CSV登録・最終スキャン日時・最小スコア、下にスコア降順の結果テーブル"></a>
+    <figcaption>スキャン完了後のスクリーニングビュー。上部ツールバーに <b>スキャン実行</b>・<b>ユニバース選択</b>・<b>CSV登録</b>・<b>最終スキャン日時</b>・<b>最小スコア</b>が並び、下の結果テーブルはコード・銘柄名・時価総額・<b>スコア（降順）</b>・サムネイルで構成されます。</figcaption>
+  </figure>
 
   <h3>ツールバー</h3>
   <div class="table-wrap"><table>
@@ -753,8 +840,13 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   </table></div>
   <p>結果行をクリックすると、その銘柄をチャート表示に切り替えます（ウォッチリスト未登録の銘柄は <a href="#s2-3">2.3</a> の手順で追加できます）。</p>
 
-  <h2 id="s9"><span class="sec-num">9</span>設定パネル（TWEAKS）</h2>
+  <h2 id="s9"><span class="sec-num">9</span>設定パネル</h2>
   <p>上部バー右側の<strong>歯車アイコン</strong>（「設定」）をクリックすると、設定パネルが開きます。「閉じる」リンクで閉じられます。</p>
+
+  <figure class="shot narrow">
+    <a class="shot-link" href="images/tweaks.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/tweaks.png" alt="設定パネル。上から FRED API キー、カラーテーマ、SQ・ウィッチング、比較モード、クイックプリセット"></a>
+    <figcaption>設定パネル。上から <b>FRED API キー</b>・<b>カラーテーマ</b>・<b>SQ・ウィッチング</b>・<b>比較モード</b>・<b>クイックプリセット</b>の順に並びます。右上の「閉じる」で閉じます。</figcaption>
+  </figure>
 
   <h3>FRED API キー</h3>
   <ul>
