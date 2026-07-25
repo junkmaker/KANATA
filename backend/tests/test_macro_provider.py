@@ -282,6 +282,38 @@ def test_pair_despike_can_be_disabled_by_config():
     assert len(result["series"]) == 21
 
 
+def test_pair_marks_stale_when_despike_drops_latest_trading_day():
+    """直近日が _despike で落ちた場合、series の最新日は実際の最新取引日より古くなるため stale=True。"""
+    num = _daily([40000.0] * 21)
+    den_values = [2500.0] * 21
+    den_values[20] = 250.0  # 最新日がスケール異常
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else _daily(den_values)
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    series = result["series"]
+    assert len(series) == 20  # 最新日が異常値として除去された
+    assert series[-1]["date"] == "2026-01-20"
+    assert result["meta"]["stale"] is True
+
+
+def test_pair_not_stale_when_no_days_are_dropped():
+    """異常値が無ければ series の最新日＝実際の最新取引日となるため stale=False のまま。"""
+    num = _daily([40000.0] * 21)
+    den = _daily([2500.0] * 21)
+
+    def closes_side_effect(symbol):
+        return num if symbol == "^N225" else den
+
+    with patch("src.services.macro_provider.fetch_daily_closes", side_effect=closes_side_effect):
+        result = build_nikkei_topix("2020-01-01", "2030-01-01", CFG)
+
+    assert result["meta"]["stale"] is False
+
+
 # --------------------------------------------------------------------------- #
 # Signal evaluation boundaries
 # --------------------------------------------------------------------------- #

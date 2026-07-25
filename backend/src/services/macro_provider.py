@@ -55,6 +55,17 @@ def _despike(closes: dict[str, float], cfg: dict, symbol: str) -> dict[str, floa
     未調整など）では中央値も一緒に移動するため誤検出しない。
 
     除去した日は系列から欠落させるだけで、補間による値の捏造はしない。
+
+    既知の限界（価格系列のみから統計的に判定するアルゴリズム全般に共通する制約）:
+    - 窓半径 (`spike_window_half_points`) を超える日数にわたって異常が連続すると、
+      窓内の中央値ごと異常値側に引きずられて検出漏れになる。ウィンドウ幅を広げると
+      恒久的な水準変化（分割未調整など）を誤検出するリスクとのトレードオフになる
+      ため、この既知の限界は自動では解消しない（該当時はログの dropped 件数・
+      日付から手動で確認する）。
+    - ゼロ近傍だが正の値（例: WTI が実際に数セントまで急落する事態）は、ベンダーの
+      スケール異常と統計的に同じ特徴（局所中央値からの極端な比率乖離）を持つため
+      価格データのみからは原理的に区別できない。意図的に許容している既知の
+      トレードオフであり、将来的に解消する場合は別データソースでの裏取りが必要。
     """
     s = cfg.get("sanitize", {})
     if not s.get("enabled", True):
@@ -349,15 +360,15 @@ def _build_pair(
     外れ値方針: 取得後に _despike でベンダー由来のスケール異常を落としてから結合する。
     """
     try:
-        a = fetch_daily_closes(num_symbol)
-        b = fetch_daily_closes(den_symbol)
+        a_raw = fetch_daily_closes(num_symbol)
+        b_raw = fetch_daily_closes(den_symbol)
     except Exception as exc:  # noqa: BLE001 - yfinance は多様な例外を投げ得る
         logger.warning("%s fetch failed: %s", key, exc)
         return _unavailable(key=key, indicator=key, unit=unit, lens=lens, source="yfinance")
 
     # ベンダー由来のスケール異常を inner join 前に除去する（両系列に適用）。
-    a = _despike(a, cfg, num_symbol)
-    b = _despike(b, cfg, den_symbol)
+    a = _despike(a_raw, cfg, num_symbol)
+    b = _despike(b_raw, cfg, den_symbol)
 
     start_d = start[:10]
     end_d = end[:10]
@@ -375,6 +386,14 @@ def _build_pair(
             value = round(a[d] - bv, 4)
         series.append({"date": d, "value": value})
 
+    # _despike が直近日を外れ値として落とすと、系列の最新日が実際に両銘柄で取得
+    # できていた最新の共通取引日より古くなる。その場合は latest が「本当の最新値」
+    # ではないことを stale=True でクライアントに伝える。
+    raw_common_dates = [d for d in (set(a_raw) & set(b_raw)) if start_d <= d <= end_d]
+    latest_raw_date = max(raw_common_dates) if raw_common_dates else None
+    latest_series_date = series[-1]["date"] if series else None
+    stale = latest_raw_date is not None and latest_raw_date != latest_series_date
+
     available = bool(series)
     signal = evaluate_signal(key, series, cfg) if series else "gray"
     return _indicator(
@@ -385,7 +404,7 @@ def _build_pair(
         series=series,
         signal=signal,
         source="yfinance",
-        stale=False,
+        stale=stale,
         available=available,
         provisional=False,
     )
