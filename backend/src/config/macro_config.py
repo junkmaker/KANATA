@@ -61,6 +61,11 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "red_extreme_min": 10.0,
         },
     },
+    "sanitize": {
+        "spike_window_half_points": 5,
+        "spike_ratio_factor": 3.0,
+        "enabled": True,
+    },
     "overall": {
         "red_if_any_red": True,
         "yellow_if_yellow_count_gte": 2,

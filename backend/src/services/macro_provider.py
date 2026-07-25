@@ -9,6 +9,7 @@ missing; RSP/SPY (yfinance) keeps working (partial availability).
 from __future__ import annotations
 
 import logging
+import statistics
 from typing import Any, Literal
 
 from ..config.macro_config import load_macro_config
@@ -42,6 +43,56 @@ def _as_of(observations_sorted: list[dict], target_date: str) -> float | None:
         else:
             break
     return result
+
+
+def _despike(closes: dict[str, float], cfg: dict, symbol: str) -> dict[str, float]:
+    """日次終値からベンダー由来の外れ値（スケール異常）を除去する。
+
+    ローリング中央値を使う理由: yfinance は分割イベントを伴わずに数日分の終値だけ
+    1/10 になる異常値を返すことがある（例: 1306.T の 2026-03-30/31）。1 点でも比率
+    系列に混ざると UI の min/max オートスケールが潰れ、その期間のチャートが読めなく
+    なる。窓中央値なら「一時的なスパイク」だけを落とし、恒久的な水準変化（分割の
+    未調整など）では中央値も一緒に移動するため誤検出しない。
+
+    除去した日は系列から欠落させるだけで、補間による値の捏造はしない。
+    """
+    s = cfg.get("sanitize", {})
+    if not s.get("enabled", True):
+        return closes
+
+    half = int(s.get("spike_window_half_points", 5))
+    factor = float(s.get("spike_ratio_factor", 3.0))
+    dates = sorted(closes)
+    # 窓を満たせない短い系列（テスト用モックや取得直後）はそのまま通す。
+    if half < 1 or factor <= 1.0 or len(dates) < 2 * half + 1:
+        return closes
+
+    values = [closes[d] for d in dates]
+    kept: dict[str, float] = {}
+    dropped: list[str] = []
+    for i, d in enumerate(dates):
+        window = values[max(0, i - half) : i + half + 1]
+        median = statistics.median(window)
+        value = values[i]
+        # 非正値（原油の逆転など）は比率判定できないため常に残す。
+        if median <= 0 or value <= 0:
+            kept[d] = value
+            continue
+        ratio = value / median
+        if ratio > factor or ratio < 1.0 / factor:
+            dropped.append(d)
+            continue
+        kept[d] = value
+
+    if dropped:
+        logger.warning(
+            "%s: dropped %d outlier close(s) (factor=%s): %s",
+            symbol,
+            len(dropped),
+            factor,
+            ",".join(dropped[:10]),
+        )
+    return kept
 
 
 def _latest_block(series: list[dict], provisional: bool) -> dict | None:
@@ -294,6 +345,8 @@ def _build_pair(
 
     degrade 方針: yfinance 障害（ネットワーク/レート制限/パースエラー）は例外を握って
     この指標だけ unavailable に落とし、build_dashboard 全体が 502 になるのを防ぐ。
+
+    外れ値方針: 取得後に _despike でベンダー由来のスケール異常を落としてから結合する。
     """
     try:
         a = fetch_daily_closes(num_symbol)
@@ -301,6 +354,10 @@ def _build_pair(
     except Exception as exc:  # noqa: BLE001 - yfinance は多様な例外を投げ得る
         logger.warning("%s fetch failed: %s", key, exc)
         return _unavailable(key=key, indicator=key, unit=unit, lens=lens, source="yfinance")
+
+    # ベンダー由来のスケール異常を inner join 前に除去する（両系列に適用）。
+    a = _despike(a, cfg, num_symbol)
+    b = _despike(b, cfg, den_symbol)
 
     start_d = start[:10]
     end_d = end[:10]
