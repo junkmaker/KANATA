@@ -69,30 +69,44 @@ def compute_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> float:
     return 0.0 if pd.isna(atr) else float(atr)
 
 
+def _threshold_from(close: float, atr: float) -> float:
+    """終値と ATR から ZigZag 反転閾値(%)を返す。zigzag_threshold の実体。"""
+    if close <= 0:
+        return ZIGZAG_MIN_PCT
+    dynamic = atr / close * 100.0 * ZIGZAG_ATR_COEF
+    return max(ZIGZAG_MIN_PCT, dynamic)
+
+
 def zigzag_threshold(df: pd.DataFrame) -> float:
     """ボラティリティ連動の ZigZag 反転閾値(%)を返す。
 
     zigzag_pct = max(ZIGZAG_MIN_PCT, ATR/終値 * 100 * ZIGZAG_ATR_COEF)
     """
-    close = float(df["Close"].iloc[-1])
-    if close <= 0:
-        return ZIGZAG_MIN_PCT
-    atr = compute_atr(df)
-    dynamic = atr / close * 100.0 * ZIGZAG_ATR_COEF
-    return max(ZIGZAG_MIN_PCT, dynamic)
+    return _threshold_from(float(df["Close"].iloc[-1]), compute_atr(df))
 
 
-def extract_zigzag_pivots(close: pd.Series, zigzag_pct: float) -> list[dict]:
+def extract_zigzag_pivots(
+    close: pd.Series,
+    zigzag_pct: float,
+    values: list[float] | None = None,
+    dates: list | None = None,
+) -> list[dict]:
     """閾値ベースの ZigZag でピボット列を抽出する。
 
     出力: ``[{index, date, price, type: 'low'|'high'}, ...]`` を時系列順で返す。
     最後の暫定極値も確定前提でピボットに含める(ブレイク直後の D を捉えるため)。
+
+    values / dates を渡すと close からの再構築(tolist と index 展開)を省く。
+    ウォークフォワードで同じ系列を何千回も舐めるための最適化で、渡さなければ
+    従来どおり close から作る(結果は完全に同一)。
     """
-    values = [float(v) for v in close.tolist()]
+    if values is None:
+        values = [float(v) for v in close.tolist()]
     n = len(values)
     if n < 2:
         return []
-    dates = list(close.index)
+    if dates is None:
+        dates = list(close.index)
     thr = zigzag_pct / 100.0
 
     pivots: list[tuple[int, float, str]] = []
@@ -161,30 +175,40 @@ def compute_macd(
     return macd_line, signal_line
 
 
-def _volume_bonus(df: pd.DataFrame, d_idx: int) -> int:
-    """D 時点の出来高が直近平均比 +50% 以上なら VOLUME_BONUS。"""
-    if "Volume" not in df.columns or d_idx <= 0:
+def _volume_bonus_from(volumes: list[float], d_idx: int) -> int:
+    """出来高リストから D 時点の急増ボーナスを返す。_volume_bonus の実体。"""
+    if not volumes or d_idx <= 0:
         return 0
-    vol = df["Volume"].astype(float)
     start = max(0, d_idx - VOLUME_LOOKBACK)
-    prior = vol.iloc[start:d_idx]
-    if prior.empty:
+    prior = volumes[start:d_idx]
+    if not prior:
         return 0
-    avg = float(prior.mean())
+    avg = sum(prior) / len(prior)
     if avg <= 0:
         return 0
-    d_vol = float(vol.iloc[d_idx])
-    return VOLUME_BONUS if d_vol >= avg * VOLUME_SPIKE_MULT else 0
+    return VOLUME_BONUS if volumes[d_idx] >= avg * VOLUME_SPIKE_MULT else 0
+
+
+def _volume_bonus(df: pd.DataFrame, d_idx: int) -> int:
+    """D 時点の出来高が直近平均比 +50% 以上なら VOLUME_BONUS。"""
+    if "Volume" not in df.columns:
+        return 0
+    return _volume_bonus_from(
+        [float(v) for v in df["Volume"].tolist()], d_idx
+    )
+
+
+def _macd_bonus_at(m: float, s: float) -> int:
+    """MACD 値とシグナル値から加点を返す。_macd_bonus の実体。"""
+    if pd.isna(m) or pd.isna(s):
+        return 0
+    return MACD_BONUS if float(m) > float(s) else 0
 
 
 def _macd_bonus(close: pd.Series, d_idx: int) -> int:
     """D 時点で MACD が GC 方向(macd > signal)なら MACD_BONUS。"""
     macd_line, signal_line = compute_macd(close)
-    m = macd_line.iloc[d_idx]
-    s = signal_line.iloc[d_idx]
-    if pd.isna(m) or pd.isna(s):
-        return 0
-    return MACD_BONUS if float(m) > float(s) else 0
+    return _macd_bonus_at(macd_line.iloc[d_idx], signal_line.iloc[d_idx])
 
 
 def _trend_bonus(close: pd.Series, a_idx: int) -> int:
@@ -213,18 +237,92 @@ def _breakout_bonus(b_price: float, d_price: float) -> int:
     return BREAKOUT_BONUS if ratio >= BREAKOUT_STRONG_PCT else 0
 
 
-def detect_n_pattern(df: pd.DataFrame, zigzag_pct: float | None = None) -> dict | None:
+def _atr_series(df: pd.DataFrame, period: int = ATR_PERIOD) -> list[float]:
+    """全期間の ATR を list で返す(compute_atr の各時点版)。
+
+    rolling(min_periods=1).mean() は時刻 t の値が t 以前しか参照しない(因果的)。
+    len(df) < 2 のときは compute_atr と揃えて 0.0 で埋める。
+    """
+    n = len(df)
+    if n < 2:
+        return [0.0] * n
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+    close = df["Close"].astype(float)
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    atr = tr.rolling(window=period, min_periods=1).mean()
+    return [0.0 if pd.isna(v) else float(v) for v in atr.tolist()]
+
+
+def precompute_series(df: pd.DataFrame) -> dict:
+    """全期間の因果的な派生系列を一度だけ計算する(ウォークフォワード用)。
+
+    ATR は rolling(min_periods=1).mean()、MACD は ewm(adjust=False) で、いずれも
+    時刻 t の値が t 以前しか参照しない(因果的)。したがって全期間で計算した系列を
+    位置 t で切り出しても先読みは発生しない。
+
+    **返り値は df の先頭(位置 0)から始まるスライスに対してのみ有効。**
+    ewm は先頭から再帰するため、途中で切ったスライスでは値が一致しない。
+    呼び出し側は必ず ``df.iloc[:t+1]`` を detect_n_pattern に渡すこと。
+
+    Returns: ``{'closes','volumes','atr','macd','signal','dates'}`` —
+    すべて list、長さは len(df)(volumes のみ Volume 列が無ければ空 list)。
+    """
+    close = df["Close"]
+    macd_line, signal_line = compute_macd(close)
+    volumes = (
+        [float(v) for v in df["Volume"].tolist()] if "Volume" in df.columns else []
+    )
+    return {
+        "closes": [float(v) for v in close.tolist()],
+        "volumes": volumes,
+        "atr": _atr_series(df),
+        "macd": macd_line.tolist(),
+        "signal": signal_line.tolist(),
+        "dates": [_date_iso(ts) for ts in close.index],
+    }
+
+
+def detect_n_pattern(
+    df: pd.DataFrame,
+    zigzag_pct: float | None = None,
+    precomputed: dict | None = None,
+) -> dict | None:
     """N字波動パターンを判定しスコア付きで返す。非該当なら None。
 
     Returns: ``{'detected', 'score', 'score_detail', 'pivots', 'break_date'}``
 
     zigzag_pct を省略すると ATR 連動閾値(zigzag_threshold)を用いる。
+
+    precomputed に precompute_series の結果を渡すと、ATR/MACD/終値リストの
+    再計算を省いて同じ結果を返す。**呼び出し側は「precomputed を作った df の
+    先頭 len(df) 行が、いま渡している df と一致する」ことを保証する契約**を負う
+    (破ると静かに違う値が出る)。
     """
     if df is None or len(df) < MIN_BARS or "Close" not in df.columns:
         return None
 
-    pct = zigzag_threshold(df) if zigzag_pct is None else zigzag_pct
-    pivots = extract_zigzag_pivots(df["Close"], pct)
+    n = len(df)
+    if zigzag_pct is not None:
+        pct = zigzag_pct
+    elif precomputed is not None:
+        pct = _threshold_from(precomputed["closes"][n - 1], precomputed["atr"][n - 1])
+    else:
+        pct = zigzag_threshold(df)
+
+    if precomputed is not None:
+        pivots = extract_zigzag_pivots(
+            df["Close"],
+            pct,
+            values=precomputed["closes"][:n],
+            dates=precomputed["dates"][:n],
+        )
+    else:
+        pivots = extract_zigzag_pivots(df["Close"], pct)
     if len(pivots) < PIVOT_COUNT:
         return None
 
@@ -244,8 +342,14 @@ def detect_n_pattern(df: pd.DataFrame, zigzag_pct: float | None = None) -> dict 
     if (len(df) - 1) - d["index"] > RECENCY_MAX_BARS:
         return None
 
-    volume = _volume_bonus(df, d["index"])
-    macd = _macd_bonus(df["Close"], d["index"])
+    if precomputed is not None:
+        volume = _volume_bonus_from(precomputed["volumes"], d["index"])
+        macd = _macd_bonus_at(
+            precomputed["macd"][d["index"]], precomputed["signal"][d["index"]]
+        )
+    else:
+        volume = _volume_bonus(df, d["index"])
+        macd = _macd_bonus(df["Close"], d["index"])
     trend = _trend_bonus(df["Close"], a["index"])
     breakout = _breakout_bonus(b["price"], d["price"])
 
