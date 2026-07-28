@@ -12,11 +12,13 @@ from src.analysis.n_pattern import (
     BREAKOUT_BONUS,
     DURATION_PENALTY,
     MACD_BONUS,
+    MIN_BARS,
     PULLBACK_PENALTY,
     TREND_BONUS,
     VOLUME_BONUS,
     detect_n_pattern,
     extract_zigzag_pivots,
+    precompute_series,
     zigzag_threshold,
 )
 
@@ -262,3 +264,33 @@ def test_extract_zigzag_pivots_alternate_types():
     # 交互に並ぶ(連続する同種ピボットが無い)
     for prev, cur in zip(types, types[1:]):
         assert prev != cur
+
+
+# --------------------------------------------------------------------------- #
+# precompute 等価性(ウォークフォワード用の高速経路)
+# --------------------------------------------------------------------------- #
+def test_precomputed_path_matches_plain_path():
+    """precompute 経由の検出結果が、素の detect_n_pattern と完全一致する。
+
+    一致しなければ ATR/MACD の事前計算に先読みか位置ズレが混入している。
+    score だけでなく戻り値全体(pivots を含む)を比較するのが要点。
+    """
+    closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 125.0)], total=60)
+    vol = [1000.0] * 60
+    vol[34] = 1600.0
+    df = _df(closes, volume=vol)
+    pre = precompute_series(df)
+
+    for t in range(MIN_BARS - 1, len(df)):
+        sub = df.iloc[: t + 1]
+        assert detect_n_pattern(sub, precomputed=pre) == detect_n_pattern(sub)
+
+
+def test_precompute_series_lengths_and_keys():
+    """全キーが len(df) の長さで返る。"""
+    df = _df(_path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 125.0)], total=60))
+
+    pre = precompute_series(df)
+
+    assert set(pre) == {"closes", "volumes", "atr", "macd", "signal", "dates"}
+    assert all(len(pre[k]) == len(df) for k in pre)

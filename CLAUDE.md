@@ -49,7 +49,10 @@ KANATA/
 │   └── shared-types/src/index.ts  # PreloadApi 型 + Window 宣言
 ├── backend/src/           # FastAPI サイドカー
 ├── electron.vite.config.ts
-├── scripts/dev.cjs        # ELECTRON_RUN_AS_NODE を除去して起動
+├── scripts/
+│   ├── dev.cjs            # ELECTRON_RUN_AS_NODE を除去して起動
+│   ├── backtest.py        # N字バックテスト CLI（fetch / detect / outcomes）
+│   └── backtest_report.py # N字バックテストの集計レポート生成
 └── package.json           # ルートワークスペース (type: module)
 ```
 
@@ -139,6 +142,22 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `services/storage.py` — ファイル永続化の共有ヘルパ（`now_iso` / `backend_data_dir` / `data_dir`（`KANATA_DATA_DIR` 解決）/ `atomic_write_json`）。他 services を import しないリーフモジュール
 - `services/screening_provider.py` — ユニバース CSV 読込（必須列は `code` のみ。`name` 欠落→code 代用、`market_cap` 欠落/空欄→None でフィルタ非適用）・スキャン実行（スレッド）・結果 JSON 永続化（`<KANATA_DATA_DIR>/n_pattern_results.json`、atomic write）
 - `services/universe_provider.py` — スクリーニング用ユニバースの登録・一覧・削除・解決。索引は `<KANATA_DATA_DIR>/universes/universes.json`、CSV 本体は `universes/<id>.csv` に `code,name,market_cap` へ正規化保存。登録は JSON ボディ `{name, csv_text}`（multipart 不使用）、2MB / 10,000 行上限、内蔵デフォルト（`prime_universe.csv`、id=`default`）は削除不可。FastAPI 非依存でカスタム例外を routes 層が HTTPException に変換。**依存方向は screening_provider → universe_provider の一方向のみ**（`DEFAULT_UNIVERSE_CSV` は universe_provider 側で定義）
+- `services/ohlcv_store.py` — バックテスト用 OHLCV の Parquet ストア。`<KANATA_DATA_DIR>/ohlcv/<symbol>.parquet` が真実源。純関数（`normalize_ohlcv` / `merge_ohlcv` / `needs_full_refetch` / `sanity_check`）と I/O（`read_ohlcv` / `write_ohlcv` は atomic、`fetch_ohlcv` は yfinance）を分離。`update_symbol` は `"created" | "updated" | "unchanged" | "failed"` を返し、`sync_symbols` が失敗銘柄を集約する。ベンチマークは `BENCHMARK_SYMBOL = "1306"`（TOPIX ETF）
+- `analysis/backtest.py` — ウォークフォワード検出（`walk_forward_signals` / `mark_overlaps`）・アウトカム計算（`resolve_entries` / `compute_outcomes` / `benchmark_outcome`）・統計（`block_bootstrap_means` / `percentile_of` / `confidence_interval`）の純関数群。**I/O は一切しない**（`os` / `pathlib` / `yfinance` / `json` を import しない）
+- `analysis/n_pattern.py` — `precompute_series(df)` で ATR/MACD/出来高を全期間分まとめて計算し、`detect_n_pattern(df, precomputed=...)` に渡すとウォークフォワードが高速化する。**precompute 経路は非 precompute 経路と完全一致することがテストで担保されている**（`test_precomputed_path_matches_plain_path`）
+
+#### N字バックテスト（`scripts/backtest.py`）
+
+設計は [docs/n_pattern_backtest_spec.md](docs/n_pattern_backtest_spec.md)。4段階を個別に再実行できる。
+
+```bash
+python scripts/backtest.py fetch  --period 5y          # ① OHLCV を Parquet に取得
+python scripts/backtest.py detect --start 2023-07-01   # ② ウォークフォワード検出
+python scripts/backtest.py outcomes                    # ③ エントリー解決とアウトカム
+python scripts/backtest_report.py                      # ④ 集計レポート（stdout + backtest/report.md）
+```
+
+出力は `<KANATA_DATA_DIR>/backtest/` 配下（既定は `backend/data/backtest/`）。`--limit N` でスモーク実行できる。ユニバース既定は `backend/data/topix_universe.csv`（**git 管理外**。無ければ `--universe` で差し替える）。
 
 #### FRED_API_KEY の設定
 
@@ -197,6 +216,16 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - **Chart サブペインの Y 座標チェーン**（[Chart.tsx:70-74](apps/renderer/src/components/Chart/Chart.tsx#L70-L74)）に手を入れない。ペインの高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する
 - **ウォッチリスト API のテスト**：`backend/tests/` に pytest 実装済み（`test_models.py` 5 件 + `test_watchlists_api.py` 10 件）。`conftest.py` は tempfile SQLite + `app.dependency_overrides[get_db]` でテスト分離
+- **バックテストの依存方向は `scripts/ → services/ → analysis/` の一方向**。`analysis/backtest.py` に I/O を持ち込まない（純関数の契約。テストがネットワークもファイルも触らずに済むのはこの分離のため）
+- **ウォークフォワードで未来を参照しない**。各時刻 t で `detect_n_pattern` に渡すのは `df.iloc[:t+1]` のみ。`precompute_series` の返り値は **df の先頭（位置 0）から始まるスライスに対してのみ有効**で、途中から切ったスライスに使うと ATR/MACD の位置がずれる
+- **打ち切りイベントは `None` を返す（0 で埋めない）**。保有期間が尽きたシグナルを 0% として混ぜるとリターンが薄まる。Parquet では nullable dtype（`Float64` / `Int64`）で欠損のまま保持する
+- **ブートストラップの再抽出単位は日付（銘柄ではない）**。同じ日に出たシグナルは互いに独立でないため、銘柄単位で引くと信頼区間が実際の 1/3 程度に狭まり、有意でないものが有意に見える
+- **重複シグナルは記録を残し、除外は集計側で行う**。`mark_overlaps` は `overlaps_prev` を立てるだけでレコードを消さない（`backtest_report.py` が既定で除外し、`--include-overlaps` で戻せる）
+- **重複判定のアンカーは「直前に**残った**シグナル」**（直前のシグナルではない）。単に直前のシグナルを基準にすると重複が連鎖し、何とも重なっていない独立イベントまで落ちる（実測で約 35% が消えた）
+- **ランダムエントリーの母集団はユニバース全体**。シグナルが出た銘柄だけから引くと帰無分布が N字側に寄り、有意判定が甘くなる。`backtest_report.py --universe` で指定し、母集団が痩せている場合はレポート本文に警告が入る
+- **有意性は「差」をブートストラップして判定する**。N字の点推定をランダム分布のパーセンタイルに当てるだけでは N字側の不確実性が入らず、数十イベント規模では過大評価になる（`paired_block_bootstrap_diffs`）
+- **OHLCV の銘柄コードは `is_valid_symbol` を通す**。ユーザがアップロードした CSV の `code` 列がそのままファイルパスになるため、検証しないと `../../foo` でストア外へ書き出せる。読みは None、書きは ValueError
+- **`sanity_check` は判定のみで除去しない**。1306.T は yfinance 側で分割が記録されずスケール異常のスパイクを出した実績がある（`macro_provider._despike` が存在する理由）。fetch 時に警告を stderr へ出し、補正するかは人間が判断する
 
 ## CI/CD
 
