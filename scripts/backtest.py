@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -105,6 +106,18 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     if summary["failed"]:
         # 黙って統計から抜けさせない(§12)
         _log(f"取得失敗: {', '.join(summary['failed'])}")
+
+    short = []
+    today = date.today()
+    for code in targets:
+        df = ohlcv_store.read_ohlcv(code)
+        if df is not None and not df.empty and ohlcv_store.needs_backfill(
+            df, args.period, today
+        ):
+            short.append(f"{code}({len(df)}本 {df.index.min().date()}〜)")
+    if short:
+        # 新規上場銘柄なら正当。切り詰めなら再取得が要る — 人間が見て判断する
+        _log(f"警告: period={args.period} に届かない銘柄 {len(short)} 件: {', '.join(short[:20])}")
 
     bench = ohlcv_store.read_ohlcv(ohlcv_store.BENCHMARK_SYMBOL)
     if bench is None:
@@ -236,7 +249,7 @@ def cmd_outcomes(args: argparse.Namespace) -> int:
                     row[f"{kind}_days_to_mfe"] = None
                     continue
                 entry_date = dates[idx]
-                out = backtest.compute_outcomes(highs, lows, closes, opens, idx)
+                out = backtest.compute_outcomes(dates, highs, lows, closes, opens, idx)
                 bench = backtest.benchmark_outcome(
                     bench_dates, bench_opens, bench_closes, entry_date
                 )

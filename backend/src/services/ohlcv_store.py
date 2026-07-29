@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Callable
+from datetime import date, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -34,6 +35,8 @@ OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 OHLC_COLUMNS = ["Open", "High", "Low", "Close"]
 ADJUST_TOLERANCE = 0.005         # 重なり区間の Close 乖離がこれを超えたら全期間再取得(分割の遡及調整)
 SANITY_MAX_DAILY_RETURN = 0.30   # 日次リターンの絶対値がこれを超えたらベンダー由来のスケール異常を疑う
+BACKFILL_TOLERANCE_DAYS = 30     # 保存済み履歴の起点がこれ以上新しければ period 未達とみなす
+PERIOD_UNIT_DAYS = {"d": 1, "wk": 7, "mo": 30, "y": 365}   # yfinance の period 接尾辞 → 暦日数
 
 # 銘柄コードとして許すのは英数字始まりの [英数字 . _ -] のみ。
 # 銘柄コードはユーザがアップロードした CSV の code 列に由来するため、
@@ -162,6 +165,67 @@ def sanity_check(
     return [ts.date().isoformat() for ts in flagged.index]
 
 
+def period_to_days(period: str) -> int | None:
+    """yfinance の period 文字列("5y" / "6mo" / "250d")を暦日数に換算する。
+
+    "max" / "ytd" のように起点が動的なものは None を返す(スパン判定をしない)。
+    未知の書式も None — 判定できないときに False 側へ倒すのではなく、
+    「判定しない」ことを呼び出し側に伝える。
+    """
+    if not isinstance(period, str):
+        return None
+    text = period.strip().lower()
+    for suffix, days in sorted(PERIOD_UNIT_DAYS.items(), key=lambda kv: -len(kv[0])):
+        if text.endswith(suffix):
+            head = text[: -len(suffix)]
+            if head.isdigit():
+                return int(head) * days
+            return None
+    return None
+
+
+def needs_backfill(
+    old: pd.DataFrame,
+    period: str,
+    today: date,
+    tolerance_days: int = BACKFILL_TOLERANCE_DAYS,
+) -> bool:
+    """保存済み履歴の起点が period の要求より新しければ True(履歴が足りない)。
+
+    ``needs_full_refetch`` は**重なり区間の価格**しか見ないため、一度短く保存された
+    ファイルは差分更新では永久に復旧しない。REFRESH_PERIOD("1y")で取り直した
+    ``recent`` は古い日付を持たないので ``merge_ohlcv`` の結果が ``old`` と一致し、
+    ``"unchanged"``(=最新である)と報告されてしまう。スパンの判定はここでしか行えない。
+
+    新規上場銘柄も True になる(上場来の全データを持っていても period には届かない)。
+    呼び出し側は取り直した結果を ``old`` と比較して ``"unchanged"`` に落とすこと —
+    無条件に書き込むと毎回 ``"updated"`` を返し続ける。
+    """
+    if old is None or len(old) == 0:
+        return False
+    span_days = period_to_days(period)
+    if span_days is None:
+        return False
+    expected_start = today - timedelta(days=span_days)
+    stored_start = pd.Timestamp(old.index.min()).date()
+    return (stored_start - expected_start).days > tolerance_days
+
+
+def has_non_positive_prices(df: pd.DataFrame) -> bool:
+    """OHLC のいずれかに 0 以下の値がある行を含むか(純粋な判定・I/O なし)。
+
+    ベンダーが上場廃止・再上場を跨いだ系列を返すと、価格が負値や桁違いの値に
+    なることがある(8303 は 691 行中 245 行が負値)。sanity_check と同じく
+    判定だけを行い、除去や補正はしない(§12.1)。
+    """
+    if df is None or len(df) == 0:
+        return False
+    cols = [c for c in OHLC_COLUMNS if c in df.columns]
+    if not cols:
+        return False
+    return bool((df[cols].astype(float) <= 0).any().any())
+
+
 # --------------------------------------------------------------------------- #
 # I/O
 # --------------------------------------------------------------------------- #
@@ -218,12 +282,16 @@ def update_symbol(
     symbol: str,
     period: str = DEFAULT_PERIOD,
     full: bool = False,
+    today: date | None = None,
 ) -> str:
     """1銘柄を最新化し ``"created" | "updated" | "unchanged" | "failed"`` を返す。
 
     created / updated の区別は **ファイルが既にあったか**で決める。``full=True`` は
     既存を読まずに取り直すので ``old`` では判別できず、破損ファイルの取り直しも
     「新規作成」ではない。
+
+    ``today`` は backfill 判定の基準日(既定は実行日)。テストが述語を差し替えずに
+    経路そのものを踏めるように注入点を開けてある。
     """
     if not is_valid_symbol(symbol):
         return "failed"
@@ -236,6 +304,21 @@ def update_symbol(
             return "failed"
         write_ohlcv(symbol, fetched)
         return "updated" if existed else "created"
+
+    # 履歴が period に届いていなければ差分ではなく全期間を取り直す。
+    # 差分の recent(REFRESH_PERIOD)には古い日付が無いため、この判定を
+    # 飛ばすと切り詰められたファイルが "unchanged" のまま固定される。
+    if needs_backfill(old, period, today or date.today()):
+        fetched = fetch_ohlcv(symbol, period)
+        if fetched is None:
+            return "failed"
+        # 新規上場銘柄は取り直しても同じ内容になる。merge ではなく置換なのは、
+        # 分割の遡及調整が入った場合に old と new のスケールを混ぜないため
+        # (needs_full_refetch の経路と同じ判断)。
+        if fetched.equals(old):
+            return "unchanged"
+        write_ohlcv(symbol, fetched)
+        return "updated"
 
     recent = fetch_ohlcv(symbol, REFRESH_PERIOD)
     if recent is None:

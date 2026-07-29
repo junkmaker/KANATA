@@ -98,57 +98,106 @@ def _stats(series: pd.Series) -> tuple[int, float | None, float | None]:
 # --------------------------------------------------------------------------- #
 # ランダムエントリー(§4.2 の比較対象)
 # --------------------------------------------------------------------------- #
-def resolve_universe_codes(
-    universe_path: str | None,
-    fallback_codes: list[str],
-) -> tuple[list[str], str | None]:
-    """ランダムエントリーの母集団を決め、``(codes, 警告文 or None)`` を返す。
+def partition_by_quality(codes: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """ユニバースを ``(使える, OHLCV 未取得, 品質不良)`` に分ける。
 
-    母集団は**ユニバース全体**でなければならない。シグナルが出た銘柄だけから
-    引くと「N字が出るような銘柄」で条件付けた比較になり、帰無分布が N字側に
-    寄って有意判定が甘くなる。
-
-    OHLCV ストアに実体のある銘柄だけに絞る(未取得の銘柄はサンプルとして
-    引かれても捨てられ、実効サンプル数だけが減るため)。ユニバース CSV を
-    読めない場合はシグナル銘柄にフォールバックするが、その旨をレポート本文に
-    残す — 黙って偏った数字を出さない。
+    品質不良の条件は「非正の価格を含む」または「sanity_check が発火する」。
+    上場廃止・再上場を跨いだ系列(8303)はベンダーが負値や桁違いの Close を返し、
+    **1 サンプル引かれただけでランダム母集団の平均が桁ごと壊れる**(実測で
+    ランダム平均 fwd20 が 287754% になった)。ストアの値は消さず、ここで
+    母集団から外すだけにする(§12.1「判定のみで除去しない」)。
     """
-    if universe_path:
+    usable: list[str] = []
+    missing: list[str] = []
+    bad: list[str] = []
+    for code in codes:
+        df = ohlcv_store.read_ohlcv(code)
+        if df is None or df.empty:
+            missing.append(code)
+        elif ohlcv_store.has_non_positive_prices(df) or ohlcv_store.sanity_check(df):
+            bad.append(code)
+        else:
+            usable.append(code)
+    return (usable, missing, bad)
+
+
+def resolve_populations(
+    universe_path: str | None,
+    signal_codes: list[str],
+) -> tuple[list[str], set[str], list[str]]:
+    """``(ランダム母集団, 除外する品質不良銘柄, 注記のリスト)`` を返す。
+
+    ランダム側の母集団は**ユニバース全体**でなければならない。シグナルが出た
+    銘柄だけから引くと「N字が出るような銘柄」で条件付けた比較になり、帰無分布が
+    N字側に寄って有意判定が甘くなる。
+
+    品質判定はランダム候補と**シグナル銘柄の両方**に掛ける。片側だけ落とすと、
+    差を取る2つの平均が別の母集団の上で計算されてしまう。返した除外集合は
+    呼び出し側が N字側の集計からも必ず外すこと。
+
+    ユニバース CSV を読めない場合はシグナル銘柄にフォールバックするが、
+    **その経路でも品質フィルタは通す**。``backend/data/*`` は git 管理外なので
+    クリーンな clone では既定の CSV が無く、このフォールバックは普通に踏まれる —
+    ここを素通しにすると品質不良銘柄が母集団に戻り、除外した意味が消える。
+    フォールバックした旨はレポート本文に残す(黙って偏った数字を出さない)。
+    """
+    universe_codes: list[str] = []
+    fallback_reason: str | None = None
+    if not universe_path:
+        fallback_reason = "`--universe` 未指定"
+    else:
         try:
             rows = load_universe(universe_path, min_market_cap=0)
+            universe_codes = sorted({str(r["code"]) for r in rows})
         except (FileNotFoundError, ValueError) as exc:
-            return (
-                fallback_codes,
-                f"ランダムエントリーの母集団に**シグナルが出た銘柄しか使えていない**"
-                f"(ユニバース `{universe_path}` を読めなかった: {exc})。"
-                " 帰無分布が N字側に寄るため、有意判定は甘い方向に偏る。"
-                " `--universe` に実在する CSV を指定して取り直すこと。",
-            )
-        codes = sorted({str(r["code"]) for r in rows})
-        available = [c for c in codes if ohlcv_store.read_ohlcv(c) is not None]
-        if available:
-            if len(available) == len(codes):
-                return (available, None)
-            # 一部しか取得できていない場合も黙って進めない。母集団が痩せるほど
-            # 「シグナルが出た銘柄だけ」に近づき、帰無分布が N字側に寄る。
-            return (
-                available,
-                f"ランダムエントリーの母集団はユニバース {len(codes)} 銘柄のうち"
-                f" **OHLCV がある {len(available)} 銘柄のみ**。"
-                " 母集団が痩せるほど帰無分布が N字側に寄り、有意判定は甘い方向に偏る。"
-                " `scripts/backtest.py fetch` をユニバース全体に対して実行すること。",
-            )
-        return (
-            fallback_codes,
-            f"ランダムエントリーの母集団に**シグナルが出た銘柄しか使えていない**"
-            f"(ユニバース `{universe_path}` の {len(codes)} 銘柄はどれも OHLCV 未取得)。"
-            " `scripts/backtest.py fetch` を先に実行すること。",
-        )
-    return (
-        fallback_codes,
-        "ランダムエントリーの母集団に**シグナルが出た銘柄しか使えていない**"
-        "(`--universe` 未指定)。帰無分布が N字側に寄るため、有意判定は甘い方向に偏る。",
+            fallback_reason = f"ユニバース `{universe_path}` を読めなかった: {exc}"
+
+    # 判定は和集合に対して1回だけ(同じ Parquet を2度読まない)
+    usable, _missing, bad = partition_by_quality(
+        sorted(set(universe_codes) | set(signal_codes))
     )
+    usable_set, bad_set = set(usable), set(bad)
+
+    notes: list[str] = []
+    population = [c for c in universe_codes if c in usable_set]
+    if not population and fallback_reason is None:
+        n_bad = sum(1 for c in universe_codes if c in bad_set)
+        fallback_reason = (
+            f"ユニバース `{universe_path}` に銘柄が無い"
+            if not universe_codes
+            else f"ユニバース `{universe_path}` の {len(universe_codes)} 銘柄が"
+            f"すべて使えない(OHLCV 未取得 {len(universe_codes) - n_bad} /"
+            f" 品質不良 {n_bad})"
+        )
+
+    if fallback_reason is not None:
+        population = [c for c in signal_codes if c in usable_set]
+        notes.append(
+            f"ランダムエントリーの母集団に**シグナルが出た銘柄しか使えていない**"
+            f"({fallback_reason})。帰無分布が N字側に寄るため、有意判定は甘い方向に偏る。"
+            " `--universe` に実在する CSV を指定して取り直すこと。"
+        )
+    elif len(population) < len(universe_codes):
+        # 一部しか使えない場合も黙って進めない。母集団が痩せるほど
+        # 「シグナルが出た銘柄だけ」に近づき、帰無分布が N字側に寄る。
+        n_bad = sum(1 for c in universe_codes if c in bad_set)
+        n_missing = len(universe_codes) - len(population) - n_bad
+        notes.append(
+            f"ランダムエントリーの母集団はユニバース {len(universe_codes)} 銘柄のうち"
+            f" **{len(population)} 銘柄のみ**(OHLCV 未取得 {n_missing} / 品質不良 {n_bad})。"
+            " 母集団が痩せるほど帰無分布が N字側に寄り、有意判定は甘い方向に偏る。"
+            " `scripts/backtest.py fetch` をユニバース全体に対して実行すること。"
+        )
+    if bad:
+        notes.append(
+            f"品質不良のため **{len(bad)} 銘柄を集計から除外**した({', '.join(bad)})。"
+            " N字側・ランダム側の**両方**から外している"
+            "(片側だけ外すと、差を取る2つの平均が別の母集団の上で計算される)。"
+            f" 除外条件は「非正の価格を含む」または"
+            f"「日次変化率の絶対値が {ohlcv_store.SANITY_MAX_DAILY_RETURN:.0%} を超える日がある」。"
+            " ストアのデータは残してあるので、除外の当否は人間が確認できる(§12.1)。"
+        )
+    return (population, bad_set, notes)
 
 
 def random_entry_returns(
@@ -165,7 +214,7 @@ def random_entry_returns(
     entry ルールは N字側と同一にする(同じ weekly / next_open 解決を通す)ことで
     比較の土俵を揃える。**シグナルが出た日だけから引く**のが要点で、全営業日から
     引くと地合いの補正が効かなくなる。一方 universe_codes は逆に**ユニバース全体**
-    を渡すこと(resolve_universe_codes 参照)。日付は揃え、銘柄は揃えない。
+    を渡すこと(resolve_populations 参照)。日付は揃え、銘柄は揃えない。
 
     Returns: ``{シグナル日: [リターン, ...]}``(日付単位ブートストラップに渡せる形)
     """
@@ -206,6 +255,11 @@ def random_entry_returns(
             entry_px = opens[entry_idx]
             if j >= len(closes) or entry_px <= 0:
                 continue  # 打ち切りは 0 で埋めずに落とす(N字側と同じ扱い)
+            if not backtest.within_calendar_span(d[entry_idx], d[j], horizon):
+                # index が疎な銘柄では horizon バー先が数年先になる。
+                # N字側は compute_outcomes が同じ判定をしている(母集団を揃えるため、
+                # 片側だけに掛けない)。シグナル日→エントリー日は resolve_entries が見る。
+                continue
             picks.append(closes[j] / entry_px - 1.0)
         if picks:
             out[day] = picks
@@ -224,7 +278,7 @@ def _section_summary(df: pd.DataFrame, raw: pd.DataFrame, entry: str) -> str:
         "",
         f"- 期間: {dates.min()} 〜 {dates.max()}" if len(dates) else "- 期間: n/a",
         f"- 銘柄数: {df['symbol'].nunique()}",
-        f"- シグナル総数(生): {len(raw)}",
+        f"- ユニーク (symbol, break_date): {len(raw)}",
         f"- 独立イベント数(overlaps_prev 除外後): {int((~raw['overlaps_prev']).sum())}",
         f"- 集計対象: {len(df)} 件(entry={entry})",
         f"- 打ち切りで fwd60 が取れない: {truncated} 件",
@@ -271,12 +325,18 @@ def _section_bands(df: pd.DataFrame, entry: str) -> str:
 
 
 def _section_bootstrap(df: pd.DataFrame, entry: str, args: argparse.Namespace,
-                       universe_codes: list[str], universe_note: str | None) -> str:
+                       universe_codes: list[str], notes: list[str]) -> str:
     """ブロックブートストラップ(§4.2/4.3)。"""
     col = f"{entry}_fwd{PRIMARY_HORIZON}"
     usable = df[["detected_date", col]].dropna()
     if usable.empty:
         return "## 3. ブロックブートストラップ\n\nfwd20 が取れたシグナルが無いため算出しない。"
+    if not universe_codes:
+        return (
+            "## 3. ブロックブートストラップ\n\n"
+            "ランダムエントリーの母集団が空のため算出しない"
+            "(比較対象のない数字は出さない §4)。"
+        )
 
     by_date: dict[str, list[float]] = {}
     for day, value in zip(usable["detected_date"], usable[col]):
@@ -334,7 +394,7 @@ def _section_bootstrap(df: pd.DataFrame, entry: str, args: argparse.Namespace,
         " 判定は上下2行の CI の重なりではなく**差の CI** で行う"
         "(2つの CI が重なっていても差が有意なことはある。逆もある)。"
     )
-    note = f"\n\n> 注意: {universe_note}" if universe_note else ""
+    note = "".join(f"\n\n> 注意: {t}" for t in notes)
     return "## 3. ブロックブートストラップ\n\n" + _table(headers, rows) + \
         f"\n\n{verdict}\n\n{caution}{note}"
 
@@ -379,7 +439,7 @@ def _section_lag(df: pd.DataFrame) -> str:
 
 
 def _section_caveats(entry: str, include_overlaps: bool,
-                     universe_note: str | None = None) -> str:
+                     notes: list[str] | None = None) -> str:
     items = [
         "ユニバースは**現在時点の構成**を過去に遡って適用しており、緩やかな先読みが残る(§3.3)。"
         " 上場廃止・指数除外銘柄が抜けているため、生存バイアスでリターンは上振れ・分散は過小評価される。",
@@ -395,8 +455,8 @@ def _section_caveats(entry: str, include_overlaps: bool,
         )
     else:
         items.append("保有期間が重なるシグナル(`overlaps_prev`)は除外済み(§5.2)。")
-    if universe_note:
-        items.append(universe_note)
+    if notes:
+        items.extend(notes)
     return "## 6. 注記\n\n" + "\n".join(f"- {t}" for t in items)
 
 
@@ -404,7 +464,7 @@ def _section_caveats(entry: str, include_overlaps: bool,
 # CLI
 # --------------------------------------------------------------------------- #
 def build_report(df: pd.DataFrame, raw: pd.DataFrame, args: argparse.Namespace,
-                 universe_codes: list[str], universe_note: str | None = None) -> str:
+                 universe_codes: list[str], notes: list[str] | None = None) -> str:
     entry = args.entry
     parts = [
         "# N字シグナル バックテストレポート",
@@ -413,13 +473,13 @@ def build_report(df: pd.DataFrame, raw: pd.DataFrame, args: argparse.Namespace,
         "",
         _section_bands(df, entry),
         "",
-        _section_bootstrap(df, entry, args, universe_codes, universe_note),
+        _section_bootstrap(df, entry, args, universe_codes, notes or []),
         "",
         _section_factors(df, entry),
         "",
         _section_lag(df),
         "",
-        _section_caveats(entry, args.include_overlaps, universe_note),
+        _section_caveats(entry, args.include_overlaps, notes),
         "",
     ]
     return "\n".join(parts)
@@ -445,18 +505,24 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"エラー: {path} が無い。先に scripts/backtest.py outcomes を実行すること")
         return 1
     raw = pd.read_parquet(path)
+    signal_codes = sorted(raw["symbol"].astype(str).unique())
+    universe_codes, excluded, notes = resolve_populations(args.universe, signal_codes)
+    for note in notes:
+        _log(f"警告: {note}")
+    if excluded:
+        # N字側からも同じ銘柄を落とす。ランダム側だけ落とすと、差を取る2つの
+        # 平均が別の母集団の上で計算される(ペアードブートストラップの前提が壊れる)
+        before = len(raw)
+        raw = raw[~raw["symbol"].astype(str).isin(excluded)].copy()
+        _log(f"品質不良 {len(excluded)} 銘柄を除外: {before} → {len(raw)} 行")
+
     df = raw if args.include_overlaps else raw[~raw["overlaps_prev"]].copy()
     _log(f"outcomes={len(raw)} 集計対象={len(df)} entry={args.entry}")
     if df.empty:
         _log("集計対象が 0 件。--include-overlaps を試すこと")
         return 1
-
-    signal_codes = sorted(raw["symbol"].astype(str).unique())
-    universe_codes, universe_note = resolve_universe_codes(args.universe, signal_codes)
-    if universe_note:
-        _log(f"警告: {universe_note}")
     _log(f"ランダムエントリーの母集団: {len(universe_codes)} 銘柄")
-    report = build_report(df, raw, args, universe_codes, universe_note)
+    report = build_report(df, raw, args, universe_codes, notes)
 
     out_path = Path(args.out) if args.out else backtest_dir() / REPORT_FILENAME
     out_path.parent.mkdir(parents=True, exist_ok=True)

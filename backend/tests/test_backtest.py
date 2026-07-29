@@ -16,11 +16,13 @@ from src.analysis.backtest import (
     confidence_interval,
     iso_dates,
     mark_overlaps,
+    max_calendar_span_days,
     paired_block_bootstrap_diffs,
     percentile_of,
     resolve_entries,
     walk_forward_signals,
     weekly_entry_index,
+    within_calendar_span,
 )
 
 
@@ -254,18 +256,61 @@ def test_resolve_entries_returns_none_beyond_data():
     assert all(v is None for v in entries.values())
 
 
+def test_resolve_entries_rejects_entry_years_after_signal():
+    """index が疎な銘柄では「翌バー」が数年後になる。そのエントリーは採用しない。
+
+    バー位置だけで前を見ると、2 年後に買った結果が元のシグナル日に紐付いて残り、
+    日付を揃えたランダム比較(§4.2)の前提が壊れる。
+    """
+    dates = iso_dates(
+        list(pd.date_range("2023-09-01", periods=20, freq="B"))
+        + list(pd.date_range("2025-12-01", periods=20, freq="B"))
+    )
+
+    across_gap = resolve_entries(dates, 19)   # ギャップ直前のシグナル
+    inside = resolve_entries(dates, 5)        # 密な区間のシグナル(対照)
+
+    assert all(v is None for v in across_gap.values())
+    assert inside["next_open"] == 6
+
+
+# --------------------------------------------------------------------------- #
+# 暦日スパンのガード
+# --------------------------------------------------------------------------- #
+def test_max_calendar_span_covers_real_holiday_gaps():
+    """実測の最大スパン(20バー=35日 / 60バー=96日)を上限が上回る。"""
+    assert max_calendar_span_days(20) > 35
+    assert max_calendar_span_days(60) > 96
+
+
+def test_within_calendar_span_accepts_normal_holdings():
+    """年末年始を跨いだ通常の20営業日保有は通る。"""
+    assert within_calendar_span("2025-12-15", "2026-01-19", 20) is True
+
+
+def test_within_calendar_span_rejects_delisting_gap():
+    """上場廃止を跨いだ 2 年先のバーは弾く(8303 の実測 825 日)。"""
+    assert within_calendar_span("2023-09-19", "2025-12-22", 20) is False
+
+
+def test_within_calendar_span_rejects_reversed_dates():
+    """exit が entry より前なら False(逆順を通さない)。"""
+    assert within_calendar_span("2026-02-10", "2026-01-10", 20) is False
+
+
 # --------------------------------------------------------------------------- #
 # ③ アウトカム
 # --------------------------------------------------------------------------- #
 def test_compute_outcomes_fwd_and_mfe_mae():
     """手計算できる直線系列で fwd/mfe/mae/days_to_mfe が一致する。"""
     n = 100
+    dates = iso_dates(pd.date_range("2026-01-05", periods=n, freq="B"))
     closes = [100.0 + i for i in range(n)]          # 1 日 +1 円の直線
     opens = closes
     highs = [c + 1.0 for c in closes]
     lows = [c - 1.0 for c in closes]
 
-    out = compute_outcomes(highs, lows, closes, opens, entry_idx=10)
+    out = compute_outcomes(dates, highs, lows, closes, opens, entry_idx=10)
 
     entry_px = 110.0
     assert out["entry_px"] == entry_px
@@ -280,15 +325,37 @@ def test_compute_outcomes_fwd_and_mfe_mae():
 def test_compute_outcomes_returns_none_when_window_truncated():
     """保有期間が尽きていれば 0 ではなく None を返す(打ち切りバイアス回避)。"""
     n = 20
+    dates = iso_dates(pd.date_range("2026-01-05", periods=n, freq="B"))
     closes = [100.0 + i for i in range(n)]
 
-    out = compute_outcomes(closes, closes, closes, closes, entry_idx=10)
+    out = compute_outcomes(dates, closes, closes, closes, closes, entry_idx=10)
 
     assert out["fwd20"] is None
     assert out["fwd60"] is None
     assert out["mfe"] is None
     assert out["mae"] is None
     assert out["days_to_mfe"] is None
+
+
+def test_compute_outcomes_returns_none_when_bars_span_years():
+    """バー数が足りていても暦日が離れすぎていれば None(上場廃止ギャップ)。
+
+    ランダム側だけで落とすと N字側と母集団が食い違うため、判定は両側が通る
+    compute_outcomes に置いてある。
+    """
+    n = 100
+    dates = iso_dates(
+        list(pd.date_range("2023-09-01", periods=20, freq="B"))
+        + list(pd.date_range("2025-12-01", periods=n - 20, freq="B"))
+    )
+    closes = [100.0 + i for i in range(n)]
+
+    out = compute_outcomes(dates, closes, closes, closes, closes, entry_idx=10)
+
+    assert out["fwd20"] is None      # 2 年先のバーは「20 営業日のリターン」ではない
+    assert out["fwd60"] is None
+    assert out["mfe"] is None
+    assert out["entry_px"] == 110.0  # エントリー自体は成立している
 
 
 def test_benchmark_outcome_rounds_to_next_trading_day():

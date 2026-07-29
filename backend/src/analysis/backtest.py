@@ -36,6 +36,10 @@ DEFAULT_BOOTSTRAP_ITERS = 2000  # §4.3 ブロックブートストラップの�
 CI_LOWER_PCT = 2.5              # 信頼区間の下側パーセンタイル(既定 95% CI)
 CI_UPPER_PCT = 97.5             # 信頼区間の上側パーセンタイル
 
+CALENDAR_DAYS_PER_WEEK = 7
+TRADING_DAYS_PER_WEEK = 5
+CALENDAR_SLACK_DAYS = 21        # 年末年始・GW の余裕(実測最大は 20バー=35日 / 60バー=96日)
+
 
 # --------------------------------------------------------------------------- #
 # 日付ヘルパ
@@ -50,6 +54,33 @@ def _iso_week(iso_date: str) -> tuple[int, int]:
     d = date(int(iso_date[0:4]), int(iso_date[5:7]), int(iso_date[8:10]))
     cal = d.isocalendar()
     return (cal[0], cal[1])
+
+
+def max_calendar_span_days(horizon_bars: int) -> int:
+    """horizon_bars 本先までに許容する暦日数の上限。
+
+    営業日から暦日への素朴な換算に連休分の余裕を足す。上場廃止・再上場を跨いだ
+    系列では index が疎になり、20 バー先が 2 年先の日付になることがある
+    (8303 で実測 825 日)。バー数だけで前方を見ると、その 2 年分の値動きを
+    「20 営業日のリターン」として混ぜてしまう。
+    """
+    return round(horizon_bars * CALENDAR_DAYS_PER_WEEK / TRADING_DAYS_PER_WEEK) \
+        + CALENDAR_SLACK_DAYS
+
+
+def within_calendar_span(
+    entry_date: str,
+    exit_date: str,
+    horizon_bars: int,
+) -> bool:
+    """entry→exit の暦日スパンが horizon_bars の上限内なら True。
+
+    日付は ISO 文字列(``iso_dates`` の出力形式)。逆順(exit < entry)は False。
+    """
+    start = date(int(entry_date[0:4]), int(entry_date[5:7]), int(entry_date[8:10]))
+    end = date(int(exit_date[0:4]), int(exit_date[5:7]), int(exit_date[8:10]))
+    delta = (end - start).days
+    return 0 <= delta <= max_calendar_span_days(horizon_bars)
 
 
 # --------------------------------------------------------------------------- #
@@ -191,23 +222,36 @@ def resolve_entries(
     signal_idx: int,
     lags: tuple[int, ...] = ENTRY_LAGS,
 ) -> dict[str, int | None]:
-    """entry 種別名 → バー位置(範囲外は None)。
+    """entry 種別名 → バー位置(範囲外・暦日が離れすぎは None)。
 
     lag_k は next_open から追加で k 本後ろ(= signal_idx + 1 + k)。
     signal_idx には **detected_date のバー位置**を渡す(break_date ではない)。
     実運用では検出前に買えないため。
+
+    シグナル日→エントリー日の暦日スパンも ``within_calendar_span`` で見る。
+    index が疎な銘柄では「翌バー」が数年後になり得る。バー位置だけで前を見ると
+    そのエントリーが元のシグナル日に紐付いたまま残り、**日付を揃えた比較**
+    (§4.2 のランダムエントリー)の前提が崩れる。
     """
     n = len(dates)
-    entries: dict[str, int | None] = {
+    raw: dict[str, int | None] = {
         "next_open": next_bar_index(n, signal_idx, 1),
         "weekly": weekly_entry_index(dates, signal_idx),
     }
     for k in lags:
-        entries[f"lag_{k}"] = next_bar_index(n, signal_idx, 1 + k)
+        raw[f"lag_{k}"] = next_bar_index(n, signal_idx, 1 + k)
+
+    entries: dict[str, int | None] = {}
+    for kind, idx in raw.items():
+        near = idx is not None and within_calendar_span(
+            dates[signal_idx], dates[idx], idx - signal_idx
+        )
+        entries[kind] = idx if near else None
     return entries
 
 
 def compute_outcomes(
+    dates: list[str],
     highs: list[float],
     lows: list[float],
     closes: list[float],
@@ -227,6 +271,12 @@ def compute_outcomes(
     **None を 0 で埋めない** — 未成熟イベントを 0% として混ぜるとリターンが薄まる。
     mfe/mae は ``[entry_idx, entry_idx + mfe_window]`` の High/Low から算出し、
     窓が尽きている場合は「取れた範囲」ではなく None を返す(打ち切りバイアス回避)。
+
+    バー数が足りていても暦日スパンが ``within_calendar_span`` の上限を超えるものは
+    打ち切りと同じく None にする。上場廃止・再上場を跨いだ系列では 20 バー先が
+    2 年先になり(8303 で実測 825 日)、それを「20 営業日のリターン」として
+    混ぜると平均が桁ごと壊れる。**ランダム側だけで落とすと N字側との母集団が
+    食い違う**ので、判定はここ(両側が通る唯一の場所)に置く。
     """
     empty: dict = {"entry_px": None, "mfe": None, "mae": None, "days_to_mfe": None}
     for h in horizons:
@@ -238,14 +288,16 @@ def compute_outcomes(
     entry_px = float(opens[entry_idx])
     if entry_px <= 0:
         return empty
+    entry_date = dates[entry_idx]
 
     out: dict = {"entry_px": entry_px}
     for h in horizons:
         j = entry_idx + h
-        out[f"fwd{h}"] = (float(closes[j]) / entry_px - 1.0) if j < n else None
+        mature = j < n and within_calendar_span(entry_date, dates[j], h)
+        out[f"fwd{h}"] = (float(closes[j]) / entry_px - 1.0) if mature else None
 
     last = entry_idx + mfe_window
-    if last >= n:
+    if last >= n or not within_calendar_span(entry_date, dates[last], mfe_window):
         out["mfe"] = None
         out["mae"] = None
         out["days_to_mfe"] = None
