@@ -5,6 +5,8 @@ yfinance には一切出ない(``fetch_ohlcv`` を monkeypatch で遮断する)�
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import pandas as pd
 import pytest
 
@@ -132,6 +134,57 @@ def test_sanity_check_clean_series_empty():
 
 
 # --------------------------------------------------------------------------- #
+# period スパン判定 / 非正価格判定
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "period,expected",
+    [("5y", 1825), ("1y", 365), ("6mo", 180), ("5d", 5), ("2wk", 14),
+     ("max", None), ("ytd", None), ("", None)],
+)
+def test_period_to_days(period, expected):
+    """yfinance の period 文字列を暦日数に換算する。起点が動的なものは None。"""
+    assert ohlcv_store.period_to_days(period) == expected
+
+
+def test_needs_backfill_true_when_history_truncated():
+    """1年分しか保存されていないファイルは period=5y に対して backfill が要る。
+
+    これが 243 行問題の再現。needs_full_refetch は重なり区間の価格しか見ないため
+    この状態を検知できず、差分更新では永久に復旧しない。
+    """
+    idx = pd.date_range("2025-07-28", periods=243, freq="B")
+    old = ohlcv_store.normalize_ohlcv(_frame([100.0] * 243, idx))
+
+    assert ohlcv_store.needs_backfill(old, "5y", date(2026, 7, 28)) is True
+
+
+def test_needs_backfill_false_for_full_history():
+    """5年分そろっていれば発火しない(健全な銘柄を毎回取り直させない)。"""
+    idx = pd.date_range("2021-07-28", periods=1223, freq="B")
+    old = ohlcv_store.normalize_ohlcv(_frame([100.0] * 1223, idx))
+
+    assert ohlcv_store.needs_backfill(old, "5y", date(2026, 7, 28)) is False
+
+
+def test_needs_backfill_false_for_unknown_period():
+    """"max" のように起点が動的な period では判定しない。"""
+    idx = pd.date_range("2025-07-28", periods=243, freq="B")
+    old = ohlcv_store.normalize_ohlcv(_frame([100.0] * 243, idx))
+
+    assert ohlcv_store.needs_backfill(old, "max", date(2026, 7, 28)) is False
+
+
+def test_has_non_positive_prices():
+    """負値・ゼロを含む系列を検知し、健全な系列では False。"""
+    idx = pd.date_range("2026-01-05", periods=3, freq="B")
+    clean = ohlcv_store.normalize_ohlcv(_frame([100.0, 101.0, 102.0], idx))
+    dirty = ohlcv_store.normalize_ohlcv(_frame([100.0, -2.3e8, 102.0], idx))
+
+    assert ohlcv_store.has_non_positive_prices(clean) is False
+    assert ohlcv_store.has_non_positive_prices(dirty) is True
+
+
+# --------------------------------------------------------------------------- #
 # I/O
 # --------------------------------------------------------------------------- #
 def test_write_read_roundtrip(ohlcv_env):
@@ -241,3 +294,66 @@ def test_sync_symbols_collects_failures(ohlcv_env, monkeypatch):
 
     assert summary["created"] == 2
     assert summary["failed"] == ["9999"]
+
+
+def test_update_symbol_backfills_truncated_history(ohlcv_env, monkeypatch):
+    """1年分に切り詰められたファイルは period=5y の取得で全期間に復旧する。
+
+    差分更新(REFRESH_PERIOD)だけでは古い日付が返らず、merge の結果が old と
+    一致して "unchanged" に固定される — その回帰を防ぐ。
+
+    needs_backfill は差し替えず ``today`` を注入する。述語をスタブすると
+    「述語 → update_symbol」の配線そのものが検証されない。
+    """
+    long_idx = pd.date_range("2021-07-28", periods=300, freq="B")
+    full = ohlcv_store.normalize_ohlcv(_frame([100.0] * 300, long_idx))
+    short = full.iloc[-60:]
+    ohlcv_store.write_ohlcv("7203", short)
+
+    def fake_fetch(symbol: str, period: str):
+        return full if period == "5y" else short
+
+    monkeypatch.setattr(ohlcv_store, "fetch_ohlcv", fake_fetch)
+    today = long_idx.max().date()
+
+    assert ohlcv_store.update_symbol("7203", period="5y", today=today) == "updated"
+    assert len(ohlcv_store.read_ohlcv("7203")) == 300
+
+
+def test_update_symbol_takes_incremental_path_when_history_is_full(ohlcv_env, monkeypatch):
+    """period を満たしている銘柄は backfill に入らず差分(REFRESH_PERIOD)で更新する。
+
+    無条件に全期間を取り直すと毎回フルフェッチになり、差分更新の意味が消える。
+    """
+    idx = pd.date_range("2021-07-28", periods=1200, freq="B")
+    full = ohlcv_store.normalize_ohlcv(_frame([100.0] * 1200, idx))
+    ohlcv_store.write_ohlcv("7203", full)
+    asked: list[str] = []
+
+    def fake_fetch(symbol: str, period: str):
+        asked.append(period)
+        return full.iloc[-60:]
+
+    monkeypatch.setattr(ohlcv_store, "fetch_ohlcv", fake_fetch)
+    # 起点がちょうど 5 年前 = period を満たしている状態
+    today = idx.min().date() + timedelta(days=ohlcv_store.period_to_days("5y"))
+
+    result = ohlcv_store.update_symbol("7203", period="5y", today=today)
+
+    assert result == "unchanged"
+    assert asked == [ohlcv_store.REFRESH_PERIOD]  # 5y を取り直していない
+
+
+def test_update_symbol_unchanged_when_backfill_returns_same_data(ohlcv_env, monkeypatch):
+    """新規上場銘柄は period に届かなくても、取り直した結果が同じなら unchanged。
+
+    無条件に書き込むと毎回 updated を返し続け、件数が意味を持たなくなる。
+    """
+    idx = pd.date_range("2025-10-16", periods=189, freq="B")
+    listed = ohlcv_store.normalize_ohlcv(_frame([100.0] * 189, idx))
+    ohlcv_store.write_ohlcv("429A", listed)
+    monkeypatch.setattr(ohlcv_store, "fetch_ohlcv", lambda symbol, period: listed)
+
+    result = ohlcv_store.update_symbol("429A", period="5y", today=idx.max().date())
+
+    assert result == "unchanged"
