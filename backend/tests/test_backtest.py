@@ -392,6 +392,24 @@ def test_contaminated_entry_dates_only_window_edges():
     assert hit == {dates[20], dates[40]}
 
 
+def test_contaminated_entry_dates_skips_missing_entry_dates():
+    """解決できなかった entry(欠損)を渡されても落ちない。
+
+    末尾付近のシグナルは lag_5 / weekly の営業日が存在せず日付が欠損する
+    (実測で weekly 337 / lag_5 410 件)。pandas 2.x の astype(str) は欠損を
+    "None" にするが 3.x は欠損のまま保持するため、float の NaN が
+    bisect_left に届いて TypeError になっていた。
+    """
+    dates = iso_dates(pd.date_range("2026-01-05", periods=60, freq="B"))
+    bad = dates[40]
+
+    hit = contaminated_entry_dates(
+        dates, [bad], 20, [dates[20], float("nan"), None, dates[40]]
+    )
+
+    assert hit == {dates[20], dates[40]}
+
+
 def test_contaminated_entry_dates_follows_benchmark_rounding():
     """ベンチに無い entry 日も、丸めた先が不正バーなら汚染とみなす。
 

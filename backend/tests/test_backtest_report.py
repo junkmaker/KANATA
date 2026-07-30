@@ -201,6 +201,24 @@ def test_score_bands_falls_back_to_value_quantiles(report):
     assert bands[0][0] == 40 and bands[-1][1] == 70
 
 
+def test_mask_contaminated_benchmark_tolerates_unresolved_entry_dates(report):
+    """entry 日が欠損した行があってもマスクは動く(pandas 3.x での TypeError 回帰)。"""
+    bench = [d.date().isoformat() for d in pd.date_range("2026-01-05", periods=60, freq="B")]
+    bad_day = bench[40]
+    df = pd.DataFrame({
+        "weekly_date": [bench[20], None, bad_day],   # 2 行目は entry を解決できなかった行
+        "weekly_fwd20": [0.01, 0.02, 0.03],
+        "weekly_topix_fwd20": [9.7, 0.01, 9.7],
+    })
+
+    out, masked = report.mask_contaminated_benchmark(
+        df, bench, [bad_day], horizons=(20,)
+    )
+
+    assert masked == 2
+    assert out["weekly_topix_fwd20"].isna().tolist() == [True, False, True]
+
+
 def test_mask_contaminated_benchmark_nulls_only_bench_columns(report):
     """汚染した超過リターンだけ欠損にし、生リターンと行は残す。
 
