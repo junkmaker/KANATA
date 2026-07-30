@@ -35,6 +35,8 @@ OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 OHLC_COLUMNS = ["Open", "High", "Low", "Close"]
 ADJUST_TOLERANCE = 0.005         # 重なり区間の Close 乖離がこれを超えたら全期間再取得(分割の遡及調整)
 SANITY_MAX_DAILY_RETURN = 0.30   # 日次リターンの絶対値がこれを超えたらベンダー由来のスケール異常を疑う
+SPIKE_WINDOW_HALF_BARS = 5       # 異常バー判定に使うローリング中央値の窓半径(macro_provider._despike と同じ)
+SPIKE_RATIO_FACTOR = 3.0         # 局所中央値からこの倍率以上離れたバーを異常とみなす
 BACKFILL_TOLERANCE_DAYS = 30     # 保存済み履歴の起点がこれ以上新しければ period 未達とみなす
 PERIOD_UNIT_DAYS = {"d": 1, "wk": 7, "mo": 30, "y": 365}   # yfinance の period 接尾辞 → 暦日数
 
@@ -163,6 +165,51 @@ def sanity_check(
     ret = close.pct_change()
     flagged = ret[ret.abs() > max_daily_return]
     return [ts.date().isoformat() for ts in flagged.index]
+
+
+def anomalous_bars(
+    df: pd.DataFrame,
+    half_window: int = SPIKE_WINDOW_HALF_BARS,
+    ratio_factor: float = SPIKE_RATIO_FACTOR,
+) -> list[str]:
+    """**バー単位**でスケール異常を判定し、該当日を ISO 日付のリストで返す。
+
+    ``sanity_check`` との違いが要点。あちらは日次「リターン」を見るので、
+    連続する異常バーの**境界**しか発火しない。1306 実測(2 本続けて 1/10)では
+    落ちた日と**戻った翌日**が挙がり、間に挟まれた本当に壊れているバーは挙がらず、
+    無傷の日が代わりに挙がる。「どの銘柄が怪しいか」を知るには十分でも、
+    「どのバーを使ってはいけないか」の答えにはならない。
+
+    ここでは ``macro_provider._despike`` と同じくローリング中央値との比率で
+    バーそのものを判定する。異常が何本続いても(窓の過半を占めない限り)
+    全本が挙がり、無傷のバーは挙がらない。
+
+    **Open も見る**。ベンチマークのエントリー価格は Open なので(``benchmark_outcome``)、
+    Close だけ健全な壊れた Open は Close 基準では素通りする。
+
+    非正値は比率を取れないため無条件に異常とみなす(``has_non_positive_prices``
+    は銘柄単位の真偽しか返さないので、日付が要る用途にはここを使う)。
+
+    窓を満たせない短い系列は判定せず空を返す。判定のみで除去・補正はしない(§12.1)。
+    """
+    if df is None or len(df) < 2 * half_window + 1:
+        return []
+    cols = [c for c in ("Open", "Close") if c in df.columns]
+    if not cols:
+        return []
+
+    flagged: set[int] = set()
+    window = 2 * half_window + 1
+    for col in cols:
+        values = df[col].astype(float)
+        median = values.rolling(window, center=True, min_periods=1).median()
+        # 比率は大小どちらの向きでも見たいので、常に 1 以上になる形に揃える
+        ratio = pd.concat(
+            [values / median, median / values], axis=1
+        ).max(axis=1)
+        bad = (values <= 0) | (median <= 0) | (ratio >= ratio_factor)
+        flagged.update(int(i) for i in range(len(df)) if bool(bad.iloc[i]))
+    return [df.index[i].date().isoformat() for i in sorted(flagged)]
 
 
 def period_to_days(period: str) -> int | None:

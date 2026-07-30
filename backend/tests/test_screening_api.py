@@ -129,7 +129,11 @@ def test_scan_sorts_desc_and_applies_filters(client, screening_env, monkeypatch)
     all_results = client.get("/api/screening/n-pattern?min_score=0").json()
     assert [r["ticker"] for r in all_results["results"]] == ["7203", "6758"]
 
-    filtered = client.get("/api/screening/n-pattern?min_score=80").json()
+    # しきい値はスコア構成の変更(例: TREND_BONUS を 0 にすると満点が 75 になる)で
+    # ずれるため、固定値ではなく実際のスコアから導く。
+    high, low = (r["score"] for r in all_results["results"])
+    assert high > low, "出来高急増側が高スコアでないとこのフィルタ検証は成立しない"
+    filtered = client.get(f"/api/screening/n-pattern?min_score={high}").json()
     assert [r["ticker"] for r in filtered["results"]] == ["7203"]
 
 

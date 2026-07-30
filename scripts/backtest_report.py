@@ -31,7 +31,7 @@ OUTCOMES_FILENAME = "outcomes.parquet"
 REPORT_FILENAME = "report.md"
 DEFAULT_UNIVERSE = str(REPO_ROOT / "backend" / "data" / "topix_universe.csv")
 
-SCORE_BANDS = ((0, 50), (50, 70), (70, 85), (85, 100))   # §7.2 左閉右開(最上位のみ右も閉)
+SCORE_BAND_COUNT = 4            # §7.2 スコア帯の本数(境界は固定値ではなく分位で決める)
 PRIMARY_ENTRY = "weekly"        # §6.1 主指標(期待値の見積もり)
 TEST_ENTRY = "next_open"        # §6.1 検定用(シグナルに情報があるか)
 ENTRY_ORDER = ("next_open", "lag_1", "lag_3", "lag_5", "weekly")
@@ -119,6 +119,62 @@ def partition_by_quality(codes: list[str]) -> tuple[list[str], list[str], list[s
         else:
             usable.append(code)
     return (usable, missing, bad)
+
+
+def benchmark_bad_dates() -> tuple[list[str], list[str]]:
+    """ベンチマーク系列の ``(全営業日, 品質不良日)`` を返す(§4.1)。
+
+    ``partition_by_quality`` はユニバース銘柄しか見ておらず、**ベンチマークは
+    素通りしていた**。銘柄側の不良は母集団から外せば済むが、ベンチは全シグナルの
+    超過リターンに入るので単一障害点になる。
+
+    判定は ``sanity_check``(日次リターン)ではなく ``anomalous_bars``(バー単位)。
+    銘柄側は「怪しい銘柄を母集団から外す」ので境界だけ分かれば足りるが、ここは
+    「どのバーを使ってはいけないか」を日付単位で当てる必要がある。リターン基準では
+    2 本以上続く異常の内側が漏れ、代わりに復帰した無傷のバーが挙がる。
+    ベンチのエントリー価格が Open である点も ``anomalous_bars`` 側で見ている。
+    """
+    df = ohlcv_store.read_ohlcv(ohlcv_store.BENCHMARK_SYMBOL)
+    if df is None or df.empty:
+        return ([], [])
+    dates = [ts.date().isoformat() for ts in df.index]
+    return (dates, ohlcv_store.anomalous_bars(df))
+
+
+def mask_contaminated_benchmark(
+    df: pd.DataFrame,
+    bench_dates: list[str],
+    bad_dates: list[str],
+    horizons: tuple[int, ...] = backtest.FWD_HORIZONS,
+) -> tuple[pd.DataFrame, int]:
+    """不正バーを踏んだ ``*_topix_fwd*`` を欠損にする。行は落とさない。
+
+    行ごと落とすと、ベンチと無関係な生リターン(§3 のブートストラップが使う)まで
+    巻き添えで減る。打ち切りと同じ扱い——**欠損にして列ごとに除外する**。
+
+    horizons の既定は ``backtest.FWD_HORIZONS``。ここを固定値で持つと、
+    ホライズンを増やしたときに新しい列だけ無警告でマスク対象から外れる
+    (列が無ければ ``continue`` するので、取りこぼしはエラーにならない)。
+    """
+    if not bad_dates or not bench_dates:
+        return (df, 0)
+    out = df.copy()
+    masked = 0
+    for horizon in horizons:
+        for entry in ENTRY_ORDER:
+            date_col, bench_col = f"{entry}_date", f"{entry}_topix_fwd{horizon}"
+            if date_col not in out.columns or bench_col not in out.columns:
+                continue
+            col_dates = out[date_col].astype(str).str.slice(0, 10)
+            # entry 日は銘柄ごとに営業日が違うため、ベンチ側の丸め
+            # (benchmark_entry_index)を通してから汚染判定する
+            hit = backtest.contaminated_entry_dates(
+                bench_dates, bad_dates, horizon, set(col_dates.unique())
+            )
+            sel = col_dates.isin(hit)
+            masked += int((sel & out[bench_col].notna()).sum())
+            out.loc[sel, bench_col] = pd.NA
+    return (out, masked)
 
 
 def resolve_populations(
@@ -294,6 +350,54 @@ def _band_mask(scores: pd.Series, lo: int, hi: int, is_last: bool) -> pd.Series:
     return (scores >= lo) & (scores <= hi if is_last else scores < hi)
 
 
+def _quantile_edges(values: pd.Series, n_bands: int) -> list[int]:
+    """等間隔の分位点を整数化し、重複を潰した昇順の境界列。"""
+    return sorted({int(round(v)) for v in values.quantile(
+        [i / n_bands for i in range(n_bands + 1)]
+    )})
+
+
+def _bands_from_edges(edges: list[int]) -> list[tuple[int, int]]:
+    """境界列 → ``[(lo, hi), ...]``。最後の帯だけ右も閉じる(``_band_mask``)。"""
+    return [(edges[i], edges[i + 1]) for i in range(len(edges) - 1)]
+
+
+def score_bands(scores: pd.Series, n_bands: int = SCORE_BAND_COUNT) -> list[tuple[int, int]]:
+    """スコアの分位で帯を切り、``[(lo, hi), ...]`` を返す。
+
+    固定カットオフ(0-50/50-70/70-85/85-100)を使わないのは、**満点がスコア構成に
+    依存するから**。TREND_BONUS を 0 にした時点で満点は 100 → 75 になり、
+    85-100 帯が n=0 の空行になった。加点要素を足し引きするたびに帯の意味が
+    変わるのでは、単調性の検証にならない。
+
+    分位なら各帯の n がほぼ揃うので、帯ごとの平均の**ばらつきも揃う** —
+    「上位帯だけ n が少なくて数字が暴れている」という読み違いを防げる。
+
+    ただしスコアは離散値で、しかも**特定の値に集中する**(加点要素の組み合わせが
+    数通りしかない)。素朴に件数の分位を取ると境界がすべて最頻値に落ちて重複し、
+    帯が 1 本に潰れて §2 が無情報な 1 行になる。そこで段階的に落とす:
+
+    1. 出現するスコアが n_bands 以下 → **1 値 1 帯**(分位を使う意味がない)
+    2. 件数の分位が潰れた → **出現値の分位**で切り直す(件数は揃わないが
+       値域は割れるので、単調性は読める)
+    3. それでも割れない → 全体を 1 帯(呼び出し側が注記を出す)
+    """
+    s = scores.dropna()
+    if s.empty:
+        return []
+    uniq = sorted({int(round(v)) for v in s})
+    if len(uniq) <= n_bands:
+        # 最上位の帯は (v, v) になり、_band_mask が右も閉じるので 1 値に一致する
+        return _bands_from_edges(uniq + [uniq[-1]])
+
+    edges = _quantile_edges(s, n_bands)
+    if len(edges) - 1 < n_bands:
+        edges = _quantile_edges(pd.Series(uniq), n_bands)
+    if len(edges) < 2:
+        return [(uniq[0], uniq[-1])]
+    return _bands_from_edges(edges)
+
+
 def _section_bands(df: pd.DataFrame, entry: str) -> str:
     """スコア帯別の単調性(§7.2 — 最初に見る)。"""
     headers = [
@@ -302,8 +406,9 @@ def _section_bands(df: pd.DataFrame, entry: str) -> str:
     ]
     rows: list[list[str]] = []
     excess = df[f"{entry}_fwd20"] - df[f"{entry}_topix_fwd20"]
-    for k, (lo, hi) in enumerate(SCORE_BANDS):
-        is_last = k == len(SCORE_BANDS) - 1
+    bands = score_bands(df["score"])
+    for k, (lo, hi) in enumerate(bands):
+        is_last = k == len(bands) - 1
         mask = _band_mask(df["score"], lo, hi, is_last)
         sub = df[mask]
         n20, m20, md20 = _stats(sub[f"{entry}_fwd20"])
@@ -320,7 +425,17 @@ def _section_bands(df: pd.DataFrame, entry: str) -> str:
     note = (
         "スコアが機能しているなら fwd20/fwd60/excess20 が band を上がるにつれ単調に増える。"
         "n は各列の欠損を落とした後の件数(fwd20 基準)。"
+        " 帯は**スコアの分位**で切っている(満点が加点要素の構成に依存するため固定値は使わない)。"
+        " **主指標は excess20** — fwd20 は相場全体の動きを含むので、帯ごとの発生時期が"
+        "偏っていると地合いの差をスコアの差と読み違える。"
     )
+    if len(bands) < SCORE_BAND_COUNT:
+        # 帯が減ったことを黙って出すと「単調に増えている」と読める 1 行になる
+        note += (
+            f"\n\n**注意: 帯が {len(bands)} 本しか作れていない**"
+            f"(要求 {SCORE_BAND_COUNT} 本)。スコアが少数の値に集中しており、"
+            "この表からは単調性を判定できない。"
+        )
     return "## 2. スコア帯別の単調性\n\n" + _table(headers, rows) + f"\n\n{note}"
 
 
@@ -400,22 +515,33 @@ def _section_bootstrap(df: pd.DataFrame, entry: str, args: argparse.Namespace,
 
 
 def _section_factors(df: pd.DataFrame, entry: str) -> str:
-    """要素別寄与(§7.3)。発火群 vs 非発火群の平均 fwd20 差。"""
+    """要素別寄与(§7.3)。発火群 vs 非発火群の**超過リターン**差。
+
+    生 fwd20 で比較してはいけない。要素の発火は相場局面と相関する(出来高急増も
+    MACD の GC も強い地合いで増える)ため、生リターンでは「その要素が効いた」のか
+    「その要素が出やすい時期の地合いが良かった」のかを分離できない。
+    実測では sd_volume が生 +0.16% → 超過 -0.03% と符号ごと変わった。
+    """
     col = f"{entry}_fwd{PRIMARY_HORIZON}"
-    headers = ["要素", "発火 n", "発火 平均", "非発火 n", "非発火 平均", "差"]
+    bench = f"{entry}_topix_fwd{PRIMARY_HORIZON}"
+    excess = df[col] - df[bench]
+    headers = ["要素", "発火 n", "発火 超過", "非発火 n", "非発火 超過", "差", "中央値の差"]
     rows: list[list[str]] = []
     for factor in SCORE_FACTORS:
         if factor not in df.columns:
             continue
-        fired = df[df[factor] > 0]
-        idle = df[df[factor] <= 0]
-        nf, mf, _ = _stats(fired[col])
-        ni, mi, _ = _stats(idle[col])
+        fired, idle = df[factor] > 0, df[factor] <= 0
+        nf, mf, df_med = _stats(excess[fired])
+        ni, mi, di_med = _stats(excess[idle])
         diff = (mf - mi) if (mf is not None and mi is not None) else None
-        rows.append([factor, str(nf), _pct(mf), str(ni), _pct(mi), _pct(diff)])
+        med = (df_med - di_med) if (df_med is not None and di_med is not None) else None
+        rows.append([factor, str(nf), _pct(mf), str(ni), _pct(mi), _pct(diff), _pct(med)])
     note = (
-        "減点要素(pullback_penalty / duration_penalty)は「発火 = 減点された群」。"
-        " 差がほぼ 0 の要素は、スコアに入れても情報を足していない。"
+        "**超過リターン(fwd20 − topix_fwd20)基準**。減点要素(pullback_penalty /"
+        " duration_penalty)は「発火 = 減点された群」。差がほぼ 0 の要素は、"
+        "スコアに入れても情報を足していない。"
+        " 平均と中央値の差が大きく開く要素は外れ値駆動を疑う"
+        "(平均だけ動いて中央値が動かないなら、少数の極端な事例が作った差)。"
     )
     return "## 4. 要素別寄与\n\n" + _table(headers, rows) + f"\n\n{note}"
 
@@ -515,6 +641,18 @@ def main(argv: list[str] | None = None) -> int:
         before = len(raw)
         raw = raw[~raw["symbol"].astype(str).isin(excluded)].copy()
         _log(f"品質不良 {len(excluded)} 銘柄を除外: {before} → {len(raw)} 行")
+
+    bench_dates, bench_bad = benchmark_bad_dates()
+    if bench_bad:
+        raw, n_masked = mask_contaminated_benchmark(raw, bench_dates, bench_bad)
+        msg = (
+            f"ベンチマーク {ohlcv_store.BENCHMARK_SYMBOL} に品質不良日 "
+            f"{len(bench_bad)} 日({', '.join(bench_bad[:5])}"
+            f"{' ほか' if len(bench_bad) > 5 else ''})。"
+            f"これを窓に含む超過リターン {n_masked} 件を欠損にした"
+        )
+        _log(f"警告: {msg}")
+        notes.append(msg + "。生リターン(§3 のブートストラップ)には影響しない")
 
     df = raw if args.include_overlaps else raw[~raw["overlaps_prev"]].copy()
     _log(f"outcomes={len(raw)} 集計対象={len(df)} entry={args.entry}")

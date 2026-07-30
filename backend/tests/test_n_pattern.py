@@ -211,8 +211,13 @@ def test_score_clamped_and_penalties_applied():
 # --------------------------------------------------------------------------- #
 # 逆転解消 & クランプ
 # --------------------------------------------------------------------------- #
-def test_continuation_outscores_downtrend_bounce():
-    """上昇継続の N字は下降トレンドのバウンスより高スコア。"""
+def test_trend_no_longer_affects_score():
+    """trend は score に寄与しない(TREND_BONUS=0)。
+
+    以前は「上昇継続 > 下降バウンス」を期待していたが、バックテストで
+    逆(発火群の超過リターンが -0.65%、95% CI [-1.31%, -0.05%])と判明した。
+    符号を反転させず 0 にしたので、両者のスコアは trend では差が付かない。
+    """
     cont_closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 125.0)], total=40)
     bounce_closes = _path(
         [(0, 115.0), (20, 100.0), (28, 120.0), (34, 110.0), (40, 130.0)], total=45
@@ -220,12 +225,12 @@ def test_continuation_outscores_downtrend_bounce():
     cont = detect_n_pattern(_df(cont_closes))
     bounce = detect_n_pattern(_df(bounce_closes), zigzag_pct=3.0)
     assert cont is not None and bounce is not None
+    assert cont["score_detail"]["trend"] == 0
     assert bounce["score_detail"]["trend"] == 0
-    assert cont["score"] > bounce["score"]
 
 
 def test_score_within_range_all_components():
-    """全加点発火(trend/breakout/volume/macd)でも score は 100 でクランプ内。"""
+    """全加点発火(breakout/volume/macd)で score は上限 75(TREND_BONUS=0 のため)。"""
     closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 130.0)], total=40)
     vol = [1000.0] * 40
     vol[34] = 1600.0
@@ -239,7 +244,9 @@ def test_score_within_range_all_components():
     assert detail["pullback_penalty"] == 0
     assert detail["duration_penalty"] == 0
     assert 0 <= result["score"] <= 100
-    assert result["score"] == 100
+    # 満点は BASE(40) + BREAKOUT(15) + VOLUME(10) + MACD(10) = 75。
+    # TREND_BONUS を戻すならこの期待値も戻すこと。
+    assert result["score"] == 75
 
 
 # --------------------------------------------------------------------------- #

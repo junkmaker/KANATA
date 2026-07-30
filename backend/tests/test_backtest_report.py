@@ -104,6 +104,130 @@ def test_resolve_populations_note_reports_actual_population(report, monkeypatch)
     assert any("**1 銘柄のみ**(OHLCV 未取得 1 / 品質不良 1)" in n for n in notes)
 
 
+def test_benchmark_bad_dates_flags_every_bar_of_the_run(report, monkeypatch):
+    """ベンチマークにも品質検査を通す(以前は素通りしていた)。
+
+    挙がるのは**壊れているバーそのもの**。日次リターン基準(sanity_check)だと
+    異常の境界しか発火せず、2 本続いた異常の内側が漏れて、代わりに復帰した
+    無傷のバーが挙がっていた。
+    """
+    idx = pd.date_range("2026-03-02", periods=20, freq="B")
+    # 1306 実測と同じ形: 2 本だけ 1/10 のスケールになる(index 12, 13)
+    closes = [375.0 + i for i in range(20)]
+    closes[12] = 38.7
+    closes[13] = 38.8
+    monkeypatch.setattr(
+        ohlcv_store, "read_ohlcv",
+        lambda code: ohlcv_store.normalize_ohlcv(_frame(closes, idx)),
+    )
+
+    dates, bad = report.benchmark_bad_dates()
+
+    assert len(dates) == 20
+    assert bad == ["2026-03-18", "2026-03-19"]   # index 12, 13 の両方
+
+
+def test_mask_contaminated_benchmark_covers_all_fwd_horizons(report):
+    """マスクのホライズンは backtest.FWD_HORIZONS に追従する。
+
+    固定値で持つと、ホライズンを増やしたとき新しい列だけ無警告で
+    マスク対象から外れる(列が無ければ continue するのでエラーにもならない)。
+    """
+    bench = [d.date().isoformat() for d in pd.date_range("2026-01-05", periods=80, freq="B")]
+    bad_day = bench[70]
+    df = pd.DataFrame({
+        # bench[10] は 60 本先、bench[50] は 20 本先が不正バーに当たる
+        "weekly_date": [bench[10], bench[50]],
+        "weekly_topix_fwd20": [0.01, 0.01],
+        "weekly_topix_fwd60": [0.02, 0.02],
+    })
+
+    out, masked = report.mask_contaminated_benchmark(df, bench, [bad_day])
+
+    assert out["weekly_topix_fwd20"].isna().tolist() == [False, True]
+    assert out["weekly_topix_fwd60"].isna().tolist() == [True, False]
+    assert masked == 2
+
+
+def test_mask_contaminated_benchmark_catches_entry_rolled_onto_bad_bar(report):
+    """ベンチに存在しない entry 日も、丸めた先が不正バーならマスクする。
+
+    銘柄ごとに営業日が違うので、entry 日がベンチの日付と一致しないことがある。
+    benchmark_outcome は bisect_left で直後の営業日へ丸めるため、完全一致で
+    照合すると丸めの先で不正バーを踏んだケースをすり抜ける。
+    """
+    bench = [d.date().isoformat() for d in pd.date_range("2026-01-05", periods=40, freq="B")]
+    bad_day = bench[30]
+    # ベンチが休場でシグナル銘柄だけ取引された日(bench[29] と bench[30] の間)
+    gap_day = (pd.Timestamp(bench[30]) - pd.Timedelta(days=1)).date().isoformat()
+    assert gap_day not in bench
+
+    df = pd.DataFrame({
+        "weekly_date": [gap_day],
+        "weekly_topix_fwd20": [9.7],
+    })
+
+    out, masked = report.mask_contaminated_benchmark(df, bench, [bad_day], horizons=(20,))
+
+    assert masked == 1
+    assert bool(out["weekly_topix_fwd20"].isna().iloc[0])
+
+
+def test_score_bands_splits_mode_concentrated_scores(report):
+    """最頻値に集中した分布でも帯が 1 本に潰れない。
+
+    件数の分位を素朴に取ると境界がすべて最頻値に落ちて重複し、§2 が
+    無情報な 1 行になる。出現値が少ないときは 1 値 1 帯に落とす。
+    """
+    scores = pd.Series([40] * 400 + [50] * 50 + [65] * 30 + [75] * 20)
+
+    bands = report.score_bands(scores)
+
+    assert bands == [(40, 50), (50, 65), (65, 75), (75, 75)]
+    counts = [
+        int(report._band_mask(scores, lo, hi, k == len(bands) - 1).sum())
+        for k, (lo, hi) in enumerate(bands)
+    ]
+    assert counts == [400, 50, 30, 20]   # どの帯にも重複なく1回ずつ入る
+
+
+def test_score_bands_falls_back_to_value_quantiles(report):
+    """出現値が多くても件数が偏っていれば、値の分位で切り直す。"""
+    scores = pd.Series([40] * 400 + list(range(41, 71)))
+
+    bands = report.score_bands(scores)
+
+    assert len(bands) == report.SCORE_BAND_COUNT
+    assert bands[0][0] == 40 and bands[-1][1] == 70
+
+
+def test_mask_contaminated_benchmark_nulls_only_bench_columns(report):
+    """汚染した超過リターンだけ欠損にし、生リターンと行は残す。
+
+    行ごと落とすと §3 のブートストラップ(生 fwd20 を使う)まで母数が減る。
+    horizon は窓の長さと列名(topix_fwd{h})の両方を決めるので連動している。
+    """
+    bench = [d.date().isoformat() for d in pd.date_range("2026-01-05", periods=40, freq="B")]
+    bad_day = bench[30]
+    df = pd.DataFrame({
+        # 汚染されるのは窓の両端だけ: entry=bench[30](entry 価格) と
+        # entry=bench[10](決済日が bench[30])。bench[15] は窓の**途中**に
+        # 不正バーが来るだけなので値には入らず、無傷で残る。
+        "weekly_date": [bench[10], bench[15], bad_day],
+        "weekly_fwd20": [0.01, 0.02, 0.03],
+        "weekly_topix_fwd20": [9.7, 0.01, 9.7],
+    })
+
+    out, masked = report.mask_contaminated_benchmark(
+        df, bench, [bad_day], horizons=(20,)
+    )
+
+    assert masked == 2
+    assert out["weekly_topix_fwd20"].isna().tolist() == [True, False, True]
+    assert out["weekly_fwd20"].tolist() == [0.01, 0.02, 0.03]   # 生は無傷
+    assert len(out) == len(df)                                   # 行は落とさない
+
+
 def test_random_entry_returns_drops_samples_spanning_years(report, monkeypatch):
     """index が疎で horizon 先が数年後になるサンプルは採用しない。
 

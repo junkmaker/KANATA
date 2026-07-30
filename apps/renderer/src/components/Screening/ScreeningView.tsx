@@ -4,7 +4,10 @@ import { ScreeningTable } from './ScreeningTable';
 import { UniverseSelect } from './UniverseSelect';
 import './screening.css';
 
-const MIN_SCORE_OPTIONS = [0, 50, 60, 70, 80];
+// 上限は N字スコアの満点に合わせる。backend/src/analysis/n_pattern.py の
+// BASE_SCORE(40) + BREAKOUT(15) + VOLUME(10) + MACD(10) + TREND(0) = 75。
+// 満点を超える選択肢を残すと、選んだ瞬間に必ず空テーブルになる。
+const MIN_SCORE_OPTIONS = [0, 50, 60, 70, 75];
 
 function formatScanTime(iso: string | null): string {
   if (!iso) return '未スキャン';

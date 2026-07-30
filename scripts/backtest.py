@@ -211,6 +211,18 @@ def cmd_outcomes(args: argparse.Namespace) -> int:
             " fetch を実行すること"
         )
         return 1
+    # ベンチは全シグナルの超過リターンに入る単一障害点。銘柄側と同じ検査を通す
+    # (1306 は分割の未記録でスケール異常を出した実績がある — §4.1)。
+    # ここでは警告だけ出す。除去の判断は集計側(backtest_report)が行う。
+    # 判定は集計側(backtest_report.benchmark_bad_dates)と同じ anomalous_bars。
+    # ここで sanity_check を使うと、警告に出る日付と実際にマスクされる日付が
+    # ずれて読み手を混乱させる。
+    bench_bad = ohlcv_store.anomalous_bars(bench_df)
+    if bench_bad:
+        _log(
+            f"警告: ベンチマーク {ohlcv_store.BENCHMARK_SYMBOL} にスケール異常の"
+            f"バーが {len(bench_bad)} 日ある: {', '.join(bench_bad[:10])}"
+        )
     bench_dates = backtest.iso_dates(bench_df.index)
     bench_opens = [float(v) for v in bench_df["Open"].tolist()]
     bench_closes = [float(v) for v in bench_df["Close"].tolist()]
