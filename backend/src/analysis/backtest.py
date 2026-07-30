@@ -396,6 +396,11 @@ def contaminated_entry_dates(
 
     out: set[str] = set()
     for entry_date in entry_dates:
+        # entry が解決できなかった行は日付が欠損する(末尾付近のシグナルでは
+        # lag_5 / weekly の営業日が存在しない)。bisect_left は str と float を
+        # 比較できず TypeError になるので、ここで落とす。
+        if not isinstance(entry_date, str):
+            continue
         i = benchmark_entry_index(bench_dates, entry_date)
         if i is not None and i in bad_pos:
             out.add(entry_date)

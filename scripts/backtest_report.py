@@ -166,10 +166,16 @@ def mask_contaminated_benchmark(
             if date_col not in out.columns or bench_col not in out.columns:
                 continue
             col_dates = out[date_col].astype(str).str.slice(0, 10)
+            # entry 日は解決できないことがある(末尾付近のシグナルは lag_5 や
+            # weekly の営業日が存在しない — 実測で weekly 337 / lag_5 410 件)。
+            # pandas 2.x の astype(str) は欠損を "None" にするが、3.x は
+            # **欠損のまま保持する**ため float の NaN が bisect_left に流れて
+            # TypeError になる。バージョン差を吸収するため str だけ通す。
+            entry_dates = {d for d in col_dates.unique() if isinstance(d, str)}
             # entry 日は銘柄ごとに営業日が違うため、ベンチ側の丸め
             # (benchmark_entry_index)を通してから汚染判定する
             hit = backtest.contaminated_entry_dates(
-                bench_dates, bad_dates, horizon, set(col_dates.unique())
+                bench_dates, bad_dates, horizon, entry_dates
             )
             sel = col_dates.isin(hit)
             masked += int((sel & out[bench_col].notna()).sum())
