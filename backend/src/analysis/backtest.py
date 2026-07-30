@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import random
 from bisect import bisect_left
+from collections.abc import Iterable
 from datetime import date
 
 import pandas as pd
@@ -312,6 +313,21 @@ def compute_outcomes(
     return out
 
 
+def benchmark_entry_index(bench_dates: list[str], entry_date: str) -> int | None:
+    """entry 日に対応するベンチマークのバー位置。範囲外なら None。
+
+    ベンチ側に entry_date そのものが無ければ**直後の営業日**に丸める
+    (バー位置は銘柄ごとに違うので、暦日で突き合わせる)。
+
+    この対応付けは ``benchmark_outcome``(値の計算)と
+    ``contaminated_entry_dates``(汚染判定)の両方が使う。**同じ関数を通す**のが
+    要点で、片方が丸めて片方が完全一致で照合すると、ベンチに存在しない日の
+    entry が不正バーへ丸め込まれたまま汚染判定だけをすり抜ける。
+    """
+    i = bisect_left(bench_dates, entry_date)
+    return i if i < len(bench_dates) else None
+
+
 def benchmark_outcome(
     bench_dates: list[str],
     bench_opens: list[float],
@@ -319,15 +335,11 @@ def benchmark_outcome(
     entry_date: str,
     horizons: tuple[int, ...] = FWD_HORIZONS,
 ) -> dict:
-    """同じ entry 日のベンチマーク(TOPIX)側リターン(§4.1)。
-
-    ベンチ側に entry_date そのものが無ければ**直後の営業日**に丸める
-    (バー位置は銘柄ごとに違うので、暦日で突き合わせる)。
-    """
+    """同じ entry 日のベンチマーク(TOPIX)側リターン(§4.1)。"""
     out: dict = {f"topix_fwd{h}": None for h in horizons}
     n = len(bench_dates)
-    i = bisect_left(bench_dates, entry_date)
-    if i >= n:
+    i = benchmark_entry_index(bench_dates, entry_date)
+    if i is None:
         return out
     entry_px = float(bench_opens[i])
     if entry_px <= 0:
@@ -337,6 +349,56 @@ def benchmark_outcome(
         out[f"topix_fwd{h}"] = (
             float(bench_closes[j]) / entry_px - 1.0 if j < n else None
         )
+    return out
+
+
+def contaminated_entry_dates(
+    bench_dates: list[str],
+    bad_dates: Iterable[str],
+    horizon: int,
+    entry_dates: Iterable[str],
+) -> set[str]:
+    """``entry_dates`` のうちベンチマークの不正バーに汚染されるものを返す(§4.1)。
+
+    ベンチマークは**全シグナルの超過リターンに入る単一障害点**である。
+    銘柄側は品質不良なら母集団から外せば済むが、ベンチが1本壊れると
+    その前後 horizon 本の entry すべてが道連れになる。実測では 1306 の
+    2026-03-30/31 が 1/10 のスケール異常を起こし、58 行の excess を
+    -970% にして集計全体の符号を裏返した(歪度 -19.9 が目印)。
+
+    汚染されるのは**窓の両端だけ**である。``benchmark_outcome`` は
+    ``close[i + horizon] / open[i] - 1`` しか計算しないので、不正バーが
+    窓の途中(i < j < i + horizon)にあっても値には入らない。したがって
+    不正バーが位置 j にあるとき落ちるのは i = j(entry 価格が壊れる)と
+    i = j - horizon(決済価格が壊れる)の 2 点のみ。
+
+    区間 [j - horizon, j] を丸ごと落とすのは誤りで、実測で 23100 セルと
+    本来の 60 倍を欠損にしてしまった。
+
+    ``entry_dates`` を受け取って**そこから絞り込む**形にしているのは、
+    ベンチマークの日付そのものを返すと照合が完全一致になり、ベンチに存在しない
+    entry 日(銘柄ごとに営業日が違う)が ``benchmark_entry_index`` の丸めで
+    不正バーへ乗ったケースを取りこぼすため。判定は値の計算と同じ丸めを通す。
+
+    返すのは日付集合だけで、除去はしない(§12.1 — 判定と除去を分ける)。
+    """
+    pos = {d: i for i, d in enumerate(bench_dates)}
+    bad_pos: set[int] = set()
+    for bad in bad_dates:
+        j = pos.get(bad)
+        if j is None:
+            continue
+        bad_pos.add(j)                    # entry 価格(open)が不正バー
+        if j - horizon >= 0:
+            bad_pos.add(j - horizon)      # 決済価格(close)が不正バー
+    if not bad_pos:
+        return set()
+
+    out: set[str] = set()
+    for entry_date in entry_dates:
+        i = benchmark_entry_index(bench_dates, entry_date)
+        if i is not None and i in bad_pos:
+            out.add(entry_date)
     return out
 
 

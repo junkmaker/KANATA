@@ -134,6 +134,60 @@ def test_sanity_check_clean_series_empty():
 
 
 # --------------------------------------------------------------------------- #
+# anomalous_bars(バー単位のスケール異常判定)
+# --------------------------------------------------------------------------- #
+def test_anomalous_bars_covers_every_bar_of_a_multi_bar_run():
+    """異常が 2 本続いても両方挙がり、復帰した無傷のバーは挙がらない。
+
+    sanity_check は日次リターンを見るので、この系列では index 12(下落)と
+    index 14(復帰)が挙がり、本当に壊れている index 13 が漏れる。
+    """
+    idx = pd.date_range("2026-03-02", periods=20, freq="B")
+    closes = [375.0 + i for i in range(20)]
+    closes[12] = 38.7
+    closes[13] = 38.8
+    df = ohlcv_store.normalize_ohlcv(_frame(closes, idx))
+
+    bad = ohlcv_store.anomalous_bars(df)
+
+    assert bad == ["2026-03-18", "2026-03-19"]
+    # 参考: リターン基準だと境界がずれる(この差が修正の理由)
+    assert ohlcv_store.sanity_check(df) == ["2026-03-18", "2026-03-20"]
+
+
+def test_anomalous_bars_flags_broken_open_with_intact_close():
+    """Close が健全でも Open が壊れていれば挙がる。
+
+    ベンチマークのエントリー価格は Open(benchmark_outcome)なので、
+    Close だけを見ると壊れた Open がそのまま超過リターンに入る。
+    """
+    idx = pd.date_range("2026-03-02", periods=20, freq="B")
+    closes = [375.0 + i for i in range(20)]
+    df = _frame(closes, idx)
+    df.loc[df.index[12], "Open"] = 38.7
+    df = ohlcv_store.normalize_ohlcv(df)
+
+    assert ohlcv_store.sanity_check(df) == []
+    assert ohlcv_store.anomalous_bars(df) == ["2026-03-18"]
+
+
+def test_anomalous_bars_clean_series_empty():
+    """通常の値動きでは何も挙がらない(窓中央値が一緒に動く)。"""
+    idx = pd.date_range("2026-01-05", periods=40, freq="B")
+    df = ohlcv_store.normalize_ohlcv(_frame([100.0 * (1.02**i) for i in range(40)], idx))
+
+    assert ohlcv_store.anomalous_bars(df) == []
+
+
+def test_anomalous_bars_short_series_not_judged():
+    """窓を満たせない短い系列は判定しない(空を返す)。"""
+    idx = pd.date_range("2026-01-05", periods=6, freq="B")
+    df = ohlcv_store.normalize_ohlcv(_frame([100.0, 101.0, 102.0, 10.0, 10.1, 104.0], idx))
+
+    assert ohlcv_store.anomalous_bars(df) == []
+
+
+# --------------------------------------------------------------------------- #
 # period スパン判定 / 非正価格判定
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(

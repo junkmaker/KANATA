@@ -14,6 +14,7 @@ from src.analysis.backtest import (
     block_bootstrap_means,
     compute_outcomes,
     confidence_interval,
+    contaminated_entry_dates,
     iso_dates,
     mark_overlaps,
     max_calendar_span_days,
@@ -379,6 +380,35 @@ def test_benchmark_outcome_none_beyond_data():
 
     assert out["topix_fwd20"] is None
     assert out["topix_fwd60"] is None
+
+
+def test_contaminated_entry_dates_only_window_edges():
+    """汚染されるのは窓の両端だけ(entry 価格と決済価格)。途中は値に入らない。"""
+    dates = iso_dates(pd.date_range("2026-01-05", periods=60, freq="B"))
+    bad = dates[40]
+
+    hit = contaminated_entry_dates(dates, [bad], 20, dates)
+
+    assert hit == {dates[20], dates[40]}
+
+
+def test_contaminated_entry_dates_follows_benchmark_rounding():
+    """ベンチに無い entry 日も、丸めた先が不正バーなら汚染とみなす。
+
+    benchmark_outcome は bisect_left で直後の営業日へ丸めるので、完全一致で
+    照合すると丸めの先で不正バーを踏んだ entry がすり抜ける。
+    """
+    dates = iso_dates(pd.date_range("2026-01-05", periods=60, freq="B"))
+    bad = dates[40]
+    saturday = "2026-01-10"          # ベンチに存在しない。丸めると 2026-01-12
+    assert saturday not in dates
+    monday_idx = dates.index("2026-01-12")
+
+    hit = contaminated_entry_dates(dates, [dates[monday_idx + 20]], 20, [saturday])
+    assert hit == {saturday}
+
+    # 丸めた先が健全なら汚染ではない
+    assert contaminated_entry_dates(dates, [bad], 20, [saturday]) == set()
 
 
 # --------------------------------------------------------------------------- #
