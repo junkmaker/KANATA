@@ -28,6 +28,8 @@ DEFAULT_MIN_MARKET_CAP = 10_000_000_000  # 100 億円
 SCAN_SLEEP_SECONDS = 0.2                 # yfinance レート制限対策(テストで 0 に patch)
 RESULTS_FILENAME = "n_pattern_results.json"
 CLOSES_TAIL = 120                        # サムネイル用に保持する終値本数
+SHARES_LOOKBACK_DAYS = 548               # 発行済株式数の取得窓(yfinance の既定と同じ 18 ヶ月)
+CAP_SANITY_RATIO = 10.0                  # 実測時価総額が CSV 値から何倍離れたら疑うか
 
 _state_lock = threading.Lock()
 _scan_state: dict = {
@@ -98,6 +100,29 @@ def _fetch_daily_df(symbol: str) -> pd.DataFrame | None:
     return df
 
 
+def _fetch_shares(symbol: str) -> pd.Series | None:
+    """発行済株式数の時系列を取得。失敗・空なら None(時価総額は未取得扱い)。
+
+    ``.info`` や ``fast_info.market_cap`` を使わないのは、前者が銘柄あたり重い
+    リクエストになり(docs/n_pattern_screening_spec.md §3.4)、後者が内部で
+    1年分の履歴を**再取得**するため — その履歴は _fetch_daily_df で既に
+    手元にある。ここは株式数だけを 1 リクエストで取り、価格は df から使う。
+    """
+    if not symbol.isascii():
+        return None
+    try:
+        ticker = yf.Ticker(to_yf_symbol(symbol))
+        start = pd.Timestamp.now("UTC").date() - pd.Timedelta(days=SHARES_LOOKBACK_DAYS)
+        shares = ticker.get_shares_full(start=start)
+    except Exception:
+        return None
+    if shares is None or len(shares) == 0:
+        return None
+    if isinstance(shares, pd.DataFrame):
+        shares = shares[shares.columns[0]]
+    return shares
+
+
 def _closes_tail(df: pd.DataFrame) -> list[dict]:
     """サムネイル用に直近 CLOSES_TAIL 本の終値を {date, value} で返す。"""
     out: list[dict] = []
@@ -107,6 +132,101 @@ def _closes_tail(df: pd.DataFrame) -> list[dict]:
             continue
         out.append({"date": ts.date().isoformat(), "value": round(float(c), 4)})
     return out
+
+
+def _last_bar(df: pd.DataFrame) -> tuple[str, float] | None:
+    """最終日足バーの (日付ISO, 終値) を返す。NaN・空なら None。
+
+    **最終バーだけを使う**。auto_adjust=True の df では過去バーが遡って
+    調整されており実際の株価ではないため、時価総額の計算に使えない
+    (最終バーはそれより後の配当・分割が無いので調整係数 1.0)。
+    """
+    if df is None or df.empty:
+        return None
+    ts = df.index[-1]
+    close = df["Close"].iloc[-1]
+    if pd.isna(close):
+        return None
+    return ts.date().isoformat(), float(close)
+
+
+def _shares_as_of(shares: pd.Series | None, asof_date: str) -> int | None:
+    """発行済株式数の系列から asof_date 以前の最新値を返す。無ければ None。
+
+    系列を持つのは、上場廃止・データ停止で最終バーが古い銘柄でも
+    「そのバー時点の株式数」を選べるようにするため(常に系列末尾を取ると
+    バーの日付と株式数の日付が食い違う)。
+    """
+    if shares is None or len(shares) == 0:
+        return None
+    # tz-aware Timestamp と tz-naive を直接比較すると TypeError になるため、
+    # 日付文字列へ落としてから比較する。
+    picked = [
+        v
+        for ts, v in shares.items()
+        if not pd.isna(v) and ts.date().isoformat() <= asof_date
+    ]
+    chosen = picked[-1] if picked else None
+    if chosen is None or chosen <= 0:
+        return None
+    return int(chosen)
+
+
+def _market_cap(shares: int | None, close: float | None) -> int | None:
+    """発行済株式数 × 終値。どちらか欠けていれば None。"""
+    if shares is None or close is None or close <= 0:
+        return None
+    return int(round(shares * close))
+
+
+def _is_plausible_cap(cap: int, csv_cap: int | None) -> bool:
+    """実測値が CSV 登録値と桁で食い違っていないか。比較対象が無ければ True。
+
+    yfinance は分割を記録し損ねてスケールの壊れた値を返すことがある
+    (macro_provider._despike と ohlcv_store.sanity_check が存在する理由)。
+    桁違いの値をそのまま通すと **CSV 値より悪い嘘** になる — フォールバック表示なら
+    `*` と muted 色が付くが、実測扱いの値には何の印も付かず、UI 上は確定値に見える。
+
+    許容幅を CAP_SANITY_RATIO 倍と広く取るのは、CSV が数ヶ月前の登録値で本物の
+    株価変動が入るため。ここで捕まえたいのは 10 倍・1/10 のスケール異常だけで、
+    2〜3 倍の値動きを弾くのは目的ではない。
+    """
+    if csv_cap is None or csv_cap <= 0 or cap <= 0:
+        return True
+    ratio = cap / csv_cap
+    return 1 / CAP_SANITY_RATIO < ratio < CAP_SANITY_RATIO
+
+
+def _resolve_asof_cap(
+    df: pd.DataFrame, symbol: str, csv_cap: int | None
+) -> tuple[int | None, str | None]:
+    """実施日時点の (時価総額, 基準日) を返す。解決できなければ (None, None)。
+
+    例外を握るのは、ここで落ちるとスキャン全体が run_scan の外側ハンドラへ抜けるため。
+    そのハンドラは atomic_write_json の**前**に status=error を立てるので、1 銘柄の
+    時価総額の失敗で 900 銘柄ぶんの検出結果が丸ごと捨てられる。_fetch_shares の
+    try は自身の HTTP 呼び出ししか覆っておらず、返り値の形の検査・_shares_as_of・
+    _market_cap は素通しであることに注意。
+    """
+    bar = _last_bar(df)
+    if bar is None:
+        return None, None
+    asof_date, close = bar
+    try:
+        cap = _market_cap(_shares_as_of(_fetch_shares(symbol), asof_date), close)
+    except Exception:
+        cap = None
+    # 追加リクエストぶんのレート制限対策。**成否によらず**待つ: 失敗はレート制限で
+    # 起きるのが典型で、成功時だけ待つと 429 を食っている最中ほど速く撃つことになる。
+    # ここに到達した時点で symbol は ASCII(非 ASCII なら _fetch_daily_df が None を
+    # 返しこの関数まで来ない)ため、リクエストは必ず 1 本出ている。
+    if SCAN_SLEEP_SECONDS:
+        time.sleep(SCAN_SLEEP_SECONDS)
+    if cap is None or not _is_plausible_cap(cap, csv_cap):
+        # 値が無い/桁が疑わしいときは日付も返さない。日付だけ残すと UI が
+        # 「この日付時点の値」と言いながら CSV 値を出すことになる。
+        return None, None
+    return cap, asof_date
 
 
 def load_results() -> dict:
@@ -160,11 +280,19 @@ def run_scan(
                 except Exception:
                     detected = None
                 if detected is not None:
+                    # 実施日の時価総額はヒット銘柄だけで解決する。ユニバース全体
+                    # (800〜900銘柄)に追加リクエストを掛けるとスキャン時間がほぼ倍に
+                    # なるうえ、表示に必要なのはヒット行だけ。
+                    cap_asof, cap_date = _resolve_asof_cap(
+                        df, row["code"], row["market_cap"]
+                    )
                     results.append(
                         {
                             "ticker": row["code"],
                             "name": row["name"],
                             "market_cap": row["market_cap"],
+                            "market_cap_asof": cap_asof,
+                            "market_cap_date": cap_date,
                             "score": detected["score"],
                             "score_detail": detected["score_detail"],
                             "pivots": detected["pivots"],

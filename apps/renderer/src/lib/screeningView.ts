@@ -129,3 +129,54 @@ export function filterByAge(
     return age === null || age <= maxAgeDays;
   });
 }
+
+/** 時価総額セルの表示に必要な情報。`source` はどちらの値を採ったか。 */
+export type MarketCapView = {
+  text: string;
+  /** `asof` = 実施日の実測値 / `universe` = CSV 登録値 / `none` = 値なし */
+  source: 'asof' | 'universe' | 'none';
+  /** hover 表示用の説明。値の出所と基準日を伝える。 */
+  title: string;
+};
+
+/**
+ * 時価総額を `4.6兆` / `230億` の形に整形する。
+ *
+ * 兆・億の 2 段階だけにするのは、日本株の時価総額がこの 2 桁帯にほぼ収まるため。
+ * 億未満は生の数字を出す（丸めると 0 億になって値の有無が読めなくなる）。
+ */
+export function formatMarketCap(cap: number | null): string {
+  if (cap === null) return '—';
+  if (cap >= 1e12) return `${(cap / 1e12).toFixed(1)}兆`;
+  if (cap >= 1e8) return `${Math.round(cap / 1e8)}億`;
+  return String(cap);
+}
+
+/**
+ * 表示に使う時価総額を決める。**実施日の実測値を優先**し、無ければ CSV 値へ落とす。
+ *
+ * フォールバックした値に `*` を付けて `source` を返すのは、両者を無印で混ぜると
+ * 「実施日の時価総額」という表示の意味が壊れるため。CSV の値は登録した日の値で、
+ * 何ヶ月前かは誰にも分からない。色だけで区別しないのは、テーマによっては
+ * muted 色の差が読み取れないから（記号と色の二重化）。
+ */
+export function resolveMarketCap(r: ScreeningResult): MarketCapView {
+  const asof = r.market_cap_asof ?? null;
+  if (asof !== null) {
+    const date = r.market_cap_date ?? null;
+    return {
+      text: formatMarketCap(asof),
+      source: 'asof',
+      title: date ? `${date} 時点` : '実施日時点',
+    };
+  }
+  const csv = r.market_cap ?? null;
+  if (csv !== null) {
+    return {
+      text: `${formatMarketCap(csv)}*`,
+      source: 'universe',
+      title: 'ユニバース CSV の登録値（実施日の値を取得できず）',
+    };
+  }
+  return { text: '—', source: 'none', title: '時価総額データなし' };
+}
