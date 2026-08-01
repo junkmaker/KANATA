@@ -49,6 +49,11 @@ D.price > B.price          # 高値更新(ブレイクポイント)
 - **押し目の深さ**: (B-C)/(B-A) が浅すぎる(<20%)場合は減点(押し目として機能していない可能性)
 - **経過日数**: A→Dの期間が短すぎる(例: 5日未満)場合は減点(ノイズの可能性)
 
+> **補足(2026-07 のバックテスト結果)**: このスコアにも構成要素にも前方リターンの予測力が無いことが
+> 確定した(`docs/n_pattern_backtest_spec.md` §16.2、`TREND_BONUS = 0` の経緯は CLAUDE.md を参照)。
+> スコアは**算出と API レスポンスには残すが、順位付け・絞り込み・UI 表示には使わない**。
+> 再検証の経路(閾値を戻して測り直す)を潰さないための保存であって、有効性の主張ではない。
+
 ---
 
 ## 3. バックエンド実装(FastAPI)
@@ -85,13 +90,25 @@ def screen_n_pattern_prime(
 ```
 
 ### 3.3 新規APIエンドポイント
+
+> 以下は実装済みの現行仕様。当初案にあった `min_market_cap` / `min_score` のクエリは**存在しない**
+> （`min_market_cap` は実装されず、`min_score` はスコアの無効性が確定した時点で廃止した。§2.3 の補足を参照）。
+
 ```
 GET /api/screening/n-pattern
-  query params:
-    - min_market_cap (default: 10000000000)
-    - min_score (default: 50)
-  response: List[NPatternResult] (score降順)
+  query params: なし
+  response: {generated_at, universe_count, scanned_count, universe_id, universe_name, results[]}
+            results は break_date 降順（同着は ticker 昇順）。キャッシュ済み JSON をそのまま返す
+
+POST /api/screening/n-pattern/scan   -> 202 {status: "started"}（ボディ省略可 / {universe_id}）
+GET  /api/screening/n-pattern/status -> {status, done, total, started_at, error}
+
+GET    /api/screening/universes            -> {universes: [...]}
+POST   /api/screening/universes            -> 201 UniverseInfo（{name, csv_text}）
+DELETE /api/screening/universes/{id}       -> {status: "deleted"}
 ```
+
+エンベロープ（`{success, data, error}`）は使わず、エラーは `HTTPException` + `detail` で返す（macro 系と同じ）。
 
 ### 3.4 パフォーマンス考慮
 - yfinanceの`.info`は銘柄ごとに追加リクエストが発生し重いため、時価総額は**事前CSVでフィルタしてから**株価データ取得する
@@ -102,9 +119,12 @@ GET /api/screening/n-pattern
 
 ## 4. フロントエンド実装(React/TypeScript)
 
+> 現行仕様は [screening_ui_repositioning_plan.md](screening_ui_repositioning_plan.md) が正。以下は実装済みの要約。
+
 - 既存のMACDシグナルバッジと同様のUI設計で、「N字候補」タブまたはセクションを追加
-- 表示項目: 銘柄コード・銘柄名・時価総額・スコア・チャートサムネイル(ピボット点をマーカー表示)
-- スコア降順でソート、`min_score`でのフィルタUIを用意
+- 表示項目: 銘柄コード・銘柄名・時価総額・ブレイク日・発火要素バッジ・チャートサムネイル(ピボット点をマーカー表示)
+- **スコアは表示しない**。並び順は `break_date` 降順(同着は ticker 昇順)、絞り込みはブレイク日の鮮度(全件 / 3日以内 / 7日以内)
+- 要素は合成せずバッジで並べ、良し悪しを示す配色は使わない(強調した瞬間に「有望」と読まれ、消したはずの期待値の含意が戻るため)
 
 ---
 

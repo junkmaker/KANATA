@@ -7,7 +7,7 @@ GET は常にキャッシュ済み結果を返す。スキャンは POST でバ�
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException
 
 from ..schemas.screening import (
     ScanStartRequest,
@@ -25,10 +25,17 @@ router = APIRouter()
 
 
 @router.get("/screening/n-pattern", response_model=ScreeningResultsResponse)
-def get_n_pattern(min_score: int = Query(default=50)):
-    data = screening_provider.load_results()
-    results = [r for r in data.get("results", []) if r.get("score", 0) >= min_score]
-    return {**data, "results": results}
+def get_n_pattern():
+    """キャッシュ済みのスキャン結果をそのまま返す(ブレイク日の新しい順)。
+
+    ``min_score`` クエリは廃止した。スコアに前方リターンの予測力が無いことが
+    バックテストで確定しており(§16.2)、スコアでの絞り込みは実測の裏付けが無い
+    期待値の含意を持ち込むため。絞り込みは表示側が ``break_date`` の鮮度で行う。
+
+    ``score`` / ``score_detail`` はレスポンスに残す — 表示しないだけで、
+    再検証の経路(閾値を戻して測り直す)を潰さないため。
+    """
+    return screening_provider.load_results()
 
 
 @router.post("/screening/n-pattern/scan", status_code=202, response_model=ScanStartResponse)

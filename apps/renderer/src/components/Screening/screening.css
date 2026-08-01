@@ -47,7 +47,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.screening-minscore {
+.screening-age {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -56,13 +56,19 @@
   color: var(--text-soft);
 }
 
-.screening-minscore select {
+.screening-age select {
   padding: 3px 8px;
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 12px;
+}
+
+.screening-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .screening-universe {
@@ -180,9 +186,33 @@
   color: var(--text);
 }
 
-.screening-score {
-  font-weight: 600;
-  color: var(--accent);
+.screening-breakdate {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* バッジは「パターンの事実」であって品質の評価ではない。
+   良し悪しを示す配色(緑/赤)やアクセント色を使わない — 使った瞬間に
+   「強調されている＝有望」と読まれ、消したはずの期待値の含意が戻る。 */
+.screening-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.screening-badge {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.screening-badge-none {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .screening-thumb {

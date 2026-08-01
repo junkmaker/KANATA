@@ -177,7 +177,13 @@ def run_scan(
             if SCAN_SLEEP_SECONDS:
                 time.sleep(SCAN_SLEEP_SECONDS)
 
-        results.sort(key=lambda r: r["score"], reverse=True)
+        # ブレイク日の新しい順。スコア降順にしないのは、スコアに前方リターンの
+        # 予測力が無いことがバックテストで確定したため(docs/n_pattern_backtest_spec.md
+        # §16.2)。順位付けに期待値の含意を持たせない。
+        # 同着は ticker 昇順にしたいので、sort の安定性を使って2段階で並べる
+        # (タプルキー + reverse=True では ticker まで降順になってしまう)。
+        results.sort(key=lambda r: r["ticker"])
+        results.sort(key=lambda r: r["break_date"], reverse=True)
         payload = {
             "generated_at": now_iso(),
             "universe_count": len(universe),

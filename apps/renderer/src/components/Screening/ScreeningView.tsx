@@ -1,13 +1,9 @@
 import { useScreening } from '../../hooks/useScreening';
 import { useUniverses } from '../../hooks/useUniverses';
+import { AGE_OPTIONS } from '../../lib/screeningView';
 import { ScreeningTable } from './ScreeningTable';
 import { UniverseSelect } from './UniverseSelect';
 import './screening.css';
-
-// 上限は N字スコアの満点に合わせる。backend/src/analysis/n_pattern.py の
-// BASE_SCORE(40) + BREAKOUT(15) + VOLUME(10) + MACD(10) + TREND(0) = 75。
-// 満点を超える選択肢を残すと、選んだ瞬間に必ず空テーブルになる。
-const MIN_SCORE_OPTIONS = [0, 50, 60, 70, 75];
 
 function formatScanTime(iso: string | null): string {
   if (!iso) return '未スキャン';
@@ -22,8 +18,17 @@ type Props = {
 };
 
 export function ScreeningView({ onSelectSymbol }: Props) {
-  const { results, generatedAt, loadStatus, error, scanStatus, minScore, setMinScore, startScan } =
-    useScreening();
+  const {
+    results,
+    totalCount,
+    generatedAt,
+    loadStatus,
+    error,
+    scanStatus,
+    maxAgeDays,
+    setMaxAgeDays,
+    startScan,
+  } = useScreening();
   const {
     universes,
     selectedId,
@@ -62,16 +67,27 @@ export function ScreeningView({ onSelectSymbol }: Props) {
           </span>
         )}
         <span className="screening-lastscan">最終スキャン: {formatScanTime(generatedAt)}</span>
-        <label className="screening-minscore">
-          最小スコア
-          <select value={minScore} onChange={(e) => setMinScore(Number(e.target.value))}>
-            {MIN_SCORE_OPTIONS.map((v) => (
-              <option key={v} value={v}>
-                {v}
+        <label className="screening-age">
+          {/* ブレイクからの経過日数で絞る。スコアではなく鮮度で絞るのは、
+              順位付けに期待値の含意を持たせないため(§16.2)。
+              新しいほど有利という証拠は無く、これは作業順序の話。 */}
+          ブレイク
+          <select
+            value={maxAgeDays === null ? '' : String(maxAgeDays)}
+            onChange={(e) => setMaxAgeDays(e.target.value === '' ? null : Number(e.target.value))}
+          >
+            {AGE_OPTIONS.map((o) => (
+              <option key={o.label} value={o.value === null ? '' : String(o.value)}>
+                {o.label}
               </option>
             ))}
           </select>
         </label>
+        <span className="screening-count">
+          {results.length === totalCount
+            ? `${totalCount} 件`
+            : `${results.length} / ${totalCount} 件`}
+        </span>
       </div>
 
       {scanStatus?.status === 'error' && (

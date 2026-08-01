@@ -21,8 +21,11 @@ async function errorFromResponse(res: Response): Promise<Error> {
   return new Error(detail ?? fallback);
 }
 
-export async function fetchScreeningResults(minScore: number): Promise<ScreeningResponse> {
-  return fetchJson<ScreeningResponse>(`/api/screening/n-pattern?min_score=${minScore}`);
+// min_score クエリは廃止した(スコアでの絞り込みは実測の裏付けが無い期待値の
+// 含意を持ち込むため — docs/n_pattern_backtest_spec.md §16.2)。
+// 絞り込みは break_date の鮮度で表示側が行う。
+export async function fetchScreeningResults(): Promise<ScreeningResponse> {
+  return fetchJson<ScreeningResponse>('/api/screening/n-pattern');
 }
 
 export type StartScanResult = 'started' | 'already-running';
