@@ -169,6 +169,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ユニバース CSV の登録値へフォールバックしたセル。実施日の値ではないことを
+   色でも示す。良し悪しの配色(緑/赤)は使わない — 時価総額の出所の区別であって
+   評価ではない。記号(*)と併用するのは、テーマによって muted 色の差が
+   読み取りにくいため。
+   セレクタを `.screening-table td.` で始めるのは詳細度のため: 単独の
+   `.screening-cap-stale`(0-1-0)は上の `.screening-table td`(0-1-1)に負けて
+   色が一切効かず、二重化したはずの手掛かりが `*` だけに黙って縮退する。 */
+.screening-table td.screening-cap-stale {
+  color: var(--muted);
+}
+
 .screening-row {
   cursor: pointer;
 }

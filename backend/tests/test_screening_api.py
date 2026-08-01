@@ -1,6 +1,6 @@
 """Integration tests for the N-pattern screening API.
 
-yfinance は ``_fetch_daily_df`` の patch で完全に遮断し、KANATA_DATA_DIR を tmp に
+yfinance は ``_fetch_daily_df`` / ``_fetch_shares`` の patch で完全に遮断し、KANATA_DATA_DIR を tmp に
 向けて結果 JSON を隔離する。スキャン完了は run_scan の同期呼び出しで検証する
 (start_scan_thread は薄いラッパのため、ルート経由の 202/409 のみ確認)。
 """
@@ -54,6 +54,10 @@ def _flat_df():
 def screening_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KANATA_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(screening_provider, "SCAN_SLEEP_SECONDS", 0)
+    # 株式数取得も既定で遮断する。ヒット行の解決で走る経路なので、塞がないと
+    # 時価総額に関心のないテストまで実ネットワークを叩く。必要なテストは
+    # 各自 monkeypatch.setattr で上書きする(後勝ち)。
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: None)
     screening_provider.reset_state()
     yield tmp_path
     screening_provider.reset_state()
@@ -248,3 +252,212 @@ def test_scan_result_has_thumbnail_closes(client, screening_env, monkeypatch):
     assert len(result["pivots"]) == 4
     assert len(result["closes"]) > 0
     assert all({"date", "value"} <= set(p) for p in result["closes"])
+
+
+# --------------------------------------------------------------------------- #
+# 実施日の時価総額（発行済株式数 × 最終日足終値）
+# --------------------------------------------------------------------------- #
+def _shares_series(pairs):
+    """[(日付, 株式数)] を tz-aware な Series にする（yfinance の返り値を模す）。"""
+    idx = pd.to_datetime([d for d, _ in pairs], utc=True)
+    return pd.Series([s for _, s in pairs], index=idx)
+
+
+def test_scan_computes_market_cap_at_scan_date(client, screening_env, monkeypatch):
+    """実施日の時価総額 = 発行済株式数 × 最終日足終値。基準日は最終バーの日付。"""
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    df = _n_df(d_index=34)
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: df)
+    # 株数は CSV 値(5兆) と同じ桁の時価総額になるよう選ぶ。桁が離れていると
+    # _is_plausible_cap のスケール検査に弾かれ、算出そのものを検証できない。
+    monkeypatch.setattr(
+        screening_provider,
+        "_fetch_shares",
+        lambda code: _shares_series([("2026-01-01", 20_000_000_000), ("2026-02-01", 40_000_000_000)]),
+    )
+
+    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+
+    last_date = df.index[-1].date().isoformat()
+    assert row["market_cap_date"] == last_date
+    # 2月の報告値(40e9)を採る。1月の 20e9 ではない
+    assert row["market_cap_asof"] == round(40_000_000_000 * float(df["Close"].iloc[-1]))
+    # CSV 値は消さない（足切りフィルタとフォールバックに使い続ける）
+    assert row["market_cap"] == 5_000_000_000_000
+
+
+def test_scan_market_cap_asof_none_when_shares_unavailable(client, screening_env, monkeypatch):
+    """株式数を取れない銘柄は asof=None かつ **date も None**（日付だけ残すと嘘になる）。"""
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: None)
+
+    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+
+    assert row["market_cap_asof"] is None
+    assert row["market_cap_date"] is None
+    assert row["market_cap"] == 5_000_000_000_000
+
+
+def test_shares_fetched_only_for_hits(client, screening_env, monkeypatch):
+    """株式数はヒット銘柄だけで取りに行く（ユニバース全体には掛けない）。"""
+    csv_path = _write_universe(
+        screening_env,
+        [("7203", "Hit", 5_000_000_000_000), ("6758", "Miss", 4_000_000_000_000)],
+    )
+    monkeypatch.setattr(
+        screening_provider,
+        "_fetch_daily_df",
+        lambda code: _n_df() if code == "7203" else _flat_df(),
+    )
+    called: list[str] = []
+
+    def fake_shares(code):
+        called.append(code)
+        return _shares_series([("2026-01-01", 1_000_000)])
+
+    monkeypatch.setattr(screening_provider, "_fetch_shares", fake_shares)
+
+    screening_provider.run_scan(csv_path=csv_path)
+
+    assert called == ["7203"]  # 非該当の 6758 には行かない
+
+
+def test_shares_as_of_picks_value_at_or_before_date():
+    """as-of は基準日以前の最新値。基準日より後の報告値は使わない。"""
+    s = _shares_series(
+        [("2026-01-01", 100), ("2026-03-01", 200), ("2026-06-01", 300)]
+    )
+    assert screening_provider._shares_as_of(s, "2026-04-15") == 200
+    assert screening_provider._shares_as_of(s, "2026-06-01") == 300
+    assert screening_provider._shares_as_of(s, "2025-12-31") is None
+    assert screening_provider._shares_as_of(None, "2026-04-15") is None
+
+
+def test_last_bar_rejects_empty_and_nan_close():
+    """終値が NaN のバー・空 df は None（時価総額の計算に使わせない）。"""
+    assert screening_provider._last_bar(_df([])) is None
+    nan_tail = _df([100.0, 101.0, float("nan")])
+    assert screening_provider._last_bar(nan_tail) is None
+    ok = _df([100.0, 101.0, 102.0])
+    assert screening_provider._last_bar(ok) == (ok.index[-1].date().isoformat(), 102.0)
+
+
+def test_scan_rejects_asof_cap_that_differs_in_scale_from_csv(
+    client, screening_env, monkeypatch
+):
+    """桁がずれた実測値は採らず CSV 値へ落とす。
+
+    yfinance は分割の記録漏れでスケールの壊れた値を返すことがある。無印の実測値として
+    出すとフォールバック(`*` + muted)より悪い嘘になるため、日付ごと捨てる。
+    """
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    df = _n_df(d_index=34)
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: df)
+    # 終値 125 前後 × この株数 ≒ CSV 値の 100 倍
+    huge = int(5_000_000_000_000 * 100 / float(df["Close"].iloc[-1]))
+    monkeypatch.setattr(
+        screening_provider, "_fetch_shares", lambda code: _shares_series([("2026-01-01", huge)])
+    )
+
+    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+
+    assert row["market_cap_asof"] is None
+    assert row["market_cap_date"] is None
+    assert row["market_cap"] == 5_000_000_000_000
+
+
+def test_is_plausible_cap_bounds():
+    """比較対象が無ければ通す。本物の値動き(数倍)は通し、桁違いだけ弾く。"""
+    assert screening_provider._is_plausible_cap(1_000, None) is True
+    assert screening_provider._is_plausible_cap(1_000, 0) is True
+    assert screening_provider._is_plausible_cap(3_000_000, 1_000_000) is True  # 3倍は通す
+    assert screening_provider._is_plausible_cap(200_000, 1_000_000) is True  # 1/5 も通す
+    assert screening_provider._is_plausible_cap(10_000_000, 1_000_000) is False  # 10倍
+    assert screening_provider._is_plausible_cap(100_000, 1_000_000) is False  # 1/10
+
+
+def test_scan_survives_shares_exception(client, screening_env, monkeypatch):
+    """時価総額の解決で例外が出てもスキャン結果を失わない。
+
+    run_scan の外側ハンドラは atomic_write_json の前に status=error を立てるため、
+    ここで例外を抜けさせると 900 銘柄ぶんの検出結果が丸ごと捨てられる。
+    """
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
+
+    def boom(code):
+        raise RuntimeError("yfinance exploded")
+
+    monkeypatch.setattr(screening_provider, "_fetch_shares", boom)
+
+    payload = screening_provider.run_scan(csv_path=csv_path)
+
+    assert screening_provider.get_scan_status()["status"] == "done"
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["market_cap_asof"] is None
+    assert payload["results"][0]["market_cap"] == 5_000_000_000_000
+
+
+def test_sleeps_after_shares_request_even_when_it_fails(client, screening_env, monkeypatch):
+    """株式数の取得に失敗しても待つ。
+
+    失敗はレート制限で起きるのが典型なので、成功時だけ待つ実装だと 429 を食っている
+    最中ほど速くリクエストを撃つことになる。
+    """
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: None)
+    monkeypatch.setattr(screening_provider, "SCAN_SLEEP_SECONDS", 0.01)
+    naps: list[float] = []
+    monkeypatch.setattr(screening_provider.time, "sleep", lambda s: naps.append(s))
+
+    screening_provider.run_scan(csv_path=csv_path)
+
+    assert len(naps) == 2  # 履歴取得ぶん(ループ末尾) + 株式数ぶん
+
+
+def test_market_cap_returns_none_on_missing_parts():
+    assert screening_provider._market_cap(None, 100.0) is None
+    assert screening_provider._market_cap(1000, None) is None
+    assert screening_provider._market_cap(1000, 0.0) is None
+    assert screening_provider._market_cap(1000, 12.5) == 12500
+
+
+def test_response_fills_null_for_legacy_results(client, screening_env):
+    """新フィールドの無い旧 JSON でも 200 で返り、値は null になる。"""
+    import json
+
+    (screening_env / "n_pattern_results.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-07-01T09:00:00+09:00",
+                "universe_count": 1,
+                "scanned_count": 1,
+                "universe_id": "default",
+                "universe_name": "旧",
+                "results": [
+                    {
+                        "ticker": "7203",
+                        "name": "A",
+                        "market_cap": 5_000_000_000_000,
+                        "score": 50,
+                        "score_detail": {
+                            "trend": 0, "breakout": 25, "volume": 0,
+                            "macd": 0, "pullback_penalty": 0, "duration_penalty": 0,
+                        },
+                        "pivots": [],
+                        "break_date": "2026-06-30",
+                        "closes": [],
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    body = client.get("/api/screening/n-pattern").json()
+
+    assert body["results"][0]["market_cap_asof"] is None
+    assert body["results"][0]["market_cap_date"] is None

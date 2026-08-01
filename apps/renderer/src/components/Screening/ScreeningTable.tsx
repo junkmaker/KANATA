@@ -1,19 +1,11 @@
 import type { ScreeningResult } from '../../types';
-import { sortByBreakDate, toBadges } from '../../lib/screeningView';
+import { resolveMarketCap, sortByBreakDate, toBadges } from '../../lib/screeningView';
 import { ScreeningThumbnail } from './ScreeningThumbnail';
 
 type Props = {
   results: ScreeningResult[];
   onSelectSymbol: (ticker: string, name: string) => void;
 };
-
-function formatMarketCap(cap: number | null): string {
-  // market_cap 列の無いユニバースでは null(未取得)になる。
-  if (cap === null) return '—';
-  if (cap >= 1e12) return `${(cap / 1e12).toFixed(1)}兆`;
-  if (cap >= 1e8) return `${Math.round(cap / 1e8)}億`;
-  return String(cap);
-}
 
 /**
  * N字候補の一覧。**スコアは表示しない**。
@@ -45,6 +37,7 @@ export function ScreeningTable({ results, onSelectSymbol }: Props) {
         <tbody>
           {sorted.map((r) => {
             const badges = toBadges(r.score_detail);
+            const cap = resolveMarketCap(r);
             return (
               <tr
                 key={r.ticker}
@@ -53,7 +46,12 @@ export function ScreeningTable({ results, onSelectSymbol }: Props) {
               >
                 <td className="screening-code">{r.ticker}</td>
                 <td className="screening-name">{r.name}</td>
-                <td className="num">{formatMarketCap(r.market_cap)}</td>
+                <td
+                  className={cap.source === 'universe' ? 'num screening-cap-stale' : 'num'}
+                  title={cap.title}
+                >
+                  {cap.text}
+                </td>
                 <td className="screening-breakdate">{r.break_date}</td>
                 <td>
                   {/* バッジは「パターンの事実」であって品質の評価ではない。

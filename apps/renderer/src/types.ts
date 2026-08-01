@@ -254,7 +254,12 @@ export interface ScreeningClose {
 export interface ScreeningResult {
   ticker: string;
   name: string;
+  /** ユニバース CSV の登録値。足切りフィルタとフォールバック表示に使う。 */
   market_cap: number | null;
+  /** スキャン実施日時点の時価総額（発行済株式数 × 最終日足終値）。取得失敗時 null。 */
+  market_cap_asof: number | null;
+  /** market_cap_asof の基準日（最終日足バーの日付、`YYYY-MM-DD`）。値が無ければ null。 */
+  market_cap_date: string | null;
   score: number;
   score_detail: ScreeningScoreDetail;
   pivots: ScreeningPivot[];

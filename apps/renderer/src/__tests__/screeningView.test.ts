@@ -4,6 +4,8 @@ import {
   BADGE_DEFS,
   ageInDays,
   filterByAge,
+  formatMarketCap,
+  resolveMarketCap,
   sortByBreakDate,
   toBadges,
 } from '../lib/screeningView';
@@ -25,6 +27,8 @@ function result(over: Partial<ScreeningResult> = {}): ScreeningResult {
     ticker: '7203',
     name: 'トヨタ自動車',
     market_cap: null,
+    market_cap_asof: null,
+    market_cap_date: null,
     score: 50,
     score_detail: detail(),
     pivots: [],
@@ -151,5 +155,53 @@ describe('filterByAge', () => {
     const withBroken = [...rows, result({ ticker: '4444', break_date: 'n/a' })];
 
     expect(filterByAge(withBroken, 3, asOf).map((r) => r.ticker)).toEqual(['1111', '4444']);
+  });
+});
+
+describe('formatMarketCap', () => {
+  it('兆・億で整形し、null は — にする', () => {
+    expect(formatMarketCap(null)).toBe('—');
+    expect(formatMarketCap(4.6e13)).toBe('46.0兆');
+    expect(formatMarketCap(1e12)).toBe('1.0兆'); // 兆の境界
+    expect(formatMarketCap(999_999_999_999)).toBe('10000億');
+    expect(formatMarketCap(2.3e10)).toBe('230億');
+    expect(formatMarketCap(1e8)).toBe('1億'); // 億の境界
+    expect(formatMarketCap(50_000_000)).toBe('50000000'); // 億未満は生値
+    expect(formatMarketCap(0)).toBe('0');
+  });
+});
+
+describe('resolveMarketCap', () => {
+  it('実施日の実測値があればそれを使い、基準日を title に出す', () => {
+    const v = resolveMarketCap(
+      result({ market_cap_asof: 5.1e13, market_cap_date: '2026-07-31', market_cap: 4.6e13 }),
+    );
+
+    expect(v.source).toBe('asof');
+    expect(v.text).toBe('51.0兆');
+    expect(v.title).toContain('2026-07-31');
+  });
+
+  it('実測値が無ければ CSV 値へ落とし、* と説明を付ける', () => {
+    const v = resolveMarketCap(result({ market_cap_asof: null, market_cap: 4.6e13 }));
+
+    expect(v.source).toBe('universe');
+    expect(v.text).toBe('46.0兆*'); // 記号で出所が分かる（色だけに頼らない）
+    expect(v.title).toContain('CSV');
+  });
+
+  it('どちらも無ければ — で source は none', () => {
+    const v = resolveMarketCap(result());
+
+    expect(v.source).toBe('none');
+    expect(v.text).toBe('—');
+  });
+
+  it('実測値があれば CSV 値より優先する（古い値に戻らない）', () => {
+    const v = resolveMarketCap(
+      result({ market_cap_asof: 1e12, market_cap: 9.9e13, market_cap_date: '2026-07-31' }),
+    );
+
+    expect(v.text).toBe('1.0兆');
   });
 });

@@ -34,6 +34,12 @@ class ScreeningResult(BaseModel):
     ticker: str
     name: str
     market_cap: int | None = None
+    # スキャン実施日時点の時価総額(発行済株式数 × 最終日足終値)と、その基準日。
+    # market_cap はユニバース CSV の登録値で、足切りフィルタとフォールバック表示に使う。
+    # 既定 None は後方互換のため必須 — 旧バージョンが書いた結果 JSON にこの
+    # フィールドが無く、response_model の検証時に null が埋まることに依存している。
+    market_cap_asof: int | None = None
+    market_cap_date: str | None = None
     score: int
     score_detail: ScoreDetail
     pivots: list[ScreeningPivot]
