@@ -23,6 +23,7 @@ import {
   SHORTCUT_OPT_OUT_SELECTOR,
   toggleDrawingsVisibility,
 } from '../../lib/drawingVisibility';
+import { tickStepForLabels, widestDateLabel } from '../../lib/xAxisTicks';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
@@ -416,11 +417,13 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     }
 
     const xAxisGridBottom = FIN_H > 0 ? lastPaneBottom : size.h - X_AXIS_H;
-    const tickStep = Math.max(1, Math.floor(nVis / 10));
+    const tf = state.timeframe;
+    // 間引き間隔はラベルの実測幅から決める（本数固定だと日中足が重なる）
+    const tickLabelW = ctx.measureText(widestDateLabel(tf)).width;
+    const tickStep = tickStepForLabels(nVis, bw, tickLabelW);
     ctx.strokeStyle = COLORS.gridSoft;
     ctx.fillStyle = COLORS.muted;
     ctx.textAlign = 'center';
-    const tf = state.timeframe;
     for (let i = view.start; i < view.end; i += tickStep) {
       const x = xScale(i);
       ctx.beginPath();

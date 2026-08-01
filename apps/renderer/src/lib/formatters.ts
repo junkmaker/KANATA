@@ -11,16 +11,24 @@ export function fmtVol(v: number): string {
   return String(v);
 }
 
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/**
+ * バーの時刻を `YY/MM/DD`（日中足は `YY/MM/DD HH:mm`）で返す。
+ *
+ * ロケール API を使わないのは、`toLocaleDateString('en-GB')` の英語月名だと
+ * 月ごとに文字幅が変わり、Canvas の X 軸ラベルと等幅フォントの列で桁が揃わないため。
+ * ゼロ埋めして常に固定幅にする。
+ *
+ * **ローカル時刻の getter を使う**（`getUTC*` ではない）。置き換え前の
+ * `toLocaleDateString` は `timeZone` 未指定でローカル解釈だったため、
+ * UTC getter にすると JST では日足の表示日が 1 日ずれる。
+ */
 export function fmtDate(t: number, tf: string): string {
   const d = new Date(t);
+  const ymd = `${pad2(d.getFullYear() % 100)}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
   if (tf === '5m' || tf === '15m' || tf === '60m') {
-    return d.toLocaleString('en-GB', {
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+    return `${ymd} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   }
-  return d.toLocaleDateString('en-GB', { year: '2-digit', month: 'short', day: '2-digit' });
+  return ymd;
 }
