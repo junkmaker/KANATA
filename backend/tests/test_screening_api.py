@@ -36,12 +36,13 @@ def _df(closes, volume=None):
     )
 
 
-def _n_df(volume_spike=False):
-    # D は末尾付近(index 34)に置き、直近性フィルタ(RECENCY_MAX_BARS)を満たす。
-    closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (34, 125.0)], total=40)
+def _n_df(volume_spike=False, d_index=34):
+    # D は末尾付近に置き、直近性フィルタ(RECENCY_MAX_BARS=10)を満たす。
+    # d_index をずらすと break_date が変わる — 並び順の検証に使う。
+    closes = _path([(0, 100.0), (10, 120.0), (18, 108.0), (d_index, 125.0)], total=40)
     vol = [1000.0] * 40
     if volume_spike:
-        vol[34] = 1600.0
+        vol[d_index] = 1600.0
     return _df(closes, vol)
 
 
@@ -96,45 +97,82 @@ def test_double_post_returns_409(client, screening_env):
 
 
 # --------------------------------------------------------------------------- #
-# run_scan (synchronous) — scoring, sort, filters
+# run_scan (synchronous) — 並び順とユニバースのフィルタ
 # --------------------------------------------------------------------------- #
-def test_scan_sorts_desc_and_applies_filters(client, screening_env, monkeypatch):
+def test_scan_sorts_by_break_date_desc(client, screening_env, monkeypatch):
+    """並びは **ブレイク日の新しい順**（スコア降順ではない）。
+
+    スコアに前方リターンの予測力が無いことがバックテストで確定したため、
+    順位付けに期待値の含意を持たせない（docs/n_pattern_backtest_spec.md §16.2）。
+    """
     csv_path = _write_universe(
         screening_env,
         [
-            ("7203", "High", 5_000_000_000_000),   # detected, volume spike -> high score
-            ("6758", "Low", 4_000_000_000_000),    # detected, no spike -> lower score
-            ("9984", "Broken", 3_000_000_000_000),  # fetch fails -> skipped
-            ("1301", "Tiny", 9_000_000_000),        # < 100 億 -> filtered before fetch
+            ("7203", "Old", 5_000_000_000_000),     # 古いブレイク + 出来高急増(高スコア)
+            ("6758", "New", 4_000_000_000_000),     # 新しいブレイク + 急増なし(低スコア)
+            ("9984", "Broken", 3_000_000_000_000),  # fetch 失敗 → スキップ
+            ("1301", "Tiny", 9_000_000_000),        # < 100 億 → fetch 前に除外
         ],
     )
 
     def fake_fetch(code):
         if code == "7203":
-            return _n_df(volume_spike=True)
+            return _n_df(volume_spike=True, d_index=30)   # 古い
         if code == "6758":
-            return _n_df(volume_spike=False)
+            return _n_df(volume_spike=False, d_index=34)  # 新しい
         if code == "9984":
             return None
-        raise AssertionError(f"unexpected fetch for {code}")  # 1301 must be filtered out
+        raise AssertionError(f"unexpected fetch for {code}")  # 1301 は除外されているはず
 
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", fake_fetch)
 
     payload = screening_provider.run_scan(csv_path=csv_path)
-    assert payload["universe_count"] == 3  # 1301 excluded by market cap
-    assert [r["ticker"] for r in payload["results"]] == ["7203", "6758"]
-    assert payload["results"][0]["score"] >= payload["results"][1]["score"]
+    assert payload["universe_count"] == 3  # 1301 は時価総額で除外
+    results = payload["results"]
 
-    # GET returns cached results, sorted, with min_score filter.
-    all_results = client.get("/api/screening/n-pattern?min_score=0").json()
-    assert [r["ticker"] for r in all_results["results"]] == ["7203", "6758"]
+    # 新しいブレイクが先。**スコアの高い 7203 が後ろに来る**のがこのテストの要点。
+    assert [r["ticker"] for r in results] == ["6758", "7203"]
+    assert results[0]["break_date"] > results[1]["break_date"]
+    assert results[0]["score"] < results[1]["score"]
 
-    # しきい値はスコア構成の変更(例: TREND_BONUS を 0 にすると満点が 75 になる)で
-    # ずれるため、固定値ではなく実際のスコアから導く。
-    high, low = (r["score"] for r in all_results["results"])
-    assert high > low, "出来高急増側が高スコアでないとこのフィルタ検証は成立しない"
-    filtered = client.get(f"/api/screening/n-pattern?min_score={high}").json()
-    assert [r["ticker"] for r in filtered["results"]] == ["7203"]
+    # GET はキャッシュ済み結果をそのまま返す（min_score による絞り込みは廃止）
+    body = client.get("/api/screening/n-pattern").json()
+    assert [r["ticker"] for r in body["results"]] == ["6758", "7203"]
+
+
+def test_scan_breaks_ties_by_ticker_ascending(client, screening_env, monkeypatch):
+    """ブレイク日が同着なら ticker 昇順。日ごとの並びを決定的にするため。"""
+    csv_path = _write_universe(
+        screening_env,
+        [("7203", "A", 5_000_000_000_000), ("6758", "B", 4_000_000_000_000)],
+    )
+    monkeypatch.setattr(
+        screening_provider, "_fetch_daily_df", lambda code: _n_df(d_index=34)
+    )
+
+    results = screening_provider.run_scan(csv_path=csv_path)["results"]
+
+    assert len(results) == 2
+    assert results[0]["break_date"] == results[1]["break_date"]
+    assert [r["ticker"] for r in results] == ["6758", "7203"]
+
+
+def test_min_score_query_is_ignored(client, screening_env, monkeypatch):
+    """廃止した min_score を付けても結果が変わらない（絞り込みは表示側の責務）。"""
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    monkeypatch.setattr(
+        screening_provider, "_fetch_daily_df", lambda code: _n_df(d_index=34)
+    )
+    screening_provider.run_scan(csv_path=csv_path)
+
+    plain = client.get("/api/screening/n-pattern").json()
+    with_query = client.get("/api/screening/n-pattern?min_score=999").json()
+
+    assert plain["results"] == with_query["results"]
+    assert len(plain["results"]) == 1
+    # score / score_detail はレスポンスに残す（再検証の経路を潰さないため）
+    assert "score" in plain["results"][0]
+    assert "score_detail" in plain["results"][0]
 
 
 def test_scan_missing_csv_sets_error_status(client, screening_env):
