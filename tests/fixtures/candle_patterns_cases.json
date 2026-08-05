@@ -1,0 +1,99 @@
+{
+  "_comment": "TS(apps/renderer/src/lib/candlePatterns.ts) と Python(backend/src/analysis/candle_patterns.py) の検出一致を担保する共有ケース。片方だけ変更すると必ずどちらかのテストが落ちる。patterns は両側に存在する型のみ（shooting_star は Python 専用のため除外）。expect は各ケースで発火する全パターンを網羅しており、キーの無いパターンは 0 件であることを意味する。bars は [open, high, low, close]、index は確定バー（複数バー構成では最終バー）。",
+  "patterns": [
+    "bullish_engulfing",
+    "bearish_engulfing",
+    "bullish_harami",
+    "bearish_harami",
+    "doji",
+    "hammer",
+    "morning_star",
+    "evening_star"
+  ],
+  "labels": {
+    "bullish_engulfing": "陽線包み",
+    "bearish_engulfing": "陰線包み",
+    "bullish_harami": "陽線はらみ",
+    "bearish_harami": "陰線はらみ",
+    "doji": "同時線",
+    "hammer": "ハンマー",
+    "morning_star": "明けの明星",
+    "evening_star": "宵の明星"
+  },
+  "signals": {
+    "bullish_engulfing": "bullish",
+    "bearish_engulfing": "bearish",
+    "bullish_harami": "bullish",
+    "bearish_harami": "bearish",
+    "doji": "neutral",
+    "hammer": "bullish",
+    "morning_star": "bullish",
+    "evening_star": "bearish"
+  },
+  "cases": [
+    {
+      "name": "bullish_harami_basic",
+      "note": "大陰線の実体に小陽線が内包される",
+      "bars": [[110, 112, 99, 100], [104, 107, 103, 106]],
+      "expect": { "bullish_harami": [1] }
+    },
+    {
+      "name": "bearish_harami_basic",
+      "note": "bullish_harami_basic を 220 で価格反転させた鏡像",
+      "bars": [[110, 121, 108, 120], [116, 117, 113, 114]],
+      "expect": { "bearish_harami": [1] }
+    },
+    {
+      "name": "harami_rejects_small_prev_body",
+      "note": "前足の実体がレンジの HARAMI_BODY_RATIO 未満（3 < 0.3*13）",
+      "bars": [[103, 112, 99, 100], [101, 104, 100.5, 102]],
+      "expect": {}
+    },
+    {
+      "name": "harami_rejects_body_outside",
+      "note": "当足の実体上端が前足の実体上端を超える（111 > 110）",
+      "bars": [[110, 112, 99, 100], [104, 113, 103, 111]],
+      "expect": {}
+    },
+    {
+      "name": "bullish_engulfing_basic",
+      "bars": [[110, 112, 104, 105], [104, 116, 103, 115]],
+      "expect": { "bullish_engulfing": [1] }
+    },
+    {
+      "name": "bearish_engulfing_basic",
+      "bars": [[105, 112, 104, 110], [115, 116, 103, 104]],
+      "expect": { "bearish_engulfing": [1] }
+    },
+    {
+      "name": "morning_star_basic",
+      "note": "大陰線 → 小実体 → 1本目の実体中点(105)を上回る陽線",
+      "bars": [[110, 111, 99, 100], [98, 99.5, 97, 98.3], [99, 107, 98.5, 106]],
+      "expect": { "morning_star": [2] }
+    },
+    {
+      "name": "evening_star_basic",
+      "note": "大陽線 → 小実体 → 1本目の実体中点(105)を割り込む陰線",
+      "bars": [[100, 110.5, 99.5, 110], [111, 112, 110.8, 111.3], [109, 109.5, 102.5, 103]],
+      "expect": { "evening_star": [2] }
+    },
+    {
+      "name": "doji_basic",
+      "note": "上ヒゲが長くハンマーにはならない小実体",
+      "bars": [[100, 110, 90, 100.5]],
+      "expect": { "doji": [0] }
+    },
+    {
+      "name": "hammer_cofires_with_doji",
+      "note": "小実体かつ長い下ヒゲ。同一バーに 2 種が同時に立つ（意図した挙動）",
+      "bars": [[100, 101, 90, 100.5]],
+      "expect": { "doji": [0], "hammer": [0] }
+    },
+    {
+      "name": "zero_range_detects_nothing",
+      "note": "四値同一。ゼロ除算せず全パターンが沈黙する",
+      "bars": [[100, 100, 100, 100]],
+      "expect": {}
+    }
+  ]
+}

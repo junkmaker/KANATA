@@ -99,7 +99,15 @@ export interface DrawingObject {
 }
 
 // --- Candlestick patterns ---
-export type CandlePatternType = 'bullish_engulfing' | 'doji' | 'evening_star' | 'hammer';
+export type CandlePatternType =
+  | 'bearish_engulfing'
+  | 'bearish_harami'
+  | 'bullish_engulfing'
+  | 'bullish_harami'
+  | 'doji'
+  | 'evening_star'
+  | 'hammer'
+  | 'morning_star';
 export type PatternSignal = 'bullish' | 'bearish' | 'neutral';
 
 export interface PatternMatch {

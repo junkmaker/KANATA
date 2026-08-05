@@ -4,14 +4,22 @@
 チャートに描かれるものと検証対象がズレると、検証結果を UI に持ち込めないため。
 片方だけ変更してはいけない（変更時は両方 + テストを揃える）。
 
-TS 側に無い `morning_star`（明けの明星）は `evening_star` の厳密な鏡像として定義した。
-`bearish_engulfing` / `shooting_star` も同様の鏡像。
+`morning_star` / `bearish_engulfing` / `bearish_harami` は、それぞれ
+`evening_star` / `bullish_engulfing` / `bullish_harami` の厳密な鏡像として定義した。
+このうち鏡像側が TS に無いのは `shooting_star`（流れ星）だけで、TS 8 種 / Python 9 種の
+非対称はこの 1 つに由来する（流れ星の TS 移植は逆ハンマーとの文脈問題と併せて別フェーズ）。
+共有フィクスチャ `tests/fixtures/candle_patterns_cases.json` の ``patterns`` から
+`shooting_star` を除いてあるのは、この非対称が一致テストを壊さないようにするため。
 
 `n_pattern.py` と同じく pandas.DataFrame を受け取るだけで、yfinance 取得や
 ファイル I/O は一切行わない（呼び出し側 = scripts/candle_backtest.py が担う）。
 
 各検出器は「そのバーでパターンが成立したか」を表す bool 配列（長さ = len(df)）を返す。
 複数バー構成のパターンでは **最終バーの位置** に True が立つ。
+
+Phase 2/3 で追加予定の型名（先に確定済み。並行実装のコンフリクトを避けるため）:
+    two_black_gapping(下放れ二本黒) / upside_gap_two_white(上放れ並び赤) /
+    hanging_man(首吊り線) / island_top(アイランド天井) / island_bottom(アイランドボトム)
 """
 from __future__ import annotations
 
@@ -27,12 +35,15 @@ DOJI_BODY_RATIO = 0.1      # 実体がレンジの 10% 以下なら同時線
 HAMMER_LOWER_RATIO = 2.0   # 下ヒゲが実体の 2 倍以上
 HAMMER_UPPER_RATIO = 0.25  # 上ヒゲがレンジの 25% 以下
 STAR_BODY_RATIO = 0.3      # 明星の 1本目の大実体 / 2本目の小実体（レンジ比）
+HARAMI_BODY_RATIO = 0.3    # はらみの前足に要求する大実体（レンジ比）
 
 REQUIRED_COLUMNS = ("Open", "High", "Low", "Close")
 
 LABELS: dict[str, str] = {
     "bullish_engulfing": "陽線包み",
     "bearish_engulfing": "陰線包み",
+    "bullish_harami": "陽線はらみ",
+    "bearish_harami": "陰線はらみ",
     "doji": "同時線",
     "hammer": "ハンマー",
     "shooting_star": "流れ星",
@@ -43,6 +54,8 @@ LABELS: dict[str, str] = {
 SIGNALS: dict[str, str] = {
     "bullish_engulfing": "bullish",
     "bearish_engulfing": "bearish",
+    "bullish_harami": "bullish",
+    "bearish_harami": "bearish",
     "doji": "neutral",
     "hammer": "bullish",
     "shooting_star": "bearish",
@@ -139,6 +152,52 @@ def detect_bearish_engulfing(df: pd.DataFrame) -> np.ndarray:
     return _place(n, 1, ok)
 
 
+def detect_bullish_harami(df: pd.DataFrame) -> np.ndarray:
+    """陽線はらみ: 大陰線の実体に、翌足の陽線の実体が内包される。
+
+    包み（engulfing）の内外を反転させた形。前足に ``HARAMI_BODY_RATIO`` を要求するのは、
+    ヒゲばかりで方向感の無い前足を除くため。**判定は実体/レンジの比なので価格の絶対水準に
+    依らず、レンジ自体が小さい「静かな」バーは除外しない**（実測で内包候補の棄却は 3.9%）。
+    値幅そのものでの足切りが要るなら別の閾値を足すこと。
+    """
+    o, h, l, c = _ohlc(df)
+    n = len(c)
+    if n < 2:
+        return _empty(n)
+    po, ph, pl, pc = o[:-1], h[:-1], l[:-1], c[:-1]
+    co, cc = o[1:], c[1:]
+    pr = ph - pl
+    with np.errstate(invalid="ignore"):
+        ok = (
+            (pc < po)                                      # 前足は陰線
+            & (pr > 0)
+            & (np.abs(pc - po) >= HARAMI_BODY_RATIO * pr)  # 前足は大実体
+            & (cc > co)                                    # 当足は陽線
+            & (co >= pc) & (cc <= po)                      # 当足の実体が内包される
+        )
+    return _place(n, 1, ok)
+
+
+def detect_bearish_harami(df: pd.DataFrame) -> np.ndarray:
+    """陰線はらみ: 陽線はらみの鏡像（大陽線の実体に小陰線が収まる）。"""
+    o, h, l, c = _ohlc(df)
+    n = len(c)
+    if n < 2:
+        return _empty(n)
+    po, ph, pl, pc = o[:-1], h[:-1], l[:-1], c[:-1]
+    co, cc = o[1:], c[1:]
+    pr = ph - pl
+    with np.errstate(invalid="ignore"):
+        ok = (
+            (pc > po)                                      # 前足は陽線
+            & (pr > 0)
+            & (np.abs(pc - po) >= HARAMI_BODY_RATIO * pr)
+            & (cc < co)                                    # 当足は陰線
+            & (cc >= po) & (co <= pc)                      # 当足の実体が内包される
+        )
+    return _place(n, 1, ok)
+
+
 # --------------------------------------------------------------------------- #
 # 3 本構成（明星）
 # --------------------------------------------------------------------------- #
@@ -201,6 +260,8 @@ def detect_evening_star(df: pd.DataFrame, require_gap: bool = False) -> np.ndarr
 DETECTORS: dict[str, Callable[..., np.ndarray]] = {
     "bullish_engulfing": detect_bullish_engulfing,
     "bearish_engulfing": detect_bearish_engulfing,
+    "bullish_harami": detect_bullish_harami,
+    "bearish_harami": detect_bearish_harami,
     "doji": detect_doji,
     "hammer": detect_hammer,
     "shooting_star": detect_shooting_star,

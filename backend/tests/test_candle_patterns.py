@@ -6,6 +6,9 @@
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -68,6 +71,47 @@ def test_bearish_engulfing_is_the_mirror():
     bars = _df([(105, 112, 104, 110), (115, 116, 103, 104)])
     assert cp.detect_bearish_engulfing(bars).tolist() == [False, True]
     assert cp.detect_bullish_engulfing(bars).tolist() == [False, False]
+
+
+HARAMI = [
+    (110, 112, 99, 100),     # 大陰線（実体 10 / レンジ 13）
+    (104, 107, 103, 106),    # 小陽線が前足の実体（100〜110）に収まる
+]
+
+
+def test_bullish_harami_needs_large_prev_body_and_containment():
+    assert cp.detect_bullish_harami(_df(HARAMI)).tolist() == [False, True]
+    # 包みとは内外が逆なので同時には立たない
+    assert cp.detect_bullish_engulfing(_df(HARAMI)).tolist() == [False, False]
+
+
+def test_harami_rejects_small_prev_body():
+    """前足の実体がレンジの HARAMI_BODY_RATIO 未満なら「はらむ」大実体ではない。"""
+    bars = [(103, 112, 99, 100), HARAMI[1]]   # 実体 3 < 0.3 * 13
+    assert cp.detect_bullish_harami(_df(bars)).tolist() == [False, False]
+
+
+def test_harami_rejects_body_outside_prev_body():
+    bars = [HARAMI[0], (104, 113, 103, 111)]  # 実体上端 111 が前足の 110 を超える
+    assert cp.detect_bullish_harami(_df(bars)).tolist() == [False, False]
+
+
+def test_bearish_harami_is_the_price_mirror_of_bullish_harami():
+    """価格を反転（x → -x）させると陽線はらみと陰線はらみが入れ替わる。"""
+    flipped = _df([(-o, -l, -h, -c) for o, h, l, c in HARAMI])
+    assert cp.detect_bearish_harami(flipped).tolist() == [False, True]
+    assert cp.detect_bullish_harami(flipped).tolist() == [False, False]
+
+
+def test_identical_bodies_fire_both_harami_and_engulfing():
+    """実体が完全一致する縮退ケースでは inclusive な不等号により両方が立つ。
+
+    既存 engulfing の <= / >= に合わせた結果であり、実データでは事実上出ない。
+    挙動を固定しておくのは、片方だけ strict に変えた変更を検出するため。
+    """
+    bars = _df([(110, 112, 99, 100), (100, 116, 98, 110)])
+    assert cp.detect_bullish_harami(bars).tolist() == [False, True]
+    assert cp.detect_bullish_engulfing(bars).tolist() == [False, True]
 
 
 # --------------------------------------------------------------------------- #
@@ -152,3 +196,35 @@ def test_labels_and_signals_cover_every_pattern():
     """検出器・表示名・シグナル方向の 3 つが常に揃っていること。"""
     assert set(cp.LABELS) == set(cp.PATTERN_NAMES)
     assert set(cp.SIGNALS) == set(cp.PATTERN_NAMES)
+
+
+# --------------------------------------------------------------------------- #
+# TS との一致（共有フィクスチャ）
+# --------------------------------------------------------------------------- #
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "candle_patterns_cases.json"
+)
+FIXTURE = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+def test_fixture_patterns_are_all_registered():
+    """フィクスチャが参照する型は全て Python 側に存在すること。"""
+    assert set(FIXTURE["patterns"]) <= set(cp.PATTERN_NAMES)
+    for name in FIXTURE["patterns"]:
+        assert cp.LABELS[name] == FIXTURE["labels"][name]
+        assert cp.SIGNALS[name] == FIXTURE["signals"][name]
+
+
+@pytest.mark.parametrize("case", FIXTURE["cases"], ids=lambda c: c["name"])
+def test_shared_fixture_cases_match(case):
+    """共有ケースの検出 index が期待と完全一致すること（TS 側と同じ表明）。
+
+    ``expect`` は網羅。キーの無いパターンは 0 件でなければならない。
+    """
+    df = _df([tuple(b) for b in case["bars"]])
+    actual = {
+        name: np.flatnonzero(cp.detect(name, df)).tolist()
+        for name in FIXTURE["patterns"]
+    }
+    expected = {name: case["expect"].get(name, []) for name in FIXTURE["patterns"]}
+    assert actual == expected
