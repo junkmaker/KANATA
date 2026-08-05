@@ -63,6 +63,93 @@ describe('detectPatterns', () => {
     );
   });
 
+  it('陰線包みを検出する', () => {
+    // Arrange: 強気足 → 実体を包む弱気足
+    const bars = [bar(105, 112, 104, 110, 1), bar(115, 116, 103, 104, 2)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'bearish_engulfing',
+        signal: 'bearish',
+        label: '陰線包み',
+        idx: 1,
+        spanStart: 0,
+      }),
+    );
+  });
+
+  it('陽線はらみを検出する', () => {
+    // Arrange: 大陰線の実体（100〜110）に小陽線が収まる
+    const bars = [bar(110, 112, 99, 100, 1), bar(104, 107, 103, 106, 2)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'bullish_harami',
+        signal: 'bullish',
+        idx: 1,
+        spanStart: 0,
+      }),
+    );
+    // 包みとは内外が逆なので同時には立たない
+    expect(matches.some((m) => m.type === 'bullish_engulfing')).toBe(false);
+  });
+
+  it('前足の実体が小さいはらみは検出しない', () => {
+    // Arrange: 前足の実体 3 が HARAMI_BODY_RATIO * レンジ 13 = 3.9 に届かない
+    const bars = [bar(103, 112, 99, 100, 1), bar(101, 104, 100.5, 102, 2)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'bullish_harami')).toBe(false);
+  });
+
+  it('陰線はらみを価格反転で検出する', () => {
+    // Arrange: 陽線はらみを 220 で反転させた鏡像
+    const bars = [bar(110, 121, 108, 120, 1), bar(116, 117, 113, 114, 2)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({ type: 'bearish_harami', signal: 'bearish', idx: 1 }),
+    );
+    expect(matches.some((m) => m.type === 'bullish_harami')).toBe(false);
+  });
+
+  it('明けの明星を検出する', () => {
+    // Arrange: 弱気大陰線 → 小実体 → 強気で中点(105)超え
+    const bars = [
+      bar(110, 111, 99, 100, 1),
+      bar(98, 99.5, 97, 98.3, 2),
+      bar(99, 107, 98.5, 106, 3),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'morning_star',
+        signal: 'bullish',
+        label: '明けの明星',
+        idx: 2,
+        spanStart: 0,
+      }),
+    );
+  });
+
   it('宵の明星を検出する', () => {
     // Arrange: 強気大陽線 → 小実体 → 弱気で中点割れ
     const bars = [
@@ -97,6 +184,8 @@ describe('detectPatterns', () => {
     // 単一バーでは前足参照の陽線包み・宵の明星は検出されない
     expect(detectPatterns(single).some((m) => m.type === 'bullish_engulfing')).toBe(false);
     expect(detectPatterns(single).some((m) => m.type === 'evening_star')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'bullish_harami')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'morning_star')).toBe(false);
   });
 
   it('range=0（四値同一）でゼロ除算せず何も検出しない', () => {

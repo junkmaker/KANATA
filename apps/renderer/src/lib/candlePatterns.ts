@@ -5,20 +5,34 @@ const DOJI_BODY_RATIO = 0.1; // 実体がレンジの 10% 以下なら同時線
 const HAMMER_LOWER_RATIO = 2; // 下ヒゲが実体の 2 倍以上
 const HAMMER_UPPER_RATIO = 0.25; // 上ヒゲがレンジの 25% 以下
 const STAR_BODY_RATIO = 0.3; // 宵の明星・中央足の小実体判定（レンジ比）
+const HARAMI_BODY_RATIO = 0.3; // はらみの前足に要求する大実体（レンジ比）
 
 const LABELS: Record<CandlePatternType, string> = {
+  bearish_engulfing: '陰線包み',
+  bearish_harami: '陰線はらみ',
   bullish_engulfing: '陽線包み',
+  bullish_harami: '陽線はらみ',
   doji: '同時線',
   evening_star: '宵の明星',
   hammer: 'ハンマー',
+  morning_star: '明けの明星',
 };
 
 const SIGNALS: Record<CandlePatternType, PatternSignal> = {
+  bearish_engulfing: 'bearish',
+  bearish_harami: 'bearish',
   bullish_engulfing: 'bullish',
+  bullish_harami: 'bullish',
   doji: 'neutral',
   evening_star: 'bearish',
   hammer: 'bullish',
+  morning_star: 'bullish',
 };
+
+// 登録済みパターンのランタイム一覧。`LABELS` は Record<CandlePatternType, string> なので
+// union に型を足した時点で tsc が登録を強制し、この配列も自動で追随する。
+// 共有フィクスチャが「TS にまだ無い型」を先に載せていないかを検証するために公開している。
+export const PATTERN_TYPES = Object.keys(LABELS) as CandlePatternType[];
 
 function isBullish(bar: OHLCBar): boolean {
   return bar.c > bar.o;
@@ -65,6 +79,48 @@ function detectBullishEngulfing(bars: OHLCBar[], i: number): PatternMatch | null
   return null;
 }
 
+// 陰線包み: 陽線包みの鏡像（前足が強気、当足が弱気で前足の実体を包む）。
+function detectBearishEngulfing(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 1) return null;
+  const prev = bars[i - 1];
+  const cur = bars[i];
+  if (!isBullish(prev) || !isBearish(cur)) return null;
+  if (cur.o >= prev.c && cur.c <= prev.o) {
+    return makeMatch('bearish_engulfing', bars, i, i - 1);
+  }
+  return null;
+}
+
+// 陽線はらみ: 大陰線の実体に、翌足の陽線の実体が内包される（包みの内外反転）。
+function detectBullishHarami(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 1) return null;
+  const prev = bars[i - 1];
+  const cur = bars[i];
+  if (!isBearish(prev) || !isBullish(cur)) return null;
+  const prevRange = range(prev);
+  // 前足に大実体を要求する（ヒゲばかりで方向感の無い前足を除く）。
+  // 実体/レンジの比なので価格水準には依らず、レンジ自体が小さいバーは除外しない。
+  if (prevRange <= 0 || body(prev) < HARAMI_BODY_RATIO * prevRange) return null;
+  if (cur.o >= prev.c && cur.c <= prev.o) {
+    return makeMatch('bullish_harami', bars, i, i - 1);
+  }
+  return null;
+}
+
+// 陰線はらみ: 陽線はらみの鏡像（大陽線の実体に小陰線が収まる）。
+function detectBearishHarami(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 1) return null;
+  const prev = bars[i - 1];
+  const cur = bars[i];
+  if (!isBullish(prev) || !isBearish(cur)) return null;
+  const prevRange = range(prev);
+  if (prevRange <= 0 || body(prev) < HARAMI_BODY_RATIO * prevRange) return null;
+  if (cur.c >= prev.o && cur.o <= prev.c) {
+    return makeMatch('bearish_harami', bars, i, i - 1);
+  }
+  return null;
+}
+
 // 同時線: 実体がレンジの一定割合以下（レンジ 0 は非検出）。
 function detectDoji(bars: OHLCBar[], i: number): PatternMatch | null {
   const cur = bars[i];
@@ -86,6 +142,27 @@ function detectHammer(bars: OHLCBar[], i: number): PatternMatch | null {
   const lowerShadow = Math.min(cur.o, cur.c) - cur.l;
   if (lowerShadow >= HAMMER_LOWER_RATIO * b && upperShadow <= HAMMER_UPPER_RATIO * r) {
     return makeMatch('hammer', bars, i, i);
+  }
+  return null;
+}
+
+// 明けの明星: 弱気の大陰線 → 小実体 → 強気足が 1 本目の中点を上回る 3 本構成。
+function detectMorningStar(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 2) return null;
+  const first = bars[i - 2];
+  const star = bars[i - 1];
+  const cur = bars[i];
+  if (!isBearish(first) || !isBullish(cur)) return null;
+  const firstRange = range(first);
+  const starRange = range(star);
+  if (firstRange <= 0 || starRange <= 0) return null;
+  // 1 本目は大陰線、2 本目は小実体
+  if (body(first) < STAR_BODY_RATIO * firstRange) return null;
+  if (body(star) > STAR_BODY_RATIO * starRange) return null;
+  // 3 本目が 1 本目の実体中点を上回る
+  const firstMid = (first.o + first.c) / 2;
+  if (cur.c > firstMid) {
+    return makeMatch('morning_star', bars, i, i - 2);
   }
   return null;
 }
@@ -113,8 +190,12 @@ function detectEveningStar(bars: OHLCBar[], i: number): PatternMatch | null {
 
 const DETECTORS: Array<(bars: OHLCBar[], i: number) => PatternMatch | null> = [
   detectBullishEngulfing,
+  detectBearishEngulfing,
+  detectBullishHarami,
+  detectBearishHarami,
   detectDoji,
   detectHammer,
+  detectMorningStar,
   detectEveningStar,
 ];
 
