@@ -21,10 +21,13 @@
 既存の「`analysis/` は純関数・I/O なし / `scripts/` が I/O と探索」という分離を踏襲する。
 
 ```
-backend/src/analysis/candle_patterns.py   検出器（純関数・7パターン）
+backend/src/analysis/candle_patterns.py   検出器（純関数・11パターン）
 scripts/candle_backtest.py                OHLCV 読み込み・前方リターン・ランダム比較・集計
-backend/tests/test_candle_patterns.py     22 件
+backend/tests/test_candle_patterns.py     57 件
 ```
+
+**§3 の結果表は検証当時の 7 パターンぶん。** その後 Phase 1〜2 で 4 種
+（はらみ 2 種・下放れ二本黒・上放れ並び赤）を追加しており、追加分の検証は未実施。
 
 ### 1.1 定義はレンダラーと一致させる
 
@@ -42,6 +45,11 @@ TS 側に無い `morning_star` / `bearish_engulfing` / `shooting_star` は、既
 
 古典的な明けの明星は「星が 1 本目の実体より下に窓を開ける」ことを要求するが、
 **既定は窓を要求しない**（TS 側の宵の明星に合わせるため）。`--require-gap` で厳密版になる。
+
+**窓の基準はコード内に 2 種類ある。** `require_gap` は**実体基準**（星の実体が 1 本目の
+実体の外にあるか）だが、`has_gap_up` / `has_gap_down`（下放れ二本黒・上放れ並び赤・
+アイランドが使う）は**高安基準**（ヒゲを含めて重ならない）。見た目の「窓」と一致するのは
+後者で、前者は既定 off・UI 経路では未使用のため統一していない。
 
 ### 1.3 実装上の注意
 

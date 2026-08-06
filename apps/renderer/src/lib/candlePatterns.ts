@@ -6,6 +6,7 @@ const HAMMER_LOWER_RATIO = 2; // 下ヒゲが実体の 2 倍以上
 const HAMMER_UPPER_RATIO = 0.25; // 上ヒゲがレンジの 25% 以下
 const STAR_BODY_RATIO = 0.3; // 宵の明星・中央足の小実体判定（レンジ比）
 const HARAMI_BODY_RATIO = 0.3; // はらみの前足に要求する大実体（レンジ比）
+const SIDE_BY_SIDE_OPEN_TOLERANCE = 0.005; // 「並び」と見なす始値の相対許容差（0.5%）
 
 const LABELS: Record<CandlePatternType, string> = {
   bearish_engulfing: '陰線包み',
@@ -16,6 +17,8 @@ const LABELS: Record<CandlePatternType, string> = {
   evening_star: '宵の明星',
   hammer: 'ハンマー',
   morning_star: '明けの明星',
+  two_black_gapping: '下放れ二本黒',
+  upside_gap_two_white: '上放れ並び赤',
 };
 
 const SIGNALS: Record<CandlePatternType, PatternSignal> = {
@@ -27,6 +30,8 @@ const SIGNALS: Record<CandlePatternType, PatternSignal> = {
   evening_star: 'bearish',
   hammer: 'bullish',
   morning_star: 'bullish',
+  two_black_gapping: 'bearish',
+  upside_gap_two_white: 'bullish',
 };
 
 // 登録済みパターンのランタイム一覧。`LABELS` は Record<CandlePatternType, string> なので
@@ -48,6 +53,17 @@ function body(bar: OHLCBar): number {
 
 function range(bar: OHLCBar): number {
   return bar.h - bar.l;
+}
+
+// 窓（ギャップ）は高安基準 — ヒゲを含めて重ならないことを窓とする。
+// 接触（prev.h === cur.l）は窓ではない。Python 側 has_gap_up / has_gap_down と同値。
+// 明星の require_gap は実体基準だが既定 off で UI 経路では未使用のため統一していない。
+function hasGapUp(prev: OHLCBar, cur: OHLCBar): boolean {
+  return prev.h < cur.l;
+}
+
+function hasGapDown(prev: OHLCBar, cur: OHLCBar): boolean {
+  return prev.l > cur.h;
 }
 
 function makeMatch(
@@ -188,6 +204,33 @@ function detectEveningStar(bars: OHLCBar[], i: number): PatternMatch | null {
   return null;
 }
 
+// 下放れ二本黒: 下窓のあと陰線が 2 本続き、2 本目が終値を切り下げる（継続パターン）。
+// 他の検出器と違い反転ではなく継続を示すため、矢印は下降の継続方向を指す。
+function detectTwoBlackGapping(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 2) return null;
+  const before = bars[i - 2];
+  const first = bars[i - 1];
+  const cur = bars[i];
+  if (!hasGapDown(before, first)) return null;
+  if (!isBearish(first) || !isBearish(cur)) return null;
+  // 終値を切り下げること（切り上げたら継続の形にならない）
+  if (cur.c >= first.c) return null;
+  return makeMatch('two_black_gapping', bars, i, i - 2);
+}
+
+// 上放れ並び赤: 上窓のあと陽線が 2 本並び、2 本目がほぼ同じ始値で寄る（継続パターン）。
+function detectUpsideGapTwoWhite(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (i < 2) return null;
+  const before = bars[i - 2];
+  const first = bars[i - 1];
+  const cur = bars[i];
+  if (!hasGapUp(before, first)) return null;
+  if (!isBullish(first) || !isBullish(cur)) return null;
+  // 「並び」は始値の近接のみで判定する（実体サイズの近接は条件に入れない）
+  if (Math.abs(cur.o - first.o) > SIDE_BY_SIDE_OPEN_TOLERANCE * Math.abs(first.o)) return null;
+  return makeMatch('upside_gap_two_white', bars, i, i - 2);
+}
+
 const DETECTORS: Array<(bars: OHLCBar[], i: number) => PatternMatch | null> = [
   detectBullishEngulfing,
   detectBearishEngulfing,
@@ -197,6 +240,8 @@ const DETECTORS: Array<(bars: OHLCBar[], i: number) => PatternMatch | null> = [
   detectHammer,
   detectMorningStar,
   detectEveningStar,
+  detectTwoBlackGapping,
+  detectUpsideGapTwoWhite,
 ];
 
 // 全バーを走査し、各検出器のヒットを集約する。同一バーに複数ヒット可。
