@@ -1,5 +1,5 @@
 {
-  "_comment": "TS(apps/renderer/src/lib/candlePatterns.ts) と Python(backend/src/analysis/candle_patterns.py) の検出一致を担保する共有ケース。片方だけ変更すると必ずどちらかのテストが落ちる。patterns は両側に存在する型のみ（shooting_star は Python 専用のため除外）。expect は各ケースで発火する全パターンを網羅しており、キーの無いパターンは 0 件であることを意味する。bars は [open, high, low, close]、index は確定バー（複数バー構成では最終バー）。",
+  "_comment": "TS(apps/renderer/src/lib/candlePatterns.ts) と Python(backend/src/analysis/candle_patterns.py) の検出一致を担保する共有ケース。片方だけ変更すると必ずどちらかのテストが落ちる。patterns は両側に存在する型のみ（shooting_star は Python 専用のため除外）。expect は各ケースで発火する全パターンを網羅しており、キーの無いパターンは 0 件であることを意味する。bars は [open, high, low, close]、index は確定バー（複数バー構成では最終バー）。窓系 2 種は「窓の手前のバー + 窓の後 2 本」の 3 本構成で、確定バーは 3 本目。",
   "patterns": [
     "bullish_engulfing",
     "bearish_engulfing",
@@ -8,7 +8,9 @@
     "doji",
     "hammer",
     "morning_star",
-    "evening_star"
+    "evening_star",
+    "two_black_gapping",
+    "upside_gap_two_white"
   ],
   "labels": {
     "bullish_engulfing": "陽線包み",
@@ -18,7 +20,9 @@
     "doji": "同時線",
     "hammer": "ハンマー",
     "morning_star": "明けの明星",
-    "evening_star": "宵の明星"
+    "evening_star": "宵の明星",
+    "two_black_gapping": "下放れ二本黒",
+    "upside_gap_two_white": "上放れ並び赤"
   },
   "signals": {
     "bullish_engulfing": "bullish",
@@ -28,7 +32,9 @@
     "doji": "neutral",
     "hammer": "bullish",
     "morning_star": "bullish",
-    "evening_star": "bearish"
+    "evening_star": "bearish",
+    "two_black_gapping": "bearish",
+    "upside_gap_two_white": "bullish"
   },
   "cases": [
     {
@@ -93,6 +99,42 @@
       "name": "zero_range_detects_nothing",
       "note": "四値同一。ゼロ除算せず全パターンが沈黙する",
       "bars": [[100, 100, 100, 100]],
+      "expect": {}
+    },
+    {
+      "name": "two_black_gapping_basic",
+      "note": "下窓 → 陰線 → 終値を切り下げる陰線。窓の手前のバーを含む 3 本",
+      "bars": [[100, 108, 99, 106], [96, 98, 92, 93], [92, 93, 87, 88]],
+      "expect": { "two_black_gapping": [2] }
+    },
+    {
+      "name": "two_black_gapping_rejects_overlapping_shadows",
+      "note": "実体は離れているがヒゲが重なる（高値 100 > 手前の安値 99）。高安基準では窓ではない",
+      "bars": [[100, 108, 99, 106], [96, 100, 92, 93], [92, 93, 87, 88]],
+      "expect": {}
+    },
+    {
+      "name": "two_black_gapping_rejects_rising_close",
+      "note": "3本目が陰線でも終値 94 が 2本目の 93 を上回るので不成立",
+      "bars": [[100, 108, 99, 106], [96, 98, 92, 93], [95, 96, 93, 94]],
+      "expect": {}
+    },
+    {
+      "name": "upside_gap_two_white_basic",
+      "note": "上窓 → 陽線 → ほぼ同じ始値の陽線（差 0.4 <= 0.005 * 108 = 0.54）",
+      "bars": [[100, 105, 98, 104], [108, 113, 107, 112], [108.4, 115, 108, 114]],
+      "expect": { "upside_gap_two_white": [2] }
+    },
+    {
+      "name": "upside_gap_two_white_rejects_open_beyond_tolerance",
+      "note": "始値の差 1.0 が許容差 0.54 を超える",
+      "bars": [[100, 105, 98, 104], [108, 113, 107, 112], [109, 115, 108.5, 114]],
+      "expect": {}
+    },
+    {
+      "name": "upside_gap_two_white_rejects_touching_low",
+      "note": "安値 105 が手前の高値 105 と一致。接触は窓ではない（strict な不等号）",
+      "bars": [[100, 105, 98, 104], [108, 113, 105, 112], [108.4, 115, 108, 114]],
       "expect": {}
     }
   ]

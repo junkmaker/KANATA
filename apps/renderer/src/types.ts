@@ -107,7 +107,9 @@ export type CandlePatternType =
   | 'doji'
   | 'evening_star'
   | 'hammer'
-  | 'morning_star';
+  | 'morning_star'
+  | 'two_black_gapping'
+  | 'upside_gap_two_white';
 export type PatternSignal = 'bullish' | 'bearish' | 'neutral';
 
 export interface PatternMatch {

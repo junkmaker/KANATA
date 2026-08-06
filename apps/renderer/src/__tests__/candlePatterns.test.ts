@@ -172,6 +172,85 @@ describe('detectPatterns', () => {
     );
   });
 
+  it('下放れ二本黒を検出する', () => {
+    // Arrange: 下窓 → 陰線 → 終値を切り下げる陰線
+    const bars = [bar(100, 108, 99, 106, 1), bar(96, 98, 92, 93, 2), bar(92, 93, 87, 88, 3)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert: 窓の手前のバーを含む 3 本が span になる
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'two_black_gapping',
+        signal: 'bearish',
+        label: '下放れ二本黒',
+        idx: 2,
+        spanStart: 0,
+      }),
+    );
+  });
+
+  it('ヒゲが重なる下放れは検出しない', () => {
+    // Arrange: 実体は離れているが高値 100 が手前の安値 99 を上回る（高安基準）
+    const bars = [bar(100, 108, 99, 106, 1), bar(96, 100, 92, 93, 2), bar(92, 93, 87, 88, 3)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'two_black_gapping')).toBe(false);
+  });
+
+  it('終値を切り下げない下放れ二本黒は検出しない', () => {
+    // Arrange: 3本目は陰線だが終値 94 が 2本目の 93 を上回る
+    const bars = [bar(100, 108, 99, 106, 1), bar(96, 98, 92, 93, 2), bar(95, 96, 93, 94, 3)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'two_black_gapping')).toBe(false);
+  });
+
+  it('上放れ並び赤を検出する', () => {
+    // Arrange: 上窓 → 陽線 → 始値の差 0.4 が許容差 0.54 に収まる陽線
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(108, 113, 107, 112, 2),
+      bar(108.4, 115, 108, 114, 3),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'upside_gap_two_white',
+        signal: 'bullish',
+        label: '上放れ並び赤',
+        idx: 2,
+        spanStart: 0,
+      }),
+    );
+  });
+
+  it('始値がずれた上放れ並び赤は検出しない', () => {
+    // Arrange: 始値の差 1.0 が許容差 0.54 を超える
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(108, 113, 107, 112, 2),
+      bar(109, 115, 108.5, 114, 3),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'upside_gap_two_white')).toBe(false);
+  });
+
   it('先頭バー・短い配列でも範囲外参照せず例外を投げない', () => {
     // Arrange
     const empty: OHLCBar[] = [];
@@ -186,6 +265,8 @@ describe('detectPatterns', () => {
     expect(detectPatterns(single).some((m) => m.type === 'evening_star')).toBe(false);
     expect(detectPatterns(single).some((m) => m.type === 'bullish_harami')).toBe(false);
     expect(detectPatterns(single).some((m) => m.type === 'morning_star')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'two_black_gapping')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'upside_gap_two_white')).toBe(false);
   });
 
   it('range=0（四値同一）でゼロ除算せず何も検出しない', () => {

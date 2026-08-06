@@ -167,6 +167,82 @@ def test_evening_star_is_the_price_mirror_of_morning_star():
 
 
 # --------------------------------------------------------------------------- #
+# 窓（ギャップ）と 3 本構成の継続パターン
+# --------------------------------------------------------------------------- #
+def test_gap_helpers_use_high_low_and_reject_touching():
+    """高安基準。接触（前足の高値 == 当足の安値）は窓ではない。"""
+    assert bool(cp.has_gap_up(prev_high=100.0, cur_low=101.0)) is True
+    assert bool(cp.has_gap_up(prev_high=100.0, cur_low=100.0)) is False
+    assert bool(cp.has_gap_down(prev_low=100.0, cur_high=99.0)) is True
+    assert bool(cp.has_gap_down(prev_low=100.0, cur_high=100.0)) is False
+
+
+def test_gap_helpers_reject_positional_arguments():
+    """引数はキーワード専用（位置引数は TypeError）。
+
+    上窓と下窓では見る値が上下反転するため、位置引数を許すと取り違えても例外にならず
+    「検出が多すぎる」形でしか現れない。呼び出し側に値の意味を書かせて防ぐ。
+    """
+    with pytest.raises(TypeError):
+        cp.has_gap_up(100.0, 101.0)
+    with pytest.raises(TypeError):
+        cp.has_gap_down(100.0, 99.0)
+
+
+TWO_BLACK = [
+    (100, 108, 99, 106),     # 窓の手前のバー（安値 99）
+    (96, 98, 92, 93),        # 陰線。高値 98 < 99 なので下窓
+    (92, 93, 87, 88),        # 陰線。終値 88 < 93 で切り下げる
+]
+
+
+def test_two_black_gapping_marks_the_third_bar():
+    """3 本構成のパターンは **最終バー** の位置に True を立てる。"""
+    assert cp.detect_two_black_gapping(_df(TWO_BLACK)).tolist() == [False, False, True]
+
+
+def test_two_black_gapping_rejects_overlapping_shadows():
+    """実体は離れていてもヒゲが重なれば窓ではない（高安基準の肝）。"""
+    # 高値 100 が手前のバーの安値 99 を上回る。実体基準なら窓ありと判定される形
+    bars = [TWO_BLACK[0], (96, 100, 92, 93), TWO_BLACK[2]]
+    assert not cp.detect_two_black_gapping(_df(bars)).any()
+
+
+def test_two_black_gapping_rejects_rising_close():
+    """2 本目が終値を切り下げなければ「二本黒」の継続にならない。"""
+    bars = TWO_BLACK[:2] + [(95, 96, 93, 94)]   # 陰線だが終値 94 > 93
+    assert not cp.detect_two_black_gapping(_df(bars)).any()
+
+
+SIDE_BY_SIDE = [
+    (100, 105, 98, 104),     # 窓の手前のバー（高値 105）
+    (108, 113, 107, 112),    # 陽線。安値 107 > 105 なので上窓
+    (108.4, 115, 108, 114),  # 陽線。始値の差 0.4 <= 0.005 * 108 = 0.54
+]
+
+
+def test_upside_gap_two_white_marks_the_third_bar():
+    assert cp.detect_upside_gap_two_white(_df(SIDE_BY_SIDE)).tolist() == [False, False, True]
+
+
+def test_upside_gap_two_white_rejects_open_beyond_tolerance():
+    """始値が SIDE_BY_SIDE_OPEN_TOLERANCE を超えてずれたら「並び」ではない。"""
+    bars = SIDE_BY_SIDE[:2] + [(109, 115, 108.5, 114)]   # 差 1.0 > 0.54
+    assert not cp.detect_upside_gap_two_white(_df(bars)).any()
+
+
+def test_gap_patterns_are_not_mirrors_of_each_other():
+    """窓系 2 種は鏡像ペアではない（価格を反転しても相手は立たない）。
+
+    下放れ二本黒は終値の切り下げ、上放れ並び赤は始値の一致を要求しており、
+    条件が非対称。鏡像テストを書かない理由をここで固定しておく。
+    """
+    flipped = _df([(-o, -l, -h, -c) for o, h, l, c in TWO_BLACK])
+    assert not cp.detect_upside_gap_two_white(flipped).any()
+    assert not cp.detect_two_black_gapping(flipped).any()
+
+
+# --------------------------------------------------------------------------- #
 # 契約
 # --------------------------------------------------------------------------- #
 def test_detect_dispatches_and_rejects_unknown_names():
