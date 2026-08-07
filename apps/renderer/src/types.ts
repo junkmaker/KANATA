@@ -107,6 +107,9 @@ export type CandlePatternType =
   | 'doji'
   | 'evening_star'
   | 'hammer'
+  | 'hanging_man'
+  | 'island_bottom'
+  | 'island_top'
   | 'morning_star'
   | 'two_black_gapping'
   | 'upside_gap_two_white';

@@ -7,6 +7,9 @@ const HAMMER_UPPER_RATIO = 0.25; // 上ヒゲがレンジの 25% 以下
 const STAR_BODY_RATIO = 0.3; // 宵の明星・中央足の小実体判定（レンジ比）
 const HARAMI_BODY_RATIO = 0.3; // はらみの前足に要求する大実体（レンジ比）
 const SIDE_BY_SIDE_OPEN_TOLERANCE = 0.005; // 「並び」と見なす始値の相対許容差（0.5%）
+const HAMMER_TREND_LOOKBACK = 10; // ハンマー/首吊り線のトレンド参照本数
+const HAMMER_TREND_RATIO = 0.05; // トレンド成立の騰落率しきい値（±5%）
+const ISLAND_MAX_LEN = 5; // アイランドの島の最大長（本）
 
 const LABELS: Record<CandlePatternType, string> = {
   bearish_engulfing: '陰線包み',
@@ -16,6 +19,9 @@ const LABELS: Record<CandlePatternType, string> = {
   doji: '同時線',
   evening_star: '宵の明星',
   hammer: 'ハンマー',
+  hanging_man: '首吊り線',
+  island_bottom: 'アイランドボトム',
+  island_top: 'アイランド天井',
   morning_star: '明けの明星',
   two_black_gapping: '下放れ二本黒',
   upside_gap_two_white: '上放れ並び赤',
@@ -29,6 +35,9 @@ const SIGNALS: Record<CandlePatternType, PatternSignal> = {
   doji: 'neutral',
   evening_star: 'bearish',
   hammer: 'bullish',
+  hanging_man: 'bearish',
+  island_bottom: 'bullish',
+  island_top: 'bearish',
   morning_star: 'bullish',
   two_black_gapping: 'bearish',
   upside_gap_two_white: 'bullish',
@@ -64,6 +73,27 @@ function hasGapUp(prev: OHLCBar, cur: OHLCBar): boolean {
 
 function hasGapDown(prev: OHLCBar, cur: OHLCBar): boolean {
   return prev.l > cur.h;
+}
+
+// 直前バーまでの騰落率。終点を当日にしないのは、ハンマー自身の下ヒゲで戻す動きが
+// トレンド判定に混ざるのを避けるため。参照元が無い / 分母 0 は null（＝文脈なし）。
+// Python 側 trend_change_ratio と同値。Phase 6 の流れ星/逆ハンマーが再利用する。
+function trendChangeRatio(bars: OHLCBar[], i: number): number | null {
+  const baseIdx = i - 1 - HAMMER_TREND_LOOKBACK;
+  if (baseIdx < 0) return null;
+  const base = bars[baseIdx].c;
+  if (base === 0) return null;
+  return (bars[i - 1].c - base) / base;
+}
+
+// ハンマー型の形状条件だけ（トレンド文脈は見ない）。ハンマーと首吊り線が共有する。
+function hasHammerShape(bar: OHLCBar): boolean {
+  const r = range(bar);
+  const b = body(bar);
+  if (r <= 0 || b <= 0) return false;
+  const upperShadow = bar.h - Math.max(bar.o, bar.c);
+  const lowerShadow = Math.min(bar.o, bar.c) - bar.l;
+  return lowerShadow >= HAMMER_LOWER_RATIO * b && upperShadow <= HAMMER_UPPER_RATIO * r;
 }
 
 function makeMatch(
@@ -148,18 +178,22 @@ function detectDoji(bars: OHLCBar[], i: number): PatternMatch | null {
   return null;
 }
 
-// ハンマー: 小さい実体・長い下ヒゲ・短い上ヒゲ（レンジ 0・実体 0 は非検出）。
+// ハンマー: ハンマー型の形状 + 下降トレンド後（騰落率 <= -HAMMER_TREND_RATIO）。
+// 形状だけで判定していた旧定義を Phase 3 で三分化した。上昇後は首吊り線、
+// 横ばい（±HAMMER_TREND_RATIO の間）はどちらも出さない。
 function detectHammer(bars: OHLCBar[], i: number): PatternMatch | null {
-  const cur = bars[i];
-  const r = range(cur);
-  const b = body(cur);
-  if (r <= 0 || b <= 0) return null;
-  const upperShadow = cur.h - Math.max(cur.o, cur.c);
-  const lowerShadow = Math.min(cur.o, cur.c) - cur.l;
-  if (lowerShadow >= HAMMER_LOWER_RATIO * b && upperShadow <= HAMMER_UPPER_RATIO * r) {
-    return makeMatch('hammer', bars, i, i);
-  }
-  return null;
+  if (!hasHammerShape(bars[i])) return null;
+  const ratio = trendChangeRatio(bars, i);
+  if (ratio === null || ratio > -HAMMER_TREND_RATIO) return null;
+  return makeMatch('hammer', bars, i, i);
+}
+
+// 首吊り線: ハンマーと同一形状 + 上昇トレンド後。しきい値が対称なので同時に立たない。
+function detectHangingMan(bars: OHLCBar[], i: number): PatternMatch | null {
+  if (!hasHammerShape(bars[i])) return null;
+  const ratio = trendChangeRatio(bars, i);
+  if (ratio === null || ratio < HAMMER_TREND_RATIO) return null;
+  return makeMatch('hanging_man', bars, i, i);
 }
 
 // 明けの明星: 弱気の大陰線 → 小実体 → 強気足が 1 本目の中点を上回る 3 本構成。
@@ -231,6 +265,55 @@ function detectUpsideGapTwoWhite(bars: OHLCBar[], i: number): PatternMatch | nul
   return makeMatch('upside_gap_two_white', bars, i, i - 2);
 }
 
+// アイランド（天井/底）の共通実装。島の長さが可変なので、この 2 種だけ検出器の中に
+// 開始候補の探索ループがある。ハイライト枠は入口の窓の手前のバーから（Phase 2 の窓系と
+// 同じ流儀）。Python 側 _detect_island と同値。
+//
+// 島の内部に **入口と同じ向き** の窓があってもよいが、**逆向きの内部の窓は島を終わらせる**。
+// その窓こそが直前の島の出口であり、そこより手前は別の島だから — 見逃すと 1 つの入口の窓が
+// 後続のすべての出口の窓に使い回され、同じ入口から始まる島が何本も重なって描かれる。
+function detectIsland(
+  bars: OHLCBar[],
+  i: number,
+  type: 'island_top' | 'island_bottom',
+): PatternMatch | null {
+  const entryGapUp = type === 'island_top';
+  const entered = (a: number, b: number) =>
+    entryGapUp ? hasGapUp(bars[a], bars[b]) : hasGapDown(bars[a], bars[b]);
+  const exited = (a: number, b: number) =>
+    entryGapUp ? hasGapDown(bars[a], bars[b]) : hasGapUp(bars[a], bars[b]);
+
+  const e = i - 1; // 島の最終バー
+  if (e < 1) return null;
+  if (!exited(e, i)) return null;
+  const lo = Math.max(1, e - ISLAND_MAX_LEN + 1);
+  // 逆向きの内部の窓があれば、そこが直前の島の出口。島の開始はその後ろに限る
+  let sMin = lo;
+  for (let k = e; k > lo; k--) {
+    if (exited(k - 1, k)) {
+      sMin = k;
+      break;
+    }
+  }
+  // 開始候補は長い島から見る（到達できる範囲で最も早い窓を島の入口とする）
+  for (let s = sMin; s <= e; s++) {
+    if (entered(s - 1, s)) {
+      return makeMatch(type, bars, i, s - 1);
+    }
+  }
+  return null;
+}
+
+// アイランド天井: 上窓で切り離された島（最大 ISLAND_MAX_LEN 本）が下窓で終わる。
+function detectIslandTop(bars: OHLCBar[], i: number): PatternMatch | null {
+  return detectIsland(bars, i, 'island_top');
+}
+
+// アイランドボトム: アイランド天井の鏡像（下窓で入り上窓で出る）。
+function detectIslandBottom(bars: OHLCBar[], i: number): PatternMatch | null {
+  return detectIsland(bars, i, 'island_bottom');
+}
+
 const DETECTORS: Array<(bars: OHLCBar[], i: number) => PatternMatch | null> = [
   detectBullishEngulfing,
   detectBearishEngulfing,
@@ -238,10 +321,13 @@ const DETECTORS: Array<(bars: OHLCBar[], i: number) => PatternMatch | null> = [
   detectBearishHarami,
   detectDoji,
   detectHammer,
+  detectHangingMan,
   detectMorningStar,
   detectEveningStar,
   detectTwoBlackGapping,
   detectUpsideGapTwoWhite,
+  detectIslandTop,
+  detectIslandBottom,
 ];
 
 // 全バーを走査し、各検出器のヒットを集約する。同一バーに複数ヒット可。

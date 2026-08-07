@@ -1,5 +1,5 @@
 {
-  "_comment": "TS(apps/renderer/src/lib/candlePatterns.ts) と Python(backend/src/analysis/candle_patterns.py) の検出一致を担保する共有ケース。片方だけ変更すると必ずどちらかのテストが落ちる。patterns は両側に存在する型のみ（shooting_star は Python 専用のため除外）。expect は各ケースで発火する全パターンを網羅しており、キーの無いパターンは 0 件であることを意味する。bars は [open, high, low, close]、index は確定バー（複数バー構成では最終バー）。窓系 2 種は「窓の手前のバー + 窓の後 2 本」の 3 本構成で、確定バーは 3 本目。",
+  "_comment": "TS(apps/renderer/src/lib/candlePatterns.ts) と Python(backend/src/analysis/candle_patterns.py) の検出一致を担保する共有ケース。片方だけ変更すると必ずどちらかのテストが落ちる。patterns は両側に存在する型のみ（shooting_star は Python 専用のため除外）。expect は各ケースで発火する全パターンを網羅しており、キーの無いパターンは 0 件であることを意味する。bars は [open, high, low, close]、index は確定バー（複数バー構成では最終バー）。窓系 2 種は「窓の手前のバー + 窓の後 2 本」の 3 本構成で、確定バーは 3 本目。アイランドは可変長で、確定バーは出口の窓の後のバー。ハンマー/首吊り線は助走 11 本を含む 12 本構成で、確定バーは 12 本目。",
   "patterns": [
     "bullish_engulfing",
     "bearish_engulfing",
@@ -7,10 +7,13 @@
     "bearish_harami",
     "doji",
     "hammer",
+    "hanging_man",
     "morning_star",
     "evening_star",
     "two_black_gapping",
-    "upside_gap_two_white"
+    "upside_gap_two_white",
+    "island_top",
+    "island_bottom"
   ],
   "labels": {
     "bullish_engulfing": "陽線包み",
@@ -19,10 +22,13 @@
     "bearish_harami": "陰線はらみ",
     "doji": "同時線",
     "hammer": "ハンマー",
+    "hanging_man": "首吊り線",
     "morning_star": "明けの明星",
     "evening_star": "宵の明星",
     "two_black_gapping": "下放れ二本黒",
-    "upside_gap_two_white": "上放れ並び赤"
+    "upside_gap_two_white": "上放れ並び赤",
+    "island_top": "アイランド天井",
+    "island_bottom": "アイランドボトム"
   },
   "signals": {
     "bullish_engulfing": "bullish",
@@ -31,10 +37,13 @@
     "bearish_harami": "bearish",
     "doji": "neutral",
     "hammer": "bullish",
+    "hanging_man": "bearish",
     "morning_star": "bullish",
     "evening_star": "bearish",
     "two_black_gapping": "bearish",
-    "upside_gap_two_white": "bullish"
+    "upside_gap_two_white": "bullish",
+    "island_top": "bearish",
+    "island_bottom": "bullish"
   },
   "cases": [
     {
@@ -79,9 +88,9 @@
     },
     {
       "name": "evening_star_basic",
-      "note": "大陽線 → 小実体 → 1本目の実体中点(105)を割り込む陰線",
+      "note": "大陽線 → 小実体 → 1本目の実体中点(105)を割り込む陰線。星の前後に窓があるため 1 本の島としてアイランド天井も立つ（意図した同時発火）",
       "bars": [[100, 110.5, 99.5, 110], [111, 112, 110.8, 111.3], [109, 109.5, 102.5, 103]],
-      "expect": { "evening_star": [2] }
+      "expect": { "evening_star": [2], "island_top": [2] }
     },
     {
       "name": "doji_basic",
@@ -90,10 +99,10 @@
       "expect": { "doji": [0] }
     },
     {
-      "name": "hammer_cofires_with_doji",
-      "note": "小実体かつ長い下ヒゲ。同一バーに 2 種が同時に立つ（意図した挙動）",
+      "name": "doji_with_hammer_shape_and_no_trend_context",
+      "note": "小実体かつ長い下ヒゲ。助走が無いのでハンマーは成立せず同時線だけが立つ（Phase 3 の三分化）",
       "bars": [[100, 101, 90, 100.5]],
-      "expect": { "doji": [0], "hammer": [0] }
+      "expect": { "doji": [0] }
     },
     {
       "name": "zero_range_detects_nothing",
@@ -135,6 +144,77 @@
       "name": "upside_gap_two_white_rejects_touching_low",
       "note": "安値 105 が手前の高値 105 と一致。接触は窓ではない（strict な不等号）",
       "bars": [[100, 105, 98, 104], [108, 113, 105, 112], [108.4, 115, 108, 114]],
+      "expect": {}
+    },
+    {
+      "name": "hammer_after_downtrend",
+      "note": "助走 11 本の下降（騰落率 -25.6%）のあとにハンマー型。12 本目で成立する",
+      "bars": [[200, 201, 194, 195], [195, 196, 189, 190], [190, 191, 184, 185],
+               [185, 186, 179, 180], [180, 181, 174, 175], [175, 176, 169, 170],
+               [170, 171, 164, 165], [165, 166, 159, 160], [160, 161, 154, 155],
+               [155, 156, 149, 150], [150, 151, 144, 145], [142, 144, 132, 143.5]],
+      "expect": { "hammer": [11] }
+    },
+    {
+      "name": "hammer_cofires_with_doji_after_downtrend",
+      "note": "同じ助走で実体をさらに小さくすると同時線とハンマーが同一バーに立つ（意図した挙動）",
+      "bars": [[200, 201, 194, 195], [195, 196, 189, 190], [190, 191, 184, 185],
+               [185, 186, 179, 180], [180, 181, 174, 175], [175, 176, 169, 170],
+               [170, 171, 164, 165], [165, 166, 159, 160], [160, 161, 154, 155],
+               [155, 156, 149, 150], [150, 151, 144, 145], [142, 144, 132, 142.5]],
+      "expect": { "doji": [11], "hammer": [11] }
+    },
+    {
+      "name": "hanging_man_after_uptrend",
+      "note": "助走 11 本の上昇（騰落率 +47.6%）のあとに同じハンマー型。首吊り線になる",
+      "bars": [[100, 106, 99, 105], [105, 111, 104, 110], [110, 116, 109, 115],
+               [115, 121, 114, 120], [120, 126, 119, 125], [125, 131, 124, 130],
+               [130, 136, 129, 135], [135, 141, 134, 140], [140, 146, 139, 145],
+               [145, 151, 144, 150], [150, 156, 149, 155], [157, 159, 147, 158.5]],
+      "expect": { "hanging_man": [11] }
+    },
+    {
+      "name": "hammer_shape_in_flat_trend_detects_nothing",
+      "note": "騰落率 -2.56% は ±5% の帯の中。形状が成立してもハンマーも首吊り線も出さない",
+      "bars": [[200, 201, 194, 195], [199.5, 200.5, 193.5, 194.5], [199, 200, 193, 194],
+               [198.5, 199.5, 192.5, 193.5], [198, 199, 192, 193], [197.5, 198.5, 191.5, 192.5],
+               [197, 198, 191, 192], [196.5, 197.5, 190.5, 191.5], [196, 197, 190, 191],
+               [195.5, 196.5, 189.5, 190.5], [195, 196, 189, 190], [187, 189, 177, 188.5]],
+      "expect": {}
+    },
+    {
+      "name": "island_top_basic",
+      "note": "上窓 → 島 2 本 → 下窓。確定バーは出口の窓の後（idx 3）",
+      "bars": [[100, 105, 98, 104], [110, 115, 108, 112], [111, 116, 107, 108], [100, 104, 95, 96]],
+      "expect": { "island_top": [3] }
+    },
+    {
+      "name": "island_bottom_basic",
+      "note": "island_top_basic を 220 で価格反転させた鏡像（下窓で入り上窓で出る）",
+      "bars": [[120, 122, 115, 116], [110, 112, 105, 108], [109, 113, 104, 112], [120, 125, 116, 124]],
+      "expect": { "island_bottom": [3] }
+    },
+    {
+      "name": "island_top_at_max_len",
+      "note": "島がちょうど ISLAND_MAX_LEN = 5 本。境界は成立する",
+      "bars": [[100, 105, 98, 104], [110, 115, 108, 112], [112, 116, 109, 114],
+               [114, 118, 111, 116], [116, 120, 113, 118], [118, 122, 115, 120],
+               [110, 114, 105, 106]],
+      "expect": { "island_top": [6] }
+    },
+    {
+      "name": "island_stops_at_an_opposite_internal_gap",
+      "note": "上窓 1 つのあと下窓が 4 本続く。島は最初の下窓で終わるので成立は 1 件だけ（入口の窓を使い回さない）",
+      "bars": [[100, 105, 98, 104], [110, 115, 108, 112], [96, 106, 95, 100],
+               [86, 94, 85, 90], [76, 84, 75, 80], [66, 74, 65, 70]],
+      "expect": { "island_top": [2] }
+    },
+    {
+      "name": "island_rejects_len_over_max",
+      "note": "島が 6 本で ISLAND_MAX_LEN を超える。入口の窓が探索範囲の外に出るので不成立",
+      "bars": [[100, 105, 98, 104], [110, 115, 108, 112], [112, 116, 109, 114],
+               [114, 118, 111, 116], [116, 120, 113, 118], [118, 122, 115, 120],
+               [120, 124, 117, 122], [110, 116, 105, 106]],
       "expect": {}
     }
   ]
