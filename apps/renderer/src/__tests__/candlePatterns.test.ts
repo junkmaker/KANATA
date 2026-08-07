@@ -7,6 +7,27 @@ function bar(o: number, h: number, l: number, c: number, t = 0): OHLCBar {
   return { o, h, l, c, t, v: 0 };
 }
 
+// 下降/上昇/横ばいの助走 11 本。それ自体はどのパターンも発火させない。
+// ハンマー/首吊り線は 12 本目以降でしか成立しないので文脈系テストは必ず前置する。
+// Python 側 test_candle_patterns.py の DOWNTREND / UPTREND / FLAT と同じ数値。
+function downtrendPrefix(): OHLCBar[] {
+  return Array.from({ length: 11 }, (_, k) =>
+    bar(200 - 5 * k, 201 - 5 * k, 194 - 5 * k, 195 - 5 * k, k + 1),
+  );
+}
+
+function uptrendPrefix(): OHLCBar[] {
+  return Array.from({ length: 11 }, (_, k) =>
+    bar(100 + 5 * k, 106 + 5 * k, 99 + 5 * k, 105 + 5 * k, k + 1),
+  );
+}
+
+function flatPrefix(): OHLCBar[] {
+  return Array.from({ length: 11 }, (_, k) =>
+    bar(200 - 0.5 * k, 201 - 0.5 * k, 194 - 0.5 * k, 195 - 0.5 * k, k + 1),
+  );
+}
+
 describe('detectPatterns', () => {
   it('陽線包みを検出する', () => {
     // Arrange: 弱気足 → 実体を包む強気足
@@ -50,17 +71,60 @@ describe('detectPatterns', () => {
     );
   });
 
-  it('ハンマーを検出する', () => {
-    // Arrange: 小実体・長い下ヒゲ・短い上ヒゲ
-    const bars = [bar(105, 106.5, 100, 106, 1)];
+  it('下降トレンド後のハンマーを検出する', () => {
+    // Arrange: 助走 11 本の下降（騰落率 -25.6%）+ 小実体・長い下ヒゲ・短い上ヒゲ
+    const bars = [...downtrendPrefix(), bar(142, 144, 132, 143.5, 12)];
 
     // Act
     const matches = detectPatterns(bars);
 
     // Assert
     expect(matches).toContainEqual(
-      expect.objectContaining({ type: 'hammer', signal: 'bullish', idx: 0 }),
+      expect.objectContaining({ type: 'hammer', signal: 'bullish', idx: 11, spanStart: 11 }),
     );
+    expect(matches.some((m) => m.type === 'hanging_man')).toBe(false);
+  });
+
+  it('上昇トレンド後の同じ形は首吊り線として検出する', () => {
+    // Arrange: 形状は上と同一。助走だけを上昇（騰落率 +47.6%）に差し替える
+    const bars = [...uptrendPrefix(), bar(157, 159, 147, 158.5, 12)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert: 弱気に反転する（既存の誤ラベルの是正）
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'hanging_man',
+        signal: 'bearish',
+        label: '首吊り線',
+        idx: 11,
+        spanStart: 11,
+      }),
+    );
+    expect(matches.some((m) => m.type === 'hammer')).toBe(false);
+  });
+
+  it('横ばい後のハンマー型はどちらも検出しない', () => {
+    // Arrange: 騰落率 -2.56% は ±5% の帯の中
+    const bars = [...flatPrefix(), bar(187, 189, 177, 188.5, 12)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'hammer' || m.type === 'hanging_man')).toBe(false);
+  });
+
+  it('助走が足りないバーではハンマーを検出しない', () => {
+    // Arrange: 形状は成立しているが 11 本目（12 本目に届かない）
+    const bars = [...downtrendPrefix().slice(0, 10), bar(142, 144, 132, 143.5, 11)];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'hammer')).toBe(false);
   });
 
   it('陰線包みを検出する', () => {
@@ -251,6 +315,115 @@ describe('detectPatterns', () => {
     expect(matches.some((m) => m.type === 'upside_gap_two_white')).toBe(false);
   });
 
+  it('アイランド天井を検出する', () => {
+    // Arrange: 上窓 → 島 2 本 → 下窓
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(110, 115, 108, 112, 2),
+      bar(111, 116, 107, 108, 3),
+      bar(100, 104, 95, 96, 4),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert: 枠は入口の窓の手前のバーから確定バーまで
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'island_top',
+        signal: 'bearish',
+        label: 'アイランド天井',
+        idx: 3,
+        spanStart: 0,
+      }),
+    );
+  });
+
+  it('アイランドボトムを価格反転で検出する', () => {
+    // Arrange: アイランド天井を 220 で反転させた鏡像
+    const bars = [
+      bar(120, 122, 115, 116, 1),
+      bar(110, 112, 105, 108, 2),
+      bar(109, 113, 104, 112, 3),
+      bar(120, 125, 116, 124, 4),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        type: 'island_bottom',
+        signal: 'bullish',
+        label: 'アイランドボトム',
+        idx: 3,
+        spanStart: 0,
+      }),
+    );
+    expect(matches.some((m) => m.type === 'island_top')).toBe(false);
+  });
+
+  it('逆向きの内部の窓で島が終わり、入口の窓を使い回さない', () => {
+    // Arrange: 上窓 1 つのあと下窓が 4 本続く。島は最初の下窓で終わる
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(110, 115, 108, 112, 2),
+      bar(96, 106, 95, 100, 3),
+      bar(86, 94, 85, 90, 4),
+      bar(76, 84, 75, 80, 5),
+      bar(66, 74, 65, 70, 6),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars).filter((m) => m.type === 'island_top');
+
+    // Assert: 成立は 1 件だけ（使い回すと枠が 4 枚重なり矢印も 4 つ並ぶ）
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toEqual(expect.objectContaining({ idx: 2, spanStart: 0 }));
+  });
+
+  it('島が ISLAND_MAX_LEN を超えるアイランドは検出しない', () => {
+    // Arrange: 島 6 本（入口の上窓が探索範囲の外に出る）
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(110, 115, 108, 112, 2),
+      bar(112, 116, 109, 114, 3),
+      bar(114, 118, 111, 116, 4),
+      bar(116, 120, 113, 118, 5),
+      bar(118, 122, 115, 120, 6),
+      bar(120, 124, 117, 122, 7),
+      bar(110, 116, 105, 106, 8),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches.some((m) => m.type === 'island_top')).toBe(false);
+  });
+
+  it('島がちょうど ISLAND_MAX_LEN のアイランドは検出する', () => {
+    // Arrange: 上のケースから島を 1 本減らして 5 本にする（境界の内側）
+    const bars = [
+      bar(100, 105, 98, 104, 1),
+      bar(110, 115, 108, 112, 2),
+      bar(112, 116, 109, 114, 3),
+      bar(114, 118, 111, 116, 4),
+      bar(116, 120, 113, 118, 5),
+      bar(118, 122, 115, 120, 6),
+      bar(110, 114, 105, 106, 7),
+    ];
+
+    // Act
+    const matches = detectPatterns(bars);
+
+    // Assert
+    expect(matches).toContainEqual(
+      expect.objectContaining({ type: 'island_top', idx: 6, spanStart: 0 }),
+    );
+  });
+
   it('先頭バー・短い配列でも範囲外参照せず例外を投げない', () => {
     // Arrange
     const empty: OHLCBar[] = [];
@@ -267,6 +440,9 @@ describe('detectPatterns', () => {
     expect(detectPatterns(single).some((m) => m.type === 'morning_star')).toBe(false);
     expect(detectPatterns(single).some((m) => m.type === 'two_black_gapping')).toBe(false);
     expect(detectPatterns(single).some((m) => m.type === 'upside_gap_two_white')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'hanging_man')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'island_top')).toBe(false);
+    expect(detectPatterns(single).some((m) => m.type === 'island_bottom')).toBe(false);
   });
 
   it('range=0（四値同一）でゼロ除算せず何も検出しない', () => {
@@ -283,17 +459,17 @@ describe('detectPatterns', () => {
 
 describe('buildPatternMap', () => {
   it('同一確定バーの複数マッチを配列に集約する', () => {
-    // Arrange: 前足を包み、かつハンマー条件も満たす強気足
-    const bars = [bar(110, 111, 99, 100, 1), bar(99.5, 111, 77, 110.5, 2)];
+    // Arrange: 前足を包み、かつハンマー条件も満たす強気足（助走で下降文脈を作る）
+    const bars = [...downtrendPrefix(), bar(144, 152, 128, 151, 12)];
     const matches = detectPatterns(bars);
 
     // Act
     const map = buildPatternMap(matches);
 
-    // Assert: idx 1 に陽線包み + ハンマーの 2 件
-    const atBar1 = map.get(1) ?? [];
-    expect(atBar1.length).toBeGreaterThanOrEqual(2);
-    const types = atBar1.map((m) => m.type);
+    // Assert: idx 11 に陽線包み + ハンマーの 2 件
+    const atBar11 = map.get(11) ?? [];
+    expect(atBar11.length).toBeGreaterThanOrEqual(2);
+    const types = atBar11.map((m) => m.type);
     expect(types).toContain('bullish_engulfing');
     expect(types).toContain('hammer');
   });

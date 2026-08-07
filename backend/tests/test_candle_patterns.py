@@ -22,6 +22,29 @@ def _df(bars: list[tuple[float, float, float, float]]) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
+# トレンド文脈の助走（ハンマー / 首吊り線）
+#
+# それ自体はどのパターンも発火させない 11 本。ハンマー/首吊り線は
+# HAMMER_TREND_LOOKBACK + 1 = 12 本目以降でしか成立しないため、文脈系のテストは
+# 必ずこれを前置する。**TS 側テストとフィクスチャで同じ数値を使っている。**
+#
+# 全バーが同色（陰線 or 陽線）なので包み・はらみ・明星が成立せず、
+# 実体 5 / レンジ 7 なので同時線にもハンマー型にもならず、
+# 隣接バーのレンジが重なるので窓も開かない。
+# --------------------------------------------------------------------------- #
+DOWNTREND = [(200 - 5 * k, 201 - 5 * k, 194 - 5 * k, 195 - 5 * k) for k in range(11)]
+UPTREND = [(100 + 5 * k, 106 + 5 * k, 99 + 5 * k, 105 + 5 * k) for k in range(11)]
+# 騰落率 -2.56%（±5% の帯の中）。形状が成立してもどちらも出さない
+FLAT = [(200 - 0.5 * k, 201 - 0.5 * k, 194 - 0.5 * k, 195 - 0.5 * k) for k in range(11)]
+
+# 助走の直後に置くハンマー型のバー（実体 1.5 / レンジ 12 / 下ヒゲ 10 / 上ヒゲ 0.5）。
+# 実体がレンジの 10% を超えるので同時線とは同時に立たない
+HAMMER_BAR_AFTER_DOWN = (142, 144, 132, 143.5)
+HAMMER_BAR_AFTER_UP = (157, 159, 147, 158.5)
+HAMMER_BAR_AFTER_FLAT = (187, 189, 177, 188.5)
+
+
+# --------------------------------------------------------------------------- #
 # 1 本構成
 # --------------------------------------------------------------------------- #
 def test_doji_detects_small_body_only():
@@ -35,19 +58,93 @@ def test_doji_ignores_zero_range():
 
 
 def test_hammer_requires_long_lower_and_short_upper_shadow():
-    hammer = (100, 101, 90, 100.5)   # 下ヒゲ 10、実体 0.5、上ヒゲ 0.5
-    inverted = (100, 110, 99.5, 100.5)
-    hit = cp.detect_hammer(_df([hammer, inverted]))
-    assert hit.tolist() == [True, False]
+    """形状条件（長い下ヒゲ・短い上ヒゲ）。トレンド文脈は下降で満たしておく。"""
+    inverted = (142, 154, 141.5, 143.5)   # 上ヒゲが長く下ヒゲが無い
+    hit = cp.detect_hammer(_df(DOWNTREND + [HAMMER_BAR_AFTER_DOWN]))
+    assert hit.tolist() == [False] * 11 + [True]
+    assert not cp.detect_hammer(_df(DOWNTREND + [inverted])).any()
 
 
-def test_shooting_star_is_the_mirror_of_hammer():
-    """流れ星はハンマーの上下反転。同じ形を反転させれば入れ替わる。"""
-    hammer = _df([(100, 101, 90, 100.5)])
-    flipped = _df([(100, 110, 99, 99.5)])
-    assert cp.detect_hammer(hammer).tolist() == [True]
-    assert cp.detect_shooting_star(hammer).tolist() == [False]
-    assert cp.detect_shooting_star(flipped).tolist() == [True]
+def test_shooting_star_stays_shape_only_while_hammer_needs_context():
+    """流れ星は形状のみ・ハンマーは形状 + 文脈。**Python 内に残す意図した非対称**。
+
+    UI に出さない検出器（流れ星）を変更してもユーザーに見える利得が無いため、
+    三分化は `hammer` 側だけに入れた（PRD「NOT Building」/ 解消は Phase 6）。
+    """
+    hammer_shaped = _df([(100, 101, 90, 100.5)])
+    star_shaped = _df([(100, 110, 99, 99.5)])
+
+    # 流れ星は 1 本だけで成立する（文脈を見ない）
+    assert cp.detect_shooting_star(star_shaped).tolist() == [True]
+    assert cp.detect_shooting_star(hammer_shaped).tolist() == [False]
+    # ハンマーは形状が揃っていても助走が無ければ成立しない
+    assert cp.detect_hammer(hammer_shaped).tolist() == [False]
+
+
+def test_trend_change_ratio_ends_at_the_previous_bar():
+    """終点は当日ではなく直前バー（ハンマー自身の戻しを判定に混ぜない）。"""
+    close = np.array([100.0] * 11 + [200.0, 300.0])
+    ratio = cp.trend_change_ratio(close)
+    # idx 11 は close[10]=100 と close[0]=100 の比 → 0（当日の 200 は入らない）
+    assert ratio[11] == pytest.approx(0.0)
+    # idx 12 は close[11]=200 と close[1]=100 の比 → +100%
+    assert ratio[12] == pytest.approx(1.0)
+
+
+def test_trend_change_ratio_is_nan_where_the_lookback_does_not_fit():
+    """先頭 HAMMER_TREND_LOOKBACK + 1 本と分母 0 は NaN（どちらの文脈にも該当しない）。"""
+    ratio = cp.trend_change_ratio(np.arange(1.0, 21.0))
+    assert np.isnan(ratio[:11]).all()
+    assert not np.isnan(ratio[11:]).any()
+    assert np.isnan(cp.trend_change_ratio(np.array([1.0, 2.0]))).all()
+    zero_base = cp.trend_change_ratio(np.array([0.0] + [1.0] * 11))
+    assert np.isnan(zero_base[11])
+
+
+def test_hanging_man_needs_an_uptrend_and_hammer_needs_a_downtrend():
+    """同一形状がトレンド文脈だけで振り分けられる（PRD Q2 の三分化）。"""
+    after_down = _df(DOWNTREND + [HAMMER_BAR_AFTER_DOWN])
+    after_up = _df(UPTREND + [HAMMER_BAR_AFTER_UP])
+
+    assert cp.detect_hammer(after_down)[11]
+    assert not cp.detect_hanging_man(after_down).any()
+    assert cp.detect_hanging_man(after_up)[11]
+    assert not cp.detect_hammer(after_up).any()
+
+
+def test_flat_trend_yields_neither_hammer_nor_hanging_man():
+    """±HAMMER_TREND_RATIO の帯の中はどちらも出さない（三分の 3 つ目）。"""
+    flat = _df(FLAT + [HAMMER_BAR_AFTER_FLAT])
+    assert not cp.detect_hammer(flat).any()
+    assert not cp.detect_hanging_man(flat).any()
+
+
+def test_hammer_and_hanging_man_never_fire_on_the_same_bar():
+    """排他（PRD Q1）。しきい値が対称かつ 0 でないので重なりようがない。"""
+    for prefix, last in (
+        (DOWNTREND, HAMMER_BAR_AFTER_DOWN),
+        (UPTREND, HAMMER_BAR_AFTER_UP),
+        (FLAT, HAMMER_BAR_AFTER_FLAT),
+    ):
+        df = _df(prefix + [last])
+        assert not (cp.detect_hammer(df) & cp.detect_hanging_man(df)).any()
+
+
+def test_hammer_and_hanging_man_are_not_price_mirrors():
+    """価格反転（x → -x）では入れ替わらない。**鏡像テストを書かない理由の固定**。
+
+    反転すると形状が流れ星型に変わる一方、騰落率 (c[i-1]-c[i-11])/c[i-11] は
+    分子・分母が同時に符号反転するため **値が変わらない**。つまり反転後は
+    「下降文脈のまま形状だけ流れ星」になり、首吊り線は成立しない。
+    """
+    flipped = _df([(-o, -l, -h, -c) for o, h, l, c in DOWNTREND + [HAMMER_BAR_AFTER_DOWN]])
+    assert not cp.detect_hanging_man(flipped).any()
+    assert not cp.detect_hammer(flipped).any()
+    # 騰落率そのものが不変であることを直接固定する
+    close = np.array([c for *_, c in DOWNTREND + [HAMMER_BAR_AFTER_DOWN]])
+    assert cp.trend_change_ratio(close)[11] == pytest.approx(
+        cp.trend_change_ratio(-close)[11]
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -240,6 +337,104 @@ def test_gap_patterns_are_not_mirrors_of_each_other():
     flipped = _df([(-o, -l, -h, -c) for o, h, l, c in TWO_BLACK])
     assert not cp.detect_upside_gap_two_white(flipped).any()
     assert not cp.detect_two_black_gapping(flipped).any()
+
+
+# --------------------------------------------------------------------------- #
+# 可変長構成（アイランド）
+# --------------------------------------------------------------------------- #
+ISLAND_TOP = [
+    (100, 105, 98, 104),     # 窓の手前のバー（高値 105）
+    (110, 115, 108, 112),    # 島 1 本目。安値 108 > 105 なので上窓
+    (111, 116, 107, 108),    # 島 2 本目
+    (100, 104, 95, 96),      # 確定バー。高値 104 < 107 なので下窓
+]
+
+
+def test_island_top_marks_the_bar_after_the_exit_gap():
+    """確定バーは **出口の窓の後**（島の最終バーではない）。"""
+    assert cp.detect_island_top(_df(ISLAND_TOP)).tolist() == [False, False, False, True]
+    assert not cp.detect_island_bottom(_df(ISLAND_TOP)).any()
+
+
+def test_island_bottom_is_the_price_mirror_of_island_top():
+    """価格を反転（x → -x）させると天井と底が入れ替わる。"""
+    flipped = _df([(-o, -l, -h, -c) for o, h, l, c in ISLAND_TOP])
+    assert cp.detect_island_bottom(flipped).tolist() == [False, False, False, True]
+    assert not cp.detect_island_top(flipped).any()
+
+
+def test_island_requires_both_gaps():
+    """入口だけ・出口だけでは成立しない。"""
+    no_exit = ISLAND_TOP[:3] + [(107, 112, 106, 111)]     # 高値 112 > 107 で下窓なし
+    no_entry = [(100, 112, 98, 111)] + ISLAND_TOP[1:]     # 高値 112 > 108 で上窓なし
+    assert not cp.detect_island_top(_df(no_exit)).any()
+    assert not cp.detect_island_top(_df(no_entry)).any()
+
+
+def test_island_accepts_a_single_bar_island():
+    """島 1 本（入口の窓の直後が出口の窓）も成立する。"""
+    bars = [ISLAND_TOP[0], ISLAND_TOP[1], (100, 104, 95, 96)]   # 安値 108 > 高値 104
+    assert cp.detect_island_top(_df(bars)).tolist() == [False, False, True]
+
+
+def test_island_allows_an_internal_gap():
+    """島の内部に窓があってもよい（島の定義は両端の窓のみ・PRD Q6）。"""
+    bars = [
+        (100, 105, 98, 104),
+        (110, 115, 108, 112),
+        (120, 125, 118, 124),    # 島の内部に上窓（115 < 118）
+        (100, 104, 95, 96),      # 出口の下窓（118 > 104）
+    ]
+    assert cp.detect_island_top(_df(bars)).tolist() == [False, False, False, True]
+
+
+# 上窓 1 つのあと下窓が 4 本続く。島は最初の下窓で終わるので成立は 1 件だけ。
+# 逆向きの内部の窓を無視すると 1 つの入口の窓が後続すべての出口に使い回され、
+# idx 5 の「島」に入口の窓の手前（高値 105）より下のバーまで入ってしまう
+ISLAND_STAIRCASE_DOWN = [
+    (100, 105, 98, 104),     # 窓の手前のバー（高値 105）
+    (110, 115, 108, 112),    # 島。安値 108 > 105 なので上窓
+    (96, 106, 95, 100),      # 下窓（108 > 106）＝ここが島の出口
+    (86, 94, 85, 90),        # さらに下窓（95 > 94）
+    (76, 84, 75, 80),        # さらに下窓（85 > 84）
+    (66, 74, 65, 70),        # さらに下窓（75 > 74）
+]
+
+
+def test_island_stops_at_an_opposite_internal_gap():
+    """逆向きの内部の窓は島を終わらせる（入口の窓を後続の出口に使い回さない）。"""
+    hit = cp.detect_island_top(_df(ISLAND_STAIRCASE_DOWN))
+    assert hit.tolist() == [False, False, True, False, False, False]
+
+
+def test_island_bottom_stops_at_an_opposite_internal_gap():
+    """底側も同じ（``exited`` / ``entered`` の向きが対称であることの確認）。"""
+    flipped = _df([(-o, -l, -h, -c) for o, h, l, c in ISLAND_STAIRCASE_DOWN])
+    hit = cp.detect_island_bottom(flipped)
+    assert hit.tolist() == [False, False, True, False, False, False]
+
+
+ISLAND_LONG = [
+    (100, 105, 98, 104),     # 窓の手前のバー
+    (110, 115, 108, 112),    # 島 1 本目（上窓）
+    (112, 116, 109, 114),
+    (114, 118, 111, 116),
+    (116, 120, 113, 118),
+    (118, 122, 115, 120),    # 島 5 本目
+    (120, 124, 117, 122),    # 島 6 本目
+    (110, 116, 105, 106),    # 確定バー候補
+]
+
+
+def test_island_accepts_exactly_max_len():
+    """島がちょうど ISLAND_MAX_LEN 本なら成立する（境界の内側）。"""
+    bars = ISLAND_LONG[:6] + [(110, 114, 105, 106)]   # 島 5 本 + 出口の下窓（115 > 114）
+    assert cp.detect_island_top(_df(bars)).tolist() == [False] * 6 + [True]
+
+
+def test_island_rejects_longer_than_max_len():
+    """島が ISLAND_MAX_LEN を超えると入口の窓が探索範囲の外に出る。"""
+    assert not cp.detect_island_top(_df(ISLAND_LONG)).any()
 
 
 # --------------------------------------------------------------------------- #
