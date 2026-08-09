@@ -11,7 +11,13 @@ const HAMMER_TREND_LOOKBACK = 10; // ハンマー/首吊り線のトレンド参
 const HAMMER_TREND_RATIO = 0.05; // トレンド成立の騰落率しきい値（±5%）
 const ISLAND_MAX_LEN = 5; // アイランドの島の最大長（本）
 
-const LABELS: Record<CandlePatternType, string> = {
+/**
+ * 表示ラベルの**単一の真実源**。UI（フィルタチップ・一覧・チャートのマーカー）は
+ * すべてここを参照する。文字列は Python 側 `LABELS` と共有フィクスチャ
+ * `tests/fixtures/candle_patterns_cases.json` の `labels` にも同じ値で存在し、
+ * candlePatternsParity.test.ts が 3 者の一致を検証する。
+ */
+export const PATTERN_LABELS: Record<CandlePatternType, string> = {
   bearish_engulfing: '陰線包み',
   bearish_harami: '陰線はらみ',
   bullish_engulfing: '陽線包み',
@@ -27,7 +33,8 @@ const LABELS: Record<CandlePatternType, string> = {
   upside_gap_two_white: '上放れ並び赤',
 };
 
-const SIGNALS: Record<CandlePatternType, PatternSignal> = {
+/** 方向の単一の真実源。Python 側 `SIGNALS` / 共有フィクスチャの `signals` と一致する。 */
+export const PATTERN_SIGNALS: Record<CandlePatternType, PatternSignal> = {
   bearish_engulfing: 'bearish',
   bearish_harami: 'bearish',
   bullish_engulfing: 'bullish',
@@ -43,10 +50,10 @@ const SIGNALS: Record<CandlePatternType, PatternSignal> = {
   upside_gap_two_white: 'bullish',
 };
 
-// 登録済みパターンのランタイム一覧。`LABELS` は Record<CandlePatternType, string> なので
+// 登録済みパターンのランタイム一覧。`PATTERN_LABELS` は Record<CandlePatternType, string> なので
 // union に型を足した時点で tsc が登録を強制し、この配列も自動で追随する。
 // 共有フィクスチャが「TS にまだ無い型」を先に載せていないかを検証するために公開している。
-export const PATTERN_TYPES = Object.keys(LABELS) as CandlePatternType[];
+export const PATTERN_TYPES = Object.keys(PATTERN_LABELS) as CandlePatternType[];
 
 function isBullish(bar: OHLCBar): boolean {
   return bar.c > bar.o;
@@ -104,8 +111,8 @@ function makeMatch(
 ): PatternMatch {
   return {
     type,
-    signal: SIGNALS[type],
-    label: LABELS[type],
+    signal: PATTERN_SIGNALS[type],
+    label: PATTERN_LABELS[type],
     idx,
     spanStart,
     spanEnd: idx,

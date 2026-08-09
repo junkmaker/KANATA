@@ -115,6 +115,16 @@ export type CandlePatternType =
   | 'upside_gap_two_white';
 export type PatternSignal = 'bullish' | 'bearish' | 'neutral';
 
+/**
+ * フィルタチップの選択値。`all` は絞り込みなし。
+ *
+ * `AppState.patternFilter` と `lib/patternView.ts` が共有する。同じ union を
+ * 両方に書くと片方だけ広げても tsc が通ってしまうため、ここを唯一の定義にする。
+ * `lib/` ではなく `types.ts` に置くのは、`types.ts` を依存の末端に保つため
+ * （`types.ts` が `lib/` を import すると循環の入口になる）。
+ */
+export type PatternFilter = CandlePatternType | 'all';
+
 export interface PatternMatch {
   type: CandlePatternType;
   signal: PatternSignal;
@@ -141,7 +151,7 @@ export interface AppState {
   indicators: IndicatorState;
   financial: FinancialState;
   indicatorParams: IndicatorParams;
-  patternFilter: CandlePatternType | 'all';
+  patternFilter: PatternFilter;
 }
 
 export interface YRange {
