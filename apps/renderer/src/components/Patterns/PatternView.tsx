@@ -1,12 +1,10 @@
 import { useMemo } from 'react';
 import { buildPatternMap, detectPatterns } from '../../lib/candlePatterns';
-import type { AppState, CandlePatternType, OHLCBar, Ticker } from '../../types';
+import type { AppState, OHLCBar, PatternFilter, Ticker } from '../../types';
 import { Chart } from '../Chart/Chart';
 import { PatternFilterBar } from './PatternFilterBar';
 import { PatternList } from './PatternList';
 import './patterns.css';
-
-type PatternFilter = CandlePatternType | 'all';
 
 type Props = {
   state: AppState;

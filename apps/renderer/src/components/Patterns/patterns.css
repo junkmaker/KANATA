@@ -9,11 +9,41 @@
   overflow: hidden;
 }
 
+/* 見出し列 + チップ列の 2 カラム。max-content にすると 3 つの見出し（強気/弱気/中立）の
+   最大幅で列が決まり、見出しの無い「すべて」行も同じ位置から始まる。
+   行ごとに別の flex にすると空セルが 0 幅になって揃わないため、Grid で列を共有する。 */
 .pattern-filterbar {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+/* 行は Grid の subgrid ではなく display: contents で親の列に直接載せる。
+   こうしないと行が 1 セルに収まり列の共有が効かない。 */
+.pattern-filter-row {
+  display: contents;
+}
+
+.pattern-filter-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+/* チップ列は fieldset（支援技術にグループとして見せるため）。既定の枠線・余白を消し、
+   min-inline-size を 0 にする — fieldset の既定値 min-content のままだと
+   flex の折返しが効かず、狭い幅で行がはみ出す。 */
+.pattern-filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
 }
 
 .pattern-chart-wrap {

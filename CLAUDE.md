@@ -31,17 +31,23 @@ KANATA/
 │   └── renderer/src/      # React フロントエンド
 │       ├── App.tsx
 │       ├── components/
-│       │   └── Chart/
-│       │       ├── Chart.tsx            # Canvas 描画 (1697 行)
-│       │       ├── subpanes/
-│       │       │   ├── drawVolume.ts
-│       │       │   ├── drawStoch.ts
-│       │       │   ├── drawMacd.ts
-│       │       │   ├── drawRsi.ts
-│       │       │   ├── drawUtils.ts
-│       │       │   └── types.ts
-│       │       └── overlays/
-│       │           └── drawSqMarkers.ts # SQ/ウィッチング日マーカー描画
+│       │   ├── Chart/
+│       │   │   ├── Chart.tsx            # Canvas 描画 (1697 行)
+│       │   │   ├── subpanes/
+│       │   │   │   ├── drawVolume.ts
+│       │   │   │   ├── drawStoch.ts
+│       │   │   │   ├── drawMacd.ts
+│       │   │   │   ├── drawRsi.ts
+│       │   │   │   ├── drawUtils.ts
+│       │   │   │   └── types.ts
+│       │   │   └── overlays/
+│       │   │       ├── drawSqMarkers.ts      # SQ/ウィッチング日マーカー描画
+│       │   │       └── drawPatternMarkers.ts # パターンの矢印・ハイライト枠
+│       │   └── Patterns/
+│       │       ├── PatternView.tsx      # 検出の単一ソース（Chart は描画のみ）
+│       │       ├── PatternFilterBar.tsx # 方向グルーピングの 14 チップ
+│       │       ├── PatternList.tsx
+│       │       └── PatternSignalBadge.tsx
 │       ├── hooks/
 │       ├── lib/
 │       └── styles/
@@ -52,7 +58,8 @@ KANATA/
 ├── scripts/
 │   ├── dev.cjs            # ELECTRON_RUN_AS_NODE を除去して起動
 │   ├── backtest.py        # N字バックテスト CLI（fetch / detect / outcomes）
-│   └── backtest_report.py # N字バックテストの集計レポート生成
+│   ├── backtest_report.py # N字バックテストの集計レポート生成
+│   └── candle_backtest.py # ローソク足パターンのバックテスト CLI
 └── package.json           # ルートワークスペース (type: module)
 ```
 
@@ -145,6 +152,7 @@ yfinance → Python sidecar (FastAPI + TTLCache) → /api/quotes/{symbol}?timefr
 - `services/ohlcv_store.py` — バックテスト用 OHLCV の Parquet ストア。`<KANATA_DATA_DIR>/ohlcv/<symbol>.parquet` が真実源。純関数（`normalize_ohlcv` / `merge_ohlcv` / `needs_full_refetch` / `sanity_check`）と I/O（`read_ohlcv` / `write_ohlcv` は atomic、`fetch_ohlcv` は yfinance）を分離。`update_symbol` は `"created" | "updated" | "unchanged" | "failed"` を返し、`sync_symbols` が失敗銘柄を集約する。ベンチマークは `BENCHMARK_SYMBOL = "1306"`（TOPIX ETF）
 - `analysis/backtest.py` — ウォークフォワード検出（`walk_forward_signals` / `mark_overlaps`）・アウトカム計算（`resolve_entries` / `compute_outcomes` / `benchmark_outcome`）・統計（`block_bootstrap_means` / `percentile_of` / `confidence_interval`）の純関数群。**I/O は一切しない**（`os` / `pathlib` / `yfinance` / `json` を import しない）
 - `analysis/n_pattern.py` — `precompute_series(df)` で ATR/MACD/出来高を全期間分まとめて計算し、`detect_n_pattern(df, precomputed=...)` に渡すとウォークフォワードが高速化する。**precompute 経路は非 precompute 経路と完全一致することがテストで担保されている**（`test_precomputed_path_matches_plain_path`）
+- `analysis/candle_patterns.py` — ローソク足パターン 14 種の検出（bool 配列を返す純関数）。**レンダラーの `lib/candlePatterns.ts` と同値**で、片方だけ変更してはいけない。TS 13 種との差は `shooting_star`（UI 未移植）の 1 つのみ
 
 #### N字バックテスト（`scripts/backtest.py`）
 
@@ -185,6 +193,10 @@ python scripts/backtest_report.py                      # ④ 集計レポート�
 - `components/Chart/Chart.tsx` — **1697 行**の Canvas 描画コンポーネント。ローソク足、インジケーター、描画ツール（選択・移動・削除含む）、クロスヘア、パン・ズームを扱う。サブペイン描画は `subpanes/` に切り出し済み
 - `components/Chart/subpanes/` — `drawVolume / drawStoch / drawMacd / drawRsi / drawUtils / types` に分割済み
 - `components/Chart/overlays/drawSqMarkers.ts` — SQ・ウィッチング日マーカーの縦線とラベルを描画。日足（1D）のみ有効
+- `components/Chart/overlays/drawPatternMarkers.ts` — パターンの矢印（強気=上向き / 弱気=下向き）とラベル、複数バー構成の半透明ハイライト枠を描画
+- `components/Patterns/` — `PatternView`（`detectPatterns` を呼ぶ単一ソース。フィルタ結果を `Chart` に `patternMatches` として渡す）/ `PatternFilterBar`（強気・弱気・中立の 3 行 + 「すべて」= 14 チップ。単一選択）/ `PatternList` / `PatternSignalBadge` / `patterns.css`
+- `lib/candlePatterns.ts` — ローソク足パターン 13 種の検出（純関数）。`PATTERN_LABELS` / `PATTERN_SIGNALS` が表示ラベルと方向の単一の真実源
+- `lib/patternView.ts` — チップの表示順（`PATTERN_DISPLAY_ORDER`）と方向グルーピング（`PATTERN_FILTER_GROUPS`）。ラベル文字列は再定義せず `PATTERN_LABELS` から引く
 - `lib/indicators.ts` — SMA/EMA/BOLL/STOCH/PSAR/Ichimoku をクライアント側で計算
 - `lib/data.ts` — `genSeries`（未知銘柄向けプレースホルダー OHLC）+ `retime()` でタイムフレーム変換。15 銘柄の事前生成は廃止済み
 - `lib/futureBars.ts` — 未来バーの時刻計算ヘルパ。`nextBarTimestamp(prevT, tf)` でタイムフレームごとの次バー時刻を返し、`barTimestampAt(data, idx, tf)` でデータ範囲外のインデックスにも安全に対応する
@@ -237,6 +249,14 @@ python scripts/backtest_report.py                      # ④ 集計レポート�
 - **スコア帯は固定値ではなく分位で切る**（`score_bands`）。満点は加点要素の構成に依存する — `TREND_BONUS` を 0 にした時点で満点が 100 → 75 になり、固定帯の 85-100 が n=0 の空行になった。ただし**件数の分位を素朴に取ると境界が最頻値に重複して帯が 1 本に潰れる**（スコアは離散値で最頻値に集中する）ので、出現値が少なければ 1 値 1 帯、それでも足りなければ値の分位へ落とす 3 段構え。要求本数より減ったら §2 に警告を出す（黙って出すと「単調に増えている」と読める 1 行になる）
 - **スクリーニング UI にスコアを出さない**（`docs/screening_ui_repositioning_plan.md`）。スコアにも構成要素にも前方リターンの予測力が無いことが確定したため、順位付けは `break_date` 降順（同着は ticker 昇順）、絞り込みは鮮度（暦日）で行う。要素は合成せず `lib/screeningView.ts` の `toBadges` でバッジ表示し、**良し悪しを示す配色を使わない**（強調した瞬間に「有望」と読まれ、消したはずの期待値の含意が戻る）。`trend` と `duration_penalty` をバッジに含めないのは前者が常に 0・後者が 3 年で 1 件だから。`score` / `score_detail` は API レスポンスには残す（再検証の経路を潰さないため）
 - **`TREND_BONUS = 0` は検証結果**（2026-07）。超過リターン基準・日付ブロックブートストラップで発火群 − 非発火群 = -0.65%（95% CI [-1.31%, -0.05%]）。25 点という最大の重みを持ちながら符号が逆だった。**符号を反転させないのは**、連続量（A 手前 20 本の騰落率）との相関が -0.02 しかなく単調な関係が無いため — 反転は閾値付近の二値でしか成立せず in-sample への当てはめになる。判定経路と `score_detail["trend"]` は残してあるので、再検証は定数を戻すだけでよい（ただし 0 の間は §4 の trend 行が n/a になり監視できない）
+- **ローソク足パターンは TS と Python の同値実装で、片方だけ変更してはいけない**。チャートに描かれるものと検証対象がズレると検証結果を UI に持ち込めない。追加の手順は次の 5 つ。**定数名が両言語で違う**ので取り違えないこと。
+  1. `types.ts` の `CandlePatternType` union に型名を足す（TS 側はこれが起点。`Record<CandlePatternType, _>` が以降の登録漏れを tsc に検出させる）
+  2. 両言語に検出器（純関数）を書く
+  3. 3 箇所に登録する — TS は `DETECTORS`・`PATTERN_LABELS`・`PATTERN_SIGNALS`、Python は `DETECTORS`・`LABELS`・`SIGNALS`
+  4. `lib/patternView.ts` の `PATTERN_DISPLAY_ORDER` に足す（tsc が強制できない唯一の登録先）
+  5. 共有フィクスチャ `tests/fixtures/candle_patterns_cases.json` に陽性ケースを足す（TS 側 `candlePatternsParity.test.ts` と Python 側 `test_candle_patterns.py` の両方が読む）
+- **表示ラベルの真実源は `PATTERN_LABELS`（TS）/ `LABELS`（Python）/ 共有フィクスチャの `labels` の 3 者**。UI 側にラベル文字列を写し書きしない（写した時点で一致テストの管轄外になる）。チップの表示順は `lib/patternView.ts` の `PATTERN_DISPLAY_ORDER` で、tsc が配列の網羅を強制できないため `__tests__/patternView.test.ts` が漏れを落とす
+- **`hammer` はトレンド文脈で三分されている**（下降後=ハンマー / 上昇後=首吊り線 / 横ばい=どちらも出さない。`HAMMER_TREND_LOOKBACK = 10` / `HAMMER_TREND_RATIO = 0.05`）。形状だけで判定していた旧定義は上昇後のハンマーに強気ラベルを出していた。**Python の `shooting_star` は文脈を見ない非対称が残っている**（UI に出さない検出器のため。解消は別フェーズ）
 
 ## CI/CD
 
