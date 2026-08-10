@@ -24,6 +24,24 @@ describe('inferCurrency', () => {
     expect(inferCurrency('NKD=F', 'US')).toBe('$');
   });
 
+  it('米国債利回り指数は % なので単位なし', () => {
+    expect(inferCurrency('^TNX', 'US')).toBe('');
+    expect(inferCurrency('^IRX', 'US')).toBe('');
+  });
+
+  // 為替は 2 通貨の比なので片方の記号を前置しても正しくならない
+  it('為替は短縮形も含めて単位なし', () => {
+    expect(inferCurrency('USDJPY=X', 'US')).toBe('');
+    expect(inferCurrency('EURUSD=X', 'US')).toBe('');
+    expect(inferCurrency('JPY=X', 'US')).toBe('');
+  });
+
+  // 為替の正規表現が先物まで飲み込まないことを確認する
+  it('=F の先物は為替扱いにしない', () => {
+    expect(inferCurrency('NIY=F', 'US')).toBe('¥');
+    expect(inferCurrency('ES=F', 'US')).toBe('$');
+  });
+
   it('小文字入力でも同じ判定になる', () => {
     expect(inferCurrency('niy=f', 'US')).toBe('¥');
     expect(inferCurrency('^vix', 'US')).toBe('');
