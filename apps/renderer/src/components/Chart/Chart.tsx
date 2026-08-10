@@ -308,7 +308,8 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
 
   const paneDefs = useMemo<PaneDef[]>(() => {
     const tk = tickers.find((t) => t.code === primary);
-    const cur = tk?.currency || '$';
+    // '' は「単位なし」（指数など）なので || で潰さない
+    const cur = tk?.currency ?? '$';
     return [
       {
         id: 'price',
@@ -412,7 +413,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         const v = yRange.max - (yRange.max - yRange.min) * (i / nLines);
         ctx.textAlign = 'left';
         const tk = tickers.find((t) => t.code === primary);
-        ctx.fillText(fmtPrice(v, tk?.currency || '$'), PAD_L + priceW + 6, y);
+        ctx.fillText(fmtPrice(v, tk?.currency ?? '$'), PAD_L + priceW + 6, y);
       }
     }
 
