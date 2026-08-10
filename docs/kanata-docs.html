@@ -413,11 +413,12 @@
     <a class="nav-link" href="#ep-macro">7. マクロ経済指標</a>
     <a class="nav-link nav-link-sub" href="#ep-macro-indicators">7-1 個別指標</a>
     <a class="nav-link nav-link-sub" href="#ep-macro-dashboard">7-2 ダッシュボード</a>
-    <a class="nav-link" href="#ep-screening">8. N字スクリーニング</a>
-    <a class="nav-link nav-link-sub" href="#ep-scr-results">8-1 結果取得</a>
-    <a class="nav-link nav-link-sub" href="#ep-scr-scan">8-2 スキャン開始</a>
-    <a class="nav-link nav-link-sub" href="#ep-scr-status">8-3 進捗確認</a>
-    <a class="nav-link nav-link-sub" href="#ep-scr-universes">8-4 ユニバース管理</a>
+    <a class="nav-link" href="#ep-screening">8. スクリーニング</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-results">8-1 結果取得（N字）</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-ppp">8-2 結果取得（PPP）</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-scan">8-3 スキャン開始</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-status">8-4 進捗確認</a>
+    <a class="nav-link nav-link-sub" href="#ep-scr-universes">8-5 ユニバース管理</a>
 
     <div class="nav-section-label">型 / 仕様</div>
     <a class="nav-link" href="#api-types">型定義</a>
@@ -437,7 +438,7 @@
     <a class="nav-link" href="#arch-backend">5. バックエンド構成</a>
     <a class="nav-link" href="#arch-datamodel">6. データモデル</a>
     <a class="nav-link" href="#arch-macro">7. マクロ経済ダッシュボード</a>
-    <a class="nav-link" href="#arch-screening">8. N字スクリーニング</a>
+    <a class="nav-link" href="#arch-screening">8. スクリーニング</a>
     <a class="nav-link" href="#arch-patterns">9. パターン認識</a>
     <a class="nav-link" href="#arch-settings">10. 設定・FREDキー管理</a>
 
@@ -809,15 +810,16 @@
 
   <hr>
 
-  <h2 id="ep-screening">8. N字スクリーニング</h2>
-  <p>ベースパス <code>/api/screening/</code>。Macro 同様 <strong>{success, data, error} エンベロープなし</strong>、エラーは <code>HTTPException</code> + <code>detail</code>。真実源はキャッシュ済み結果 JSON ファイル（<code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code>）であり、スキャン進捗（ジョブ状態）はプロセスのメモリ内のみで管理される（<strong>アプリ再起動で idle に戻る</strong>）。</p>
+  <h2 id="ep-screening">8. スクリーニング（N字 / PPP）</h2>
+  <p>ベースパス <code>/api/screening/</code>。Macro 同様 <strong>{success, data, error} エンベロープなし</strong>、エラーは <code>HTTPException</code> + <code>detail</code>。真実源は<strong>パターン別</strong>のキャッシュ済み結果 JSON ファイル（<code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code> と <code>ppp_results.json</code>）であり、スキャン進捗（ジョブ状態）はプロセスのメモリ内のみで管理される（<strong>アプリ再起動で idle に戻る</strong>）。</p>
+  <p><strong>スキャンジョブは 1 本で、全パターンを同時に処理する。</strong>銘柄あたりの yfinance 取得を 1 回に保つための設計で、スキャン・ステータスのパスはパターン名を持たない（<code>/n-pattern/scan</code> は 1 ジョブでは嘘になるため）。代償として「N字だけスキャンし直す」はできない。結果取得のみパターン別パスに分かれる。</p>
 
-  <h3 id="ep-scr-results">8-1. 結果取得</h3>
+  <h3 id="ep-scr-results">8-1. 結果取得（N字）</h3>
   <div class="endpoint-title">
     <span class="method GET">GET</span>
-    <span class="endpoint-path">/api/screening/n-pattern?min_score={n}</span>
+    <span class="endpoint-path">/api/screening/n-pattern</span>
   </div>
-  <p>クエリ <code>min_score</code>（デフォルト 50）でキャッシュ済み結果をフィルタして返す。スキャン未実行時は空配列。</p>
+  <p>キャッシュ済み結果をそのまま返す（<strong>ブレイク日の新しい順</strong>）。スキャン未実行時は空配列。<code>min_score</code> クエリは<strong>廃止</strong>した（スコアに前方リターンの予測力が無いことがバックテストで確定したため、絞り込みは表示側が <code>break_date</code> の鮮度で行う）。<code>score</code> / <code>score_detail</code> はレスポンスに残す — 表示しないだけで、再検証の経路を潰さないため。</p>
   <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">ScreeningPivot</span> { index: <span class="kw">number</span>; date: <span class="kw">string</span>; price: <span class="kw">number</span>; type: <span class="st">'low'</span> | <span class="st">'high'</span>; }
 
 <span class="kw">interface</span> <span class="ty">ScreeningScoreDetail</span> {
@@ -828,7 +830,9 @@
 <span class="kw">interface</span> <span class="ty">ScreeningResult</span> {
   ticker: <span class="kw">string</span>;
   name: <span class="kw">string</span>;
-  market_cap: <span class="kw">number</span> | <span class="kw">null</span>;
+  market_cap: <span class="kw">number</span> | <span class="kw">null</span>;      <span class="cm">// ユニバース CSV の登録値（足切りとフォールバック表示）</span>
+  market_cap_asof: <span class="kw">number</span> | <span class="kw">null</span>; <span class="cm">// 実施日時点の実測値（発行済株式数 × 最終日足終値）</span>
+  market_cap_date: <span class="kw">string</span> | <span class="kw">null</span>; <span class="cm">// market_cap_asof の基準日</span>
   score: <span class="kw">number</span>;
   score_detail: <span class="ty">ScreeningScoreDetail</span>;
   pivots: <span class="ty">ScreeningPivot</span>[];
@@ -842,27 +846,56 @@
   scanned_count: <span class="kw">number</span>;
   universe_id: <span class="kw">string</span> | <span class="kw">null</span>;
   universe_name: <span class="kw">string</span> | <span class="kw">null</span>;
-  results: <span class="ty">ScreeningResult</span>[]; <span class="cm">// score 降順ソート済み</span>
+  results: <span class="ty">ScreeningResult</span>[]; <span class="cm">// break_date 降順、同着は ticker 昇順</span>
 }</code></pre>
 
-  <h3 id="ep-scr-scan">8-2. スキャン開始</h3>
+  <h3 id="ep-scr-ppp">8-2. 結果取得（PPP）</h3>
+  <div class="endpoint-title">
+    <span class="method GET">GET</span>
+    <span class="endpoint-path">/api/screening/ppp</span>
+  </div>
+  <p>PPP（パーフェクトオーダー）の<strong>成立イベント</strong>（非PPP → PPP の転換日）を返す（<strong>成立日の新しい順</strong>）。銘柄ごとに<strong>最新の成立イベント 1 件</strong>だけが入る。鮮度の打ち切りはバックエンドでは行わない — 切ると「なぜ出ないのか」が JSON から追えなくなるため、絞り込みは表示側が <code>established_date</code> の鮮度で行う（UI 既定は 7 日以内）。</p>
+  <p>乖離値（<code>gap_short</code> / <code>gap_long</code>）は<strong>含めない</strong>。検出条件そのもので、同じ df から常に再計算できるため。</p>
+  <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">PppResult</span> {
+  ticker: <span class="kw">string</span>;
+  name: <span class="kw">string</span>;
+  market_cap: <span class="kw">number</span> | <span class="kw">null</span>;
+  market_cap_asof: <span class="kw">number</span> | <span class="kw">null</span>; <span class="cm">// 成立が古い行は解決しない（表示は CSV 値 + `*`）</span>
+  market_cap_date: <span class="kw">string</span> | <span class="kw">null</span>;
+  established_date: <span class="kw">string</span>;      <span class="cm">// 成立イベント日（out → in の遷移バー）</span>
+  duration_days: <span class="kw">number</span>;         <span class="cm">// 成立日から最終バーまでの本数（列には出さない）</span>
+  closes: { date: <span class="kw">string</span>; value: <span class="kw">number</span> }[];
+}
+
+<span class="kw">interface</span> <span class="ty">PppResponse</span> {
+  generated_at: <span class="kw">string</span> | <span class="kw">null</span>;
+  universe_count: <span class="kw">number</span>;
+  scanned_count: <span class="kw">number</span>;
+  universe_id: <span class="kw">string</span> | <span class="kw">null</span>;
+  universe_name: <span class="kw">string</span> | <span class="kw">null</span>;
+  results: <span class="ty">PppResult</span>[]; <span class="cm">// established_date 降順、同着は ticker 昇順</span>
+}</code></pre>
+  <p>メタ 5 項目（<code>generated_at</code> / <code>universe_id</code> / <code>universe_name</code> / <code>universe_count</code> / <code>scanned_count</code>）は同一スキャンの値なので N字側と一致する。未知のパターン（例 <code>/api/screening/unknown</code>）は <span class="status s404">404</span>。</p>
+
+  <h3 id="ep-scr-scan">8-3. スキャン開始（全パターン共通）</h3>
   <div class="endpoint-title">
     <span class="method POST">POST</span>
-    <span class="endpoint-path">/api/screening/n-pattern/scan</span>
+    <span class="endpoint-path">/api/screening/scan</span>
   </div>
-  <p>ボディ省略可。指定時は <code>{"universe_id": string}</code> でユニバースを指定（省略/<code>null</code> は内蔵デフォルト）。バックグラウンドスレッドでスキャンを起動し即座に応答する。</p>
-  <p><strong>レスポンス</strong> <span class="status s202">202</span> — <code>{ "status": "running" }</code></p>
+  <p>ボディ省略可。指定時は <code>{"universe_id": string}</code> でユニバースを指定（省略/<code>null</code> は内蔵デフォルト）。バックグラウンドスレッドでスキャンを起動し即座に応答する。<strong>1 回の起動で N字と PPP の両方が判定される。</strong></p>
+  <p><strong>レスポンス</strong> <span class="status s202">202</span> — <code>{ "status": "started" }</code></p>
   <table>
     <tr><th>HTTP</th><th>detail</th><th>原因</th></tr>
     <tr><td><span class="status s404">404</span></td><td>未知の <code>universe_id</code></td><td><code>UniverseNotFound</code></td></tr>
-    <tr><td><span class="status s409">409</span></td><td><code>"not started"</code></td><td>既に実行中（多重起動防止）</td></tr>
+    <tr><td><span class="status s409">409</span></td><td><code>"scan already running"</code></td><td>既に実行中（多重起動防止）</td></tr>
   </table>
 
-  <h3 id="ep-scr-status">8-3. 進捗確認</h3>
+  <h3 id="ep-scr-status">8-4. 進捗確認（全パターン共通）</h3>
   <div class="endpoint-title">
     <span class="method GET">GET</span>
-    <span class="endpoint-path">/api/screening/n-pattern/status</span>
+    <span class="endpoint-path">/api/screening/status</span>
   </div>
+  <p><code>done</code> / <code>total</code> は<strong>銘柄単位</strong>なので、パターンが増えても意味は変わらない。</p>
   <p><strong>レスポンス</strong> <span class="status s200">200</span>（ポーリング用）</p>
   <pre><span class="lang-tag">typescript</span><code><span class="kw">type</span> <span class="ty">ScanStatus</span> = <span class="st">'idle'</span> | <span class="st">'running'</span> | <span class="st">'done'</span> | <span class="st">'error'</span>;
 
@@ -874,7 +907,7 @@
   error: <span class="kw">string</span> | <span class="kw">null</span>;
 }</code></pre>
 
-  <h3 id="ep-scr-universes">8-4. ユニバース管理</h3>
+  <h3 id="ep-scr-universes">8-5. ユニバース管理</h3>
   <table>
     <tr><th>エンドポイント</th><th>用途</th><th>ステータス</th></tr>
     <tr><td><code>GET /api/screening/universes</code></td><td>一覧取得（内蔵デフォルト先頭 + 登録済み）</td><td><span class="status s200">200</span></td></tr>
@@ -996,6 +1029,7 @@
     <tr><td>Macro API クライアント / フック</td><td><code>apps/renderer/src/lib/macroApi.ts</code>, <code>apps/renderer/src/hooks/useMacroDashboard.ts</code></td></tr>
     <tr><td>Screening ルート</td><td><code>backend/src/routes/screening.py</code></td></tr>
     <tr><td>Screening / ユニバース ロジック</td><td><code>backend/src/services/screening_provider.py</code>, <code>backend/src/services/universe_provider.py</code>, <code>backend/src/services/storage.py</code></td></tr>
+    <tr><td>Screening 検出器</td><td><code>backend/src/analysis/n_pattern.py</code>, <code>backend/src/analysis/ppp.py</code>, <code>backend/src/analysis/series.py</code>（共有リーフ）</td></tr>
     <tr><td>Screening スキーマ</td><td><code>backend/src/schemas/screening.py</code></td></tr>
     <tr><td>Screening API クライアント / フック</td><td><code>apps/renderer/src/lib/screeningApi.ts</code>, <code>apps/renderer/src/hooks/useScreening.ts</code>, <code>apps/renderer/src/hooks/useUniverses.ts</code></td></tr>
     <tr><td>生オブジェクト共通フェッチラッパ</td><td><code>apps/renderer/src/lib/backendFetch.ts</code></td></tr>
@@ -1097,7 +1131,7 @@ graph TD
     MAIN -- "view=chart" --> RP["RightPanel\nウォッチリスト / 検索\n基礎情報メトリクス"]
     MAIN -- "view=pattern" --> PV["PatternView\nPatternFilterBar / PatternList"]
     MAIN -- "view=macro" --> MD["MacroDashboard\nMacroCard / MacroLineChart / SignalBadge"]
-    MAIN -- "view=screening" --> SV["ScreeningView\nScreeningTable / UniverseSelect"]
+    MAIN -- "view=screening" --> SV["ScreeningView\nパターンタブ\nScreeningTable / PppTable / UniverseSelect"]
     CHART --> CANDLE["ローソク足\nグリッド / 価格軸"]
     CHART --> OVERLAY["オーバーレイ指標\nSMA / EMA / BOLL / PSAR / 一目"]
     CHART --> SQMARK["SQ/ウィッチングマーカー\noverlays/drawSqMarkers.ts"]
@@ -1145,6 +1179,7 @@ graph LR
         LS5["kanata.alerts"]
         LS6["kanata.migrated.v1"]
         LS7["kanata.screening.universeId"]
+        LS8["kanata.screening.pattern"]
     end
     STATE <--> LS1
     AES <--> LS2
@@ -1169,7 +1204,7 @@ graph TB
         WR["watchlists.py\n8 エンドポイント"]
         FR["fundamentals.py\nGET /api/fundamentals/:symbol"]
         MR["macro.py\n7 エンドポイント"]
-        SCR["screening.py\n6 エンドポイント"]
+        SCR["screening.py\n7 エンドポイント"]
         HR["/api/health"]
     end
     subgraph SERVICES["Services"]
@@ -1177,7 +1212,7 @@ graph TB
         CACHE["cache.py\nTTLCache (in-memory)"]
         MP["macro_provider.py\n単位換算 / シグナル判定\nbuild_dashboard()"]
         FP["fred_provider.py\nFRED observations 取得\nstale フォールバック"]
-        SP["screening_provider.py\nrun_scan() / load_results()"]
+        SP["screening_provider.py\nrun_scan() 全パターン\nload_results(pattern)"]
         UP["universe_provider.py\nCSV 登録・削除・解決"]
         STOR["storage.py\natomic_write_json / data_dir"]
     end
@@ -1185,7 +1220,7 @@ graph TB
         COMMON["common.py\nApiResponse[T]\nok() / fail()"]
         WSCH["watchlist.py\nWatchlistRead / Create\nUpdate / ..."]
         MSCH["macro.py\nIndicatorResponse\nDashboardResponse"]
-        SSCH["screening.py\nScreeningResultsResponse\nUniverseInfo"]
+        SSCH["screening.py\nScreeningResultsResponse\nPppResultsResponse\nUniverseInfo"]
     end
     subgraph DB["Database (SQLAlchemy 2.x)"]
         DBMOD["models.py\nWatchlist / WatchlistItem"]
@@ -1276,7 +1311,7 @@ graph TB
 
   <hr>
 
-  <h2 id="arch-screening">8. N字スクリーニング</h2>
+  <h2 id="arch-screening">8. スクリーニング（N字 / PPP）</h2>
   <div class="mermaid-wrap">
     <div class="mermaid">
 sequenceDiagram
@@ -1285,28 +1320,29 @@ sequenceDiagram
     participant R as routes/screening.py
     participant SP as screening_provider.py
     participant TH as バックグラウンドスレッド
-    participant FS as n_pattern_results.json
+    participant FS as n_pattern_results.json / ppp_results.json
 
     SV->>API: POST /scan (universe_id)
     API->>R: リクエスト
     R->>SP: start_scan_thread()
     SP->>TH: スレッド起動 (202)
-    TH-->>SP: 銘柄ごとに detect_n_pattern()
+    TH-->>SP: 銘柄ごとに 1 回取得 → detect_n_pattern() と detect_ppp()
     loop ポーリング
         SV->>API: GET /status
         API->>R: リクエスト
         R->>SP: get_scan_status()
         SP-->>SV: done/total/status
     end
-    TH->>FS: atomic_write_json(結果)
-    SV->>API: GET /n-pattern
+    TH->>FS: atomic_write_json(パターン別に 2 ファイル)
+    SV->>API: GET /n-pattern または /ppp
     API->>R: リクエスト
-    R->>SP: load_results()
+    R->>SP: load_results(pattern)
     SP->>FS: 読込
     FS-->>SV: 結果一覧
     </div>
   </div>
-  <p>ジョブ状態はモジュールレベルの<code>dict</code> + <code>Lock</code>によるメモリ管理のみで、プロセス再起動で <code>idle</code> に戻る。結果の真実源はメモリではなく <code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code>。ユニバースは <code>screening_provider → universe_provider → storage</code> の一方向依存で CSV 管理される。</p>
+  <p>ジョブ状態はモジュールレベルの<code>dict</code> + <code>Lock</code>によるメモリ管理のみで、プロセス再起動で <code>idle</code> に戻る。<strong>ジョブは 1 本で全パターンを処理する</strong>ため、進捗 <code>done/total</code> は銘柄単位。結果の真実源はメモリではなくパターン別の JSON（<code>&lt;KANATA_DATA_DIR&gt;/n_pattern_results.json</code> と <code>ppp_results.json</code>）。ユニバースは <code>screening_provider → universe_provider → storage</code> の一方向依存で CSV 管理される。検出器は <code>analysis/n_pattern.py</code> と <code>analysis/ppp.py</code> で、共有する ATR 系列・日付整形はリーフモジュール <code>analysis/series.py</code> に集約されている（<code>n_pattern ↔ ppp</code> の横方向依存を作らない）。</p>
+  <p>実施日の時価総額（<code>market_cap_asof</code>）は<strong>表示されうる行だけ</strong>で解決する。PPP は実測 82% の銘柄がヒットするため、素朴に「ヒット銘柄だけ」にすると追加リクエストがほぼ全銘柄に掛かる（<code>_needs_asof_cap</code>）。<strong>行そのものは落とさず</strong>、解決を見送った行は CSV 登録値へ <code>*</code> 付きでフォールバックする。</p>
 
   <hr>
 

@@ -1,4 +1,4 @@
-"""Integration tests for the N-pattern screening API.
+"""Integration tests for the screening API (N-pattern + PPP).
 
 yfinance は ``_fetch_daily_df`` / ``_fetch_shares`` の patch で完全に遮断し、KANATA_DATA_DIR を tmp に
 向けて結果 JSON を隔離する。スキャン完了は run_scan の同期呼び出しで検証する
@@ -50,6 +50,29 @@ def _flat_df():
     return _df([100.0 + i * 0.5 for i in range(40)])  # 単調上昇 → 非該当
 
 
+def _ppp_df():
+    """PPP だけにヒットする系列(前半で崩壊 → 後半で成立)。
+
+    N字には当たらない: 最後の 4 ピボットが low→high→low→high にならない
+    (単調な下降 → 単調な上昇で、押し目 C が存在しない)。
+    """
+    return _df(_path([(0, 200.0), (119, 100.0), (239, 260.0)], total=240))
+
+
+def _both_df():
+    """N字と PPP の両方にヒットする系列。
+
+    前半の下降で PPP の崩壊を作り、後半に N字(安値→高値→押し目→高値更新)を置く。
+    最後の高値更新が末尾から 4 本目なので RECENCY_MAX_BARS=10 も満たす。
+    """
+    return _df(
+        _path(
+            [(0, 200.0), (119, 100.0), (180, 150.0), (200, 130.0), (235, 170.0)],
+            total=240,
+        )
+    )
+
+
 @pytest.fixture
 def screening_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KANATA_DATA_DIR", str(tmp_path))
@@ -83,19 +106,19 @@ def test_get_before_scan_returns_empty(client, screening_env):
 
 def test_post_starts_scan_and_status(client, screening_env, monkeypatch):
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: None)
-    resp = client.post("/api/screening/n-pattern/scan")
+    resp = client.post("/api/screening/scan")
     assert resp.status_code == 202
     assert resp.json()["status"] == "started"
     if screening_provider._thread:
         screening_provider._thread.join(timeout=5)
-    status = client.get("/api/screening/n-pattern/status").json()
+    status = client.get("/api/screening/status").json()
     assert status["status"] in ("done", "running")
 
 
 def test_double_post_returns_409(client, screening_env):
     with screening_provider._state_lock:
         screening_provider._scan_state["status"] = "running"
-    resp = client.post("/api/screening/n-pattern/scan")
+    resp = client.post("/api/screening/scan")
     assert resp.status_code == 409
     assert "already running" in resp.json()["detail"]
 
@@ -130,7 +153,7 @@ def test_scan_sorts_by_break_date_desc(client, screening_env, monkeypatch):
 
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", fake_fetch)
 
-    payload = screening_provider.run_scan(csv_path=csv_path)
+    payload = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]
     assert payload["universe_count"] == 3  # 1301 は時価総額で除外
     results = payload["results"]
 
@@ -154,7 +177,7 @@ def test_scan_breaks_ties_by_ticker_ascending(client, screening_env, monkeypatch
         screening_provider, "_fetch_daily_df", lambda code: _n_df(d_index=34)
     )
 
-    results = screening_provider.run_scan(csv_path=csv_path)["results"]
+    results = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]["results"]
 
     assert len(results) == 2
     assert results[0]["break_date"] == results[1]["break_date"]
@@ -180,7 +203,7 @@ def test_min_score_query_is_ignored(client, screening_env, monkeypatch):
 
 
 def test_scan_missing_csv_sets_error_status(client, screening_env):
-    payload = screening_provider.run_scan(csv_path=str(screening_env / "does-not-exist.csv"))
+    payload = screening_provider.run_scan(csv_path=str(screening_env / "does-not-exist.csv"))["n-pattern"]
     assert payload["results"] == []
     assert screening_provider.get_scan_status()["status"] == "error"
 
@@ -188,7 +211,7 @@ def test_scan_missing_csv_sets_error_status(client, screening_env):
 def test_scan_all_fetch_fail_completes_empty(client, screening_env, monkeypatch):
     csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: None)
-    payload = screening_provider.run_scan(csv_path=csv_path)
+    payload = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]
     assert payload["results"] == []
     assert screening_provider.get_scan_status()["status"] == "done"
 
@@ -206,7 +229,7 @@ def test_scan_with_registered_universe(client, screening_env, monkeypatch):
         json={"name": "Custom", "csv_text": "code\n7203\n6758\n"},
     ).json()
 
-    resp = client.post("/api/screening/n-pattern/scan", json={"universe_id": created["id"]})
+    resp = client.post("/api/screening/scan", json={"universe_id": created["id"]})
     assert resp.status_code == 202
     if screening_provider._thread:
         screening_provider._thread.join(timeout=5)
@@ -223,20 +246,20 @@ def test_scan_without_market_cap_column(client, screening_env, monkeypatch):
     csv_path.write_text("code,name\n7203,Toyota\n", encoding="utf-8")
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
 
-    payload = screening_provider.run_scan(csv_path=str(csv_path))
+    payload = screening_provider.run_scan(csv_path=str(csv_path))["n-pattern"]
     assert payload["universe_count"] == 1
     assert payload["results"][0]["market_cap"] is None
 
 
 def test_scan_unknown_universe_returns_404(client, screening_env):
-    resp = client.post("/api/screening/n-pattern/scan", json={"universe_id": "nope"})
+    resp = client.post("/api/screening/scan", json={"universe_id": "nope"})
     assert resp.status_code == 404
 
 
 def test_scan_without_body_uses_default_universe(client, screening_env, monkeypatch):
     # 後方互換: ボディ無し POST は内蔵デフォルトでスキャンされる。
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: None)
-    resp = client.post("/api/screening/n-pattern/scan")
+    resp = client.post("/api/screening/scan")
     assert resp.status_code == 202
     if screening_provider._thread:
         screening_provider._thread.join(timeout=10)
@@ -247,7 +270,7 @@ def test_scan_without_body_uses_default_universe(client, screening_env, monkeypa
 def test_scan_result_has_thumbnail_closes(client, screening_env, monkeypatch):
     csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
-    payload = screening_provider.run_scan(csv_path=csv_path)
+    payload = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]
     result = payload["results"][0]
     assert len(result["pivots"]) == 4
     assert len(result["closes"]) > 0
@@ -276,7 +299,7 @@ def test_scan_computes_market_cap_at_scan_date(client, screening_env, monkeypatc
         lambda code: _shares_series([("2026-01-01", 20_000_000_000), ("2026-02-01", 40_000_000_000)]),
     )
 
-    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+    row = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]["results"][0]
 
     last_date = df.index[-1].date().isoformat()
     assert row["market_cap_date"] == last_date
@@ -292,7 +315,7 @@ def test_scan_market_cap_asof_none_when_shares_unavailable(client, screening_env
     monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
     monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: None)
 
-    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+    row = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]["results"][0]
 
     assert row["market_cap_asof"] is None
     assert row["market_cap_date"] is None
@@ -360,7 +383,7 @@ def test_scan_rejects_asof_cap_that_differs_in_scale_from_csv(
         screening_provider, "_fetch_shares", lambda code: _shares_series([("2026-01-01", huge)])
     )
 
-    row = screening_provider.run_scan(csv_path=csv_path)["results"][0]
+    row = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]["results"][0]
 
     assert row["market_cap_asof"] is None
     assert row["market_cap_date"] is None
@@ -391,7 +414,7 @@ def test_scan_survives_shares_exception(client, screening_env, monkeypatch):
 
     monkeypatch.setattr(screening_provider, "_fetch_shares", boom)
 
-    payload = screening_provider.run_scan(csv_path=csv_path)
+    payload = screening_provider.run_scan(csv_path=csv_path)["n-pattern"]
 
     assert screening_provider.get_scan_status()["status"] == "done"
     assert len(payload["results"]) == 1
@@ -461,3 +484,204 @@ def test_response_fills_null_for_legacy_results(client, screening_env):
 
     assert body["results"][0]["market_cap_asof"] is None
     assert body["results"][0]["market_cap_date"] is None
+
+
+# --------------------------------------------------------------------------- #
+# 2 パターン同時スキャン（PPP）
+# --------------------------------------------------------------------------- #
+def test_get_ppp_before_scan_returns_empty(client, screening_env):
+    resp = client.get("/api/screening/ppp")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["generated_at"] is None
+    assert body["results"] == []
+
+
+def test_unknown_pattern_path_returns_404(client, screening_env):
+    """未知のパターンは 404（明示ルートなので FastAPI が自動で返す）。"""
+    assert client.get("/api/screening/unknown").status_code == 404
+
+
+def test_scan_writes_both_pattern_files(client, screening_env, monkeypatch):
+    """1 スキャンで両パターンの JSON が生成され、メタ情報が同値になる。"""
+    csv_path = _write_universe(
+        screening_env,
+        [("7203", "Both", 5_000_000_000_000), ("6758", "PppOnly", 4_000_000_000_000)],
+    )
+    monkeypatch.setattr(
+        screening_provider,
+        "_fetch_daily_df",
+        lambda code: _both_df() if code == "7203" else _ppp_df(),
+    )
+
+    payloads = screening_provider.run_scan(
+        csv_path=csv_path, universe_id="u1", universe_name="Custom"
+    )
+
+    assert (screening_env / "n_pattern_results.json").exists()
+    assert (screening_env / "ppp_results.json").exists()
+    n_payload, ppp_payload = payloads["n-pattern"], payloads["ppp"]
+    # メタ 5 項目は同一スキャンの値なので一致する
+    for key in ("generated_at", "universe_id", "universe_name", "universe_count", "scanned_count"):
+        assert n_payload[key] == ppp_payload[key], key
+    # 7203 は両方、6758 は PPP だけ
+    assert [r["ticker"] for r in n_payload["results"]] == ["7203"]
+    assert sorted(r["ticker"] for r in ppp_payload["results"]) == ["6758", "7203"]
+
+    body = client.get("/api/screening/ppp").json()
+    assert body["universe_name"] == "Custom"
+    assert len(body["results"]) == 2
+    row = body["results"][0]
+    assert "established_date" in row and "duration_days" in row
+    # 乖離値は載せない（検出条件そのもので、同じ df から常に再計算できる）
+    assert "gap_short" not in row and "gap_long" not in row
+    # PPP に N字固有のフィールドは無い
+    assert "score" not in row and "pivots" not in row
+
+
+def test_scan_resolves_market_cap_once_for_both_patterns(client, screening_env, monkeypatch):
+    """両パターンにヒットしても株式数の取得は銘柄あたり 1 回。
+
+    素直に書くと _resolve_asof_cap が 2 回走り、レート制限とスキャン時間を無駄に食う。
+    """
+    csv_path = _write_universe(screening_env, [("7203", "Both", 5_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _both_df())
+    called: list[str] = []
+
+    def fake_shares(code):
+        called.append(code)
+        return None
+
+    monkeypatch.setattr(screening_provider, "_fetch_shares", fake_shares)
+
+    payloads = screening_provider.run_scan(csv_path=csv_path)
+
+    assert len(payloads["n-pattern"]["results"]) == 1
+    assert len(payloads["ppp"]["results"]) == 1
+    assert called == ["7203"]  # 2 回撃たない
+
+
+def test_scan_skips_market_cap_when_neither_pattern_hits(client, screening_env, monkeypatch):
+    """どちらにも当たらない銘柄には追加リクエストを掛けない。"""
+    csv_path = _write_universe(screening_env, [("6758", "Miss", 4_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _flat_df())
+    called: list[str] = []
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: called.append(code))
+
+    payloads = screening_provider.run_scan(csv_path=csv_path)
+
+    assert payloads["n-pattern"]["results"] == []
+    assert payloads["ppp"]["results"] == []
+    assert called == []
+
+
+def test_stale_ppp_hit_does_not_trigger_market_cap_request(client, screening_env, monkeypatch):
+    """成立が古い PPP 銘柄には時価総額の追加リクエストを撃たない。
+
+    「ヒット銘柄だけ解決する」は N字だけの頃はユニバースの一部にしか当たらなかったが、
+    PPP は実測 82% の銘柄がヒットするため、そのままだと _resolve_asof_cap が
+    ほぼ全銘柄で走る（実測 170 → 491 回）。しかも増分の大半は鮮度フィルタで
+    表示されない行のためのもの。**行は残したまま**解決だけを鮮度で絞る。
+    """
+    csv_path = _write_universe(screening_env, [("7203", "StalePpp", 5_000_000_000_000)])
+    # _ppp_df は成立が 100 本以上前（CAP_RESOLVE_MAX_BARS=10 を大きく超える）
+    stale = _ppp_df()
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: stale)
+    called: list[str] = []
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: called.append(code))
+
+    payloads = screening_provider.run_scan(csv_path=csv_path)
+    row = payloads["ppp"]["results"][0]
+
+    assert called == []  # 追加リクエストを撃たない
+    # **行は落とさない**（§5.2: バックエンドで打ち切らない）
+    assert row["ticker"] == "7203"
+    assert row["duration_days"] > screening_provider.CAP_RESOLVE_MAX_BARS
+    # 実測値は無いが CSV 登録値は残るので、UI は `*` 付きで表示できる
+    assert row["market_cap_asof"] is None
+    assert row["market_cap_date"] is None
+    assert row["market_cap"] == 5_000_000_000_000
+
+
+def test_fresh_ppp_hit_still_resolves_market_cap(client, screening_env, monkeypatch):
+    """成立が新しい PPP 銘柄には従来どおり解決を掛ける（絞りすぎていない）。"""
+    csv_path = _write_universe(screening_env, [("7203", "FreshPpp", 5_000_000_000_000)])
+    # 末尾付近で成立するよう、下降→上昇の転換を後ろに寄せる（成立は末尾 7 本前）
+    fresh = _df(_path([(0, 200.0), (215, 100.0), (239, 190.0)], total=240))
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: fresh)
+    called: list[str] = []
+    monkeypatch.setattr(screening_provider, "_fetch_shares", lambda code: called.append(code))
+
+    row = screening_provider.run_scan(csv_path=csv_path)["ppp"]["results"][0]
+
+    assert row["duration_days"] <= screening_provider.CAP_RESOLVE_MAX_BARS
+    assert called == ["7203"]
+
+
+def test_ppp_results_sorted_by_established_date_desc(client, screening_env, monkeypatch):
+    """成立日の新しい順。同着は ticker 昇順（N字と同じ規約）。"""
+    csv_path = _write_universe(
+        screening_env,
+        [
+            ("7203", "Old", 5_000_000_000_000),
+            ("9984", "NewA", 3_000_000_000_000),
+            ("6758", "NewB", 4_000_000_000_000),
+        ],
+    )
+
+    def fake_fetch(code):
+        if code == "7203":
+            # 成立を早め（後半の上昇を前倒し）にして古い established_date を作る
+            return _df(_path([(0, 200.0), (60, 100.0), (239, 320.0)], total=240))
+        return _ppp_df()  # 9984 と 6758 は同じ系列 → 成立日が同着
+
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", fake_fetch)
+
+    results = screening_provider.run_scan(csv_path=csv_path)["ppp"]["results"]
+
+    assert len(results) == 3
+    dates = [r["established_date"] for r in results]
+    assert dates == sorted(dates, reverse=True)
+    # 同着の 2 件は ticker 昇順
+    tied = [r["ticker"] for r in results if r["established_date"] == dates[0]]
+    assert tied == sorted(tied)
+
+
+def test_ppp_result_keeps_one_row_per_ticker(client, screening_env, monkeypatch):
+    """複数回成立しても銘柄あたり 1 行（表の key={ticker} が前提）。"""
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    # 崩壊→成立を 2 回繰り返す系列
+    twice = _df(
+        _path(
+            [(0, 200.0), (60, 100.0), (120, 240.0), (180, 120.0), (239, 300.0)],
+            total=240,
+        )
+    )
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: twice)
+
+    results = screening_provider.run_scan(csv_path=csv_path)["ppp"]["results"]
+
+    assert len(results) == 1
+    # 採るのは最新の成立イベント
+    from src.analysis.ppp import ppp_events
+
+    assert results[0]["established_date"] == ppp_events(twice)[-1]["date"]
+
+
+def test_ppp_detector_exception_does_not_lose_n_pattern_results(
+    client, screening_env, monkeypatch
+):
+    """PPP 検出器が落ちても N字の結果は失われない（例外は 1 銘柄・1 検出器に閉じる）。"""
+    csv_path = _write_universe(screening_env, [("7203", "A", 5_000_000_000_000)])
+    monkeypatch.setattr(screening_provider, "_fetch_daily_df", lambda code: _n_df())
+
+    def boom(df):
+        raise RuntimeError("ppp exploded")
+
+    monkeypatch.setattr(screening_provider, "detect_ppp", boom)
+
+    payloads = screening_provider.run_scan(csv_path=csv_path)
+
+    assert screening_provider.get_scan_status()["status"] == "done"
+    assert len(payloads["n-pattern"]["results"]) == 1
+    assert payloads["ppp"]["results"] == []

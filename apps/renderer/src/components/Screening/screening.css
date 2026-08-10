@@ -129,6 +129,36 @@
   font-size: 13px;
 }
 
+/* パターンタブ（N字 / PPP）。表だけを差し替え、ツールバーは共通のまま。
+   色は必ずトークン（var(--*)）で指定する — 生の色を書くと 4 テーマのどれかで
+   読めなくなる。選択状態は背景・文字色・境界色の 3 つで示し、色相の差だけに
+   頼らない（アンバーCRT のようにコントラストの出にくいテーマがあるため）。 */
+.screening-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.screening-tab {
+  padding: 6px 18px;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.screening-tab:hover {
+  color: var(--text);
+}
+
+.screening-tab.active {
+  background: var(--panel-3);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .screening-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);

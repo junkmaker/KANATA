@@ -299,6 +299,35 @@ export interface ScreeningResponse {
   results: ScreeningResult[];
 }
 
+// --- PPP screening ---
+/** スクリーニングのパターン種別。値はエンドポイントのパス片と同じ綴り。 */
+export type ScreeningPattern = 'n-pattern' | 'ppp';
+
+export interface PppResult {
+  ticker: string;
+  name: string;
+  /** ユニバース CSV の登録値。足切りフィルタとフォールバック表示に使う。 */
+  market_cap: number | null;
+  /** スキャン実施日時点の時価総額（発行済株式数 × 最終日足終値）。取得失敗時 null。 */
+  market_cap_asof: number | null;
+  /** market_cap_asof の基準日（最終日足バーの日付、`YYYY-MM-DD`）。値が無ければ null。 */
+  market_cap_date: string | null;
+  /** 成立イベント日（out → in の遷移バー）。銘柄ごとに最新の 1 件。 */
+  established_date: string;
+  /** 成立日から最終バーまでの経過バー本数。**列には出さない**（検証用に持つだけ）。 */
+  duration_days: number;
+  closes: ScreeningClose[];
+}
+
+export interface PppResponse {
+  generated_at: string | null;
+  universe_count: number;
+  scanned_count: number;
+  universe_id: string | null;
+  universe_name: string | null;
+  results: PppResult[];
+}
+
 export interface ScreeningUniverse {
   id: string;
   name: string;

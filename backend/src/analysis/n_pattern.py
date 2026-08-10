@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pandas as pd
 
+from .series import ATR_PERIOD, atr_series, date_iso
+
 # --------------------------------------------------------------------------- #
 # 定数(マジックナンバー禁止 — 閾値・重みはすべてここに集約する)
 # --------------------------------------------------------------------------- #
@@ -28,7 +30,6 @@ MACD_BONUS = 10            # ブレイク時に MACD が GC 方向(偏重緩和�
 PULLBACK_PENALTY = 15      # 押し目が浅すぎる
 DURATION_PENALTY = 15      # A→D が短すぎる
 
-ATR_PERIOD = 14
 ZIGZAG_ATR_COEF = 1.5      # ATR 比率に掛ける係数
 ZIGZAG_MIN_PCT = 3.0       # ZigZag 反転閾値の下限(%)
 
@@ -50,14 +51,6 @@ TREND_DROP_PCT = 10.0       # A の TREND_LOOKBACK 本前が A より 10% 以上
 
 MIN_BARS = 30              # ATR/MACD 計算に必要な最小本数
 PIVOT_COUNT = 4            # N字判定に使うピボット数(A,B,C,D)
-
-
-def _date_iso(ts: object) -> str:
-    """DatetimeIndex 要素を ISO 日付文字列に正規化する。"""
-    date_fn = getattr(ts, "date", None)
-    if callable(date_fn):
-        return date_fn().isoformat()
-    return str(ts)[:10]
 
 
 def compute_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> float:
@@ -159,7 +152,7 @@ def extract_zigzag_pivots(
         pivots.append((ext_i, ext_v, "low"))
 
     return [
-        {"index": i, "date": _date_iso(dates[i]), "price": round(p, 4), "type": t}
+        {"index": i, "date": date_iso(dates[i]), "price": round(p, 4), "type": t}
         for (i, p, t) in pivots
     ]
 
@@ -244,27 +237,6 @@ def _breakout_bonus(b_price: float, d_price: float) -> int:
     return BREAKOUT_BONUS if ratio >= BREAKOUT_STRONG_PCT else 0
 
 
-def _atr_series(df: pd.DataFrame, period: int = ATR_PERIOD) -> list[float]:
-    """全期間の ATR を list で返す(compute_atr の各時点版)。
-
-    rolling(min_periods=1).mean() は時刻 t の値が t 以前しか参照しない(因果的)。
-    len(df) < 2 のときは compute_atr と揃えて 0.0 で埋める。
-    """
-    n = len(df)
-    if n < 2:
-        return [0.0] * n
-    high = df["High"].astype(float)
-    low = df["Low"].astype(float)
-    close = df["Close"].astype(float)
-    prev_close = close.shift(1)
-    tr = pd.concat(
-        [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
-        axis=1,
-    ).max(axis=1)
-    atr = tr.rolling(window=period, min_periods=1).mean()
-    return [0.0 if pd.isna(v) else float(v) for v in atr.tolist()]
-
-
 def precompute_series(df: pd.DataFrame) -> dict:
     """全期間の因果的な派生系列を一度だけ計算する(ウォークフォワード用)。
 
@@ -287,10 +259,10 @@ def precompute_series(df: pd.DataFrame) -> dict:
     return {
         "closes": [float(v) for v in close.tolist()],
         "volumes": volumes,
-        "atr": _atr_series(df),
+        "atr": atr_series(df),
         "macd": macd_line.tolist(),
         "signal": signal_line.tolist(),
-        "dates": [_date_iso(ts) for ts in close.index],
+        "dates": [date_iso(ts) for ts in close.index],
     }
 
 

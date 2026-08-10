@@ -44,11 +44,14 @@ cd backend && pytest
 - **単位換算は `services/macro_provider.py` に集約**。`WALCL` は百万$ → 十億$（÷1000）、純流動性は兆$ 表示（÷1000）
 - **FRED キー未設定でも 500 にしない**。該当指標を `meta.available=false` で返す部分稼働にする（RSP/SPY は yfinance だけで動く）
 - **`services/storage.py` は他 services を import しないリーフモジュール**。**依存方向は `screening_provider` → `universe_provider` の一方向のみ**（`DEFAULT_UNIVERSE_CSV` は universe_provider 側で定義）
+- **`analysis/series.py` も同じくリーフモジュール**（他の analysis を import しない）。`atr_series` / `date_iso` はここが真実源で、依存方向は `n_pattern → series` と `ppp → series` の一方向のみ。**`n_pattern ↔ ppp` の横方向依存を作らない**（片方だけ別の ATR 実装にすると「ATR 単位」という言葉が 2 つの意味を持つ）
+- **スキャンは 1 ジョブ・結果はパターン別 JSON**。`run_scan` は銘柄あたり `_fetch_daily_df` を 1 回だけ呼び、その df で `detect_n_pattern` と `detect_ppp` の両方を回す。時価総額（`_resolve_asof_cap`）も**どちらかにヒットした銘柄で 1 回だけ**解決して両パターンの行で使い回す。返り値は `{pattern: payload}`。代償として「N字だけスキャンし直す」はできず常に両方走る（受け入れ済み）。エンドポイントは `POST /api/screening/scan` / `GET /api/screening/status` でパターン名を持たない
+- **`PPP_GAP_K = 1.0` は効果で選んでいない**。「SMA 間隔が ATR 1 本ぶん」という物理的意味で先験的に置いた値。1 日あたり成立件数はどの `k` でも実用域に収まり件数では選べないことが較正済み（[docs/ppp_screening_spec.md](docs/ppp_screening_spec.md) §5.1）。変更するときも**前方リターンを見て選ばない**こと（in-sample への当てはめになる）
 - ユニバース CSV の必須列は `code` のみ。`name` 欠落は code 代用、`market_cap` 欠落は None でフィルタ非適用
 
 ## レンダラーの制約
 
-- **`App.tsx` が全状態の単一ソース**。`localStorage` キーは `kanata.*` 名前空間（`kanata.state` / `kanata.aesthetic` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view` / `kanata.screening.universeId`）
+- **`App.tsx` が全状態の単一ソース**。`localStorage` キーは `kanata.*` 名前空間（`kanata.state` / `kanata.aesthetic` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view` / `kanata.screening.universeId` / `kanata.screening.pattern`）
 - **`apps/renderer/src/types.ts` が型の起点**。新しい描画ツールやインジケーターを追加するときはここから変更する
 - **描画ツールは OHLC インデックスと価格で保存**（`DrawingObject`）、座標ではない。タイムフレーム変更でも位置が維持される設計
 - **描画の表示/非表示（`state.showDrawings`）は 3 箇所で抑制する** — `Chart.tsx` のオーバーレイ描画・`hitTest`・`onPointerDown` のツール判定。描画を止めるだけだと見えない線を掴めてしまい、掴めなくするだけだと見えない線を新規作成できてしまう。非表示化時は `activeTool` をパンへ戻す。この状態は永続化せず、`loadState` が起動時に必ず `true` へ戻す

@@ -1,14 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchScanStatus, fetchScreeningResults, startScreeningScan } from '../lib/screeningApi';
-import { filterByAge } from '../lib/screeningView';
-import type { ScreeningResponse, ScreeningResult, ScreeningScanStatus } from '../types';
+import {
+  fetchPppResults,
+  fetchScanStatus,
+  fetchScreeningResults,
+  startScreeningScan,
+} from '../lib/screeningApi';
+import { DEFAULT_MAX_AGE_DAYS, filterByAge } from '../lib/screeningView';
+import type {
+  PppResponse,
+  PppResult,
+  ScreeningPattern,
+  ScreeningResponse,
+  ScreeningResult,
+  ScreeningScanStatus,
+} from '../types';
 
 export type ScreeningLoadStatus = 'loading' | 'ready' | 'offline';
 
 const POLL_INTERVAL_MS = 2000;
 
+type PatternRow = ScreeningResult | PppResult;
+type PatternResponse = ScreeningResponse | PppResponse;
+
 interface UseScreeningResult {
-  results: ScreeningResult[];
+  results: PatternRow[];
   totalCount: number;
   generatedAt: string | null;
   loadStatus: ScreeningLoadStatus;
@@ -19,12 +34,35 @@ interface UseScreeningResult {
   startScan: (universeId?: string) => Promise<void>;
 }
 
-export function useScreening(): UseScreeningResult {
-  const [data, setData] = useState<ScreeningResponse | null>(null);
+/** 行から鮮度判定に使う日付を取り出す。フィールド名がパターンで違う。 */
+function dateOf(r: PatternRow): string {
+  return 'established_date' in r ? r.established_date : r.break_date;
+}
+
+/**
+ * スクリーニング結果の取得・鮮度フィルタ・スキャン起動。
+ *
+ * **パターンごとに呼び分けない** — この hook は 1 箇所からだけ呼び、パターンは
+ * 引数で渡す。タブごとにインスタンスを持つと fetch とポーリングが二重に走る。
+ * スキャンジョブは 1 本なので、進捗と再読込トークンはパターン間で共通でよい。
+ */
+export function useScreening(pattern: ScreeningPattern): UseScreeningResult {
+  // 取得済みレスポンスは**どのパターンのものか**を一緒に持つ。`pattern` が変わった
+  // レンダーでは、再取得の effect（描画後に走る）がまだ loading を立てていないため、
+  // これが無いと前パターンの行が新しい表に 1 フレームだけ描かれる
+  // （PPP タブに N字の行が成立日カラム空欄で出る）。キャストがあるので tsc も
+  // 型では捕まえられない。
+  const [data, setData] = useState<{ pattern: ScreeningPattern; res: PatternResponse } | null>(
+    null,
+  );
   const [loadStatus, setLoadStatus] = useState<ScreeningLoadStatus>('loading');
   const [error, setError] = useState<string | null>(null);
-  // 既定は全件。絞って開くと見落とすため(docs/screening_ui_repositioning_plan.md §6)。
-  const [maxAgeDays, setMaxAgeDays] = useState<number | null>(null);
+  // 鮮度は**タブごとに独立して保持する**。単一 state にしてパターン変更でリセットすると、
+  // 切り替えて戻ったときにユーザーの選択が黙って消える。既定値の根拠は
+  // screeningView.ts の DEFAULT_MAX_AGE_DAYS を参照（N字=全件 / PPP=7日）。
+  const [maxAgeByPattern, setMaxAgeByPattern] = useState<Record<ScreeningPattern, number | null>>(
+    () => ({ ...DEFAULT_MAX_AGE_DAYS }),
+  );
   const [scanStatus, setScanStatus] = useState<ScreeningScanStatus | null>(null);
   // サイドカー再起動やスキャン完了時に結果を取り直すためのトークン
   const [reloadToken, setReloadToken] = useState(0);
@@ -36,17 +74,18 @@ export function useScreening(): UseScreeningResult {
     return unsubscribe;
   }, []);
 
-  // reloadToken 変化でキャッシュ結果を取得。
-  // 絞り込みはサーバに投げない — 鮮度フィルタは break_date から表示側で計算でき、
+  // reloadToken / pattern 変化でキャッシュ結果を取得。
+  // 絞り込みはサーバに投げない — 鮮度フィルタは日付から表示側で計算でき、
   // 取り直す理由がない(選択のたびに fetch すると再スキャン中に取りこぼす)。
   useEffect(() => {
     let cancelled = false;
     setLoadStatus('loading');
 
-    fetchScreeningResults()
+    const fetcher = pattern === 'ppp' ? fetchPppResults : fetchScreeningResults;
+    fetcher()
       .then((res) => {
         if (cancelled) return;
-        setData(res);
+        setData({ pattern, res });
         setLoadStatus('ready');
         setError(null);
       })
@@ -59,7 +98,7 @@ export function useScreening(): UseScreeningResult {
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [reloadToken, pattern]);
 
   // 実行中のみ status をポーリング。running↔done で effect を張り替える。
   const isRunning = scanStatus?.status === 'running';
@@ -98,20 +137,34 @@ export function useScreening(): UseScreeningResult {
     }
   }, []);
 
-  const all = data?.results ?? [];
-  const generatedAt = data?.generated_at ?? null;
+  const maxAgeDays = maxAgeByPattern[pattern];
+  const setMaxAgeDays = useCallback(
+    (n: number | null) => setMaxAgeByPattern((prev) => ({ ...prev, [pattern]: n })),
+    [pattern],
+  );
+
+  // 現在のパターンに対応するデータだけを採る。切替直後は null になり、
+  // 下の effectiveStatus が loading に倒れて表の描画そのものを止める。
+  const current = data !== null && data.pattern === pattern ? data.res : null;
+  const all: PatternRow[] = current?.results ?? [];
+  const generatedAt = current?.generated_at ?? null;
   // 鮮度の基準はスキャン実行時刻。現在時刻にすると、古い結果を開いたときに
   // 全件が「古い」と判定されて空テーブルになる。
   const results = useMemo(
-    () => filterByAge(all, maxAgeDays, generatedAt),
+    () => filterByAge(all, maxAgeDays, generatedAt, dateOf),
     [all, maxAgeDays, generatedAt],
   );
+
+  // ready なのに現在のパターンのデータが無い＝切替直後の 1 フレーム。loading に倒す。
+  // それ以外（loading / offline）は素通しで、同じパターンの再取得中の挙動は変えない。
+  const effectiveStatus: ScreeningLoadStatus =
+    loadStatus === 'ready' && current === null ? 'loading' : loadStatus;
 
   return {
     results,
     totalCount: all.length,
     generatedAt,
-    loadStatus,
+    loadStatus: effectiveStatus,
     error,
     scanStatus,
     maxAgeDays,

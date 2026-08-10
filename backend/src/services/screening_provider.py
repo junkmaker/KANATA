@@ -1,12 +1,21 @@
-"""N字スクリーニングのユニバース読込・スキャン実行・結果永続化。
+"""スクリーニングのユニバース読込・スキャン実行・結果永続化。
 
 役割分担:
 - ``load_universe`` : 銘柄マスタ CSV を読み、時価総額でフィルタ
-- ``run_scan``      : 同期スキャン本体(各銘柄で detect_n_pattern → JSON 保存)
+- ``run_scan``      : 同期スキャン本体(各銘柄で detect_n_pattern と detect_ppp の
+  両方を回し、パターン別 JSON に保存)
 - ``start_scan_thread`` : run_scan をバックグラウンドスレッドで起動する薄いラッパ
 - ``get_scan_status`` / ``load_results`` : 進捗・結果の読み出し
 
-真実源は JSON ファイル(``<KANATA_DATA_DIR>/n_pattern_results.json``)。
+真実源はパターン別の JSON ファイル(``<KANATA_DATA_DIR>/n_pattern_results.json``
+と ``ppp_results.json``)。1 JSON に混在させないのは、レスポンスモデルを全 optional の
+ユニオンにしてしまうため。
+
+**スキャンジョブは 1 本**。銘柄あたりの yfinance 取得を 1 回に保つため、パターンごとに
+独立したスキャンにはしない(数十分の取得をもう一周払うことになる)。代償として
+「N字だけスキャンし直す」ができず、常に両方走る。ジョブ状態(``_scan_state``)も
+共通のまま 1 つ — 進捗 done/total は銘柄単位なのでパターンが増えても意味が変わらない。
+
 ジョブ状態はメモリ(モジュールレベルの dict + Lock)のみで、プロセス再起動で idle に戻る。
 """
 from __future__ import annotations
@@ -20,15 +29,28 @@ import pandas as pd
 import yfinance as yf
 
 from ..analysis.n_pattern import detect_n_pattern
+from ..analysis.ppp import detect_ppp
 from .storage import atomic_write_json, data_dir, now_iso
 from .universe_provider import DEFAULT_UNIVERSE_CSV
 from .yfinance_provider import to_yf_symbol
 
 DEFAULT_MIN_MARKET_CAP = 10_000_000_000  # 100 億円
 SCAN_SLEEP_SECONDS = 0.2                 # yfinance レート制限対策(テストで 0 に patch)
-RESULTS_FILENAME = "n_pattern_results.json"
+
+N_PATTERN = "n-pattern"
+PPP_PATTERN = "ppp"
+# パターン名 → 結果ファイル名。名前はエンドポイントのパス片と同じ綴りにしてある。
+RESULTS_FILENAMES = {
+    N_PATTERN: "n_pattern_results.json",
+    PPP_PATTERN: "ppp_results.json",
+}
+PATTERNS = tuple(RESULTS_FILENAMES)
 CLOSES_TAIL = 120                        # サムネイル用に保持する終値本数
 SHARES_LOOKBACK_DAYS = 548               # 発行済株式数の取得窓(yfinance の既定と同じ 18 ヶ月)
+# 実施日の時価総額を解決する対象の本数上限(_needs_asof_cap 参照)。
+# n_pattern.RECENCY_MAX_BARS と同じ 10 本に揃えてある。営業日 10 本 ≒ 暦日 14 日で、
+# UI の鮮度フィルタの最大値(7 日)を余裕をもって覆う。
+CAP_RESOLVE_MAX_BARS = 10
 CAP_SANITY_RATIO = 10.0                  # 実測時価総額が CSV 値から何倍離れたら疑うか
 
 _state_lock = threading.Lock()
@@ -42,8 +64,8 @@ _scan_state: dict = {
 _thread: threading.Thread | None = None
 
 
-def _results_path() -> Path:
-    return data_dir() / RESULTS_FILENAME
+def _results_path(pattern: str) -> Path:
+    return data_dir() / RESULTS_FILENAMES[pattern]
 
 
 def load_universe(
@@ -229,8 +251,8 @@ def _resolve_asof_cap(
     return cap, asof_date
 
 
-def load_results() -> dict:
-    """最新スキャン結果を返す。ファイルなし/破損時は未スキャン扱い。"""
+def load_results(pattern: str) -> dict:
+    """指定パターンの最新スキャン結果を返す。ファイルなし/破損時は未スキャン扱い。"""
     empty = {
         "generated_at": None,
         "universe_count": 0,
@@ -239,7 +261,7 @@ def load_results() -> dict:
         "universe_name": None,
         "results": [],
     }
-    path = _results_path()
+    path = _results_path(pattern)
     if not path.exists():
         return empty
     try:
@@ -253,13 +275,58 @@ def get_scan_status() -> dict:
         return dict(_scan_state)
 
 
+def _needs_asof_cap(n_hit: dict | None, ppp_hit: dict | None) -> bool:
+    """実施日の時価総額を解決する価値がある行か(＝表示されうる行か)。
+
+    「ヒット銘柄だけ解決する」という条件は N字だけの頃はユニバースの一部にしか
+    当たらなかったが、**PPP のヒット率が高いためそのままでは条件が効かない** —
+    実測で N字 30%(170/563) に対し PPP は 82%(464/563) がヒットし、
+    _resolve_asof_cap の呼び出しが 170 → 491 回(2.9 倍)に膨らむ。
+    追加リクエストと SCAN_SLEEP_SECONDS ぶんの待ちがそのままスキャン時間に乗る。
+
+    しかも増分の大半は無駄になる。PPP の成立が CAP_RESOLVE_MAX_BARS 以内なのは
+    11%(63/563) しかなく、残りは UI の鮮度フィルタ(最大 7 日)で表示されない行。
+
+    そこで**時価総額の解決だけ**を鮮度で絞る。**行そのものは落とさない**ので
+    docs/ppp_screening_spec.md §5.2 の決定(バックエンドで打ち切らない)は保たれ、
+    落ちるのは表示用フィールドだけ。その場合は CSV 登録値へのフォールバックが
+    `*` 付きで出るので、値の出所は UI 上も区別できる。
+
+    N字は detect_n_pattern が RECENCY_MAX_BARS=10 で進行中のブレイクに限っている
+    ため、ヒットした時点で常に対象。
+    """
+    if n_hit is not None:
+        return True
+    return ppp_hit is not None and ppp_hit["duration_days"] <= CAP_RESOLVE_MAX_BARS
+
+
+def _sort_results(rows: list[dict], date_key: str) -> None:
+    """日付の新しい順に並べる(同着は ticker 昇順)。in-place。
+
+    スコア降順にしないのは、スコアに前方リターンの予測力が無いことがバックテストで
+    確定したため(docs/n_pattern_backtest_spec.md §16.2)。順位付けに期待値の含意を
+    持たせない。同着は ticker 昇順にしたいので、sort の安定性を使って2段階で並べる
+    (タプルキー + reverse=True では ticker まで降順になってしまう)。
+
+    日付フィールド名はパターンで違う(break_date / established_date)ので引数に取る。
+    """
+    rows.sort(key=lambda r: r["ticker"])
+    rows.sort(key=lambda r: r[date_key], reverse=True)
+
+
 def run_scan(
     csv_path: str | None = None,
     min_market_cap: int = DEFAULT_MIN_MARKET_CAP,
     universe_id: str | None = None,
     universe_name: str | None = None,
 ) -> dict:
-    """スキャン本体(同期)。ユニバース全銘柄を判定して JSON に保存する。
+    """スキャン本体(同期)。ユニバース全銘柄を全パターンで判定して JSON に保存する。
+
+    Returns: ``{pattern: payload}``(パターン別のペイロード)。
+
+    銘柄ごとに ``_fetch_daily_df`` は **1 回**だけ呼び、その df で detect_n_pattern と
+    detect_ppp の両方を回す。時価総額の解決も**どちらかにヒットした銘柄で 1 回だけ**
+    行い、両パターンの行で使い回す(同じ銘柄に 2 回リクエストを撃たない)。
 
     テストからは直接同期呼び出しでき、start_scan_thread は本関数を包むだけ。
     予期せぬ例外はスレッド内 silent failure を避けるため status=error に反映する。
@@ -271,63 +338,84 @@ def run_scan(
         with _state_lock:
             _scan_state["total"] = len(universe)
 
-        results: list[dict] = []
+        n_results: list[dict] = []
+        ppp_results: list[dict] = []
         for i, row in enumerate(universe):
             df = _fetch_daily_df(row["code"])
             if df is not None:
                 try:
-                    detected = detect_n_pattern(df)
+                    n_hit = detect_n_pattern(df)
                 except Exception:
-                    detected = None
-                if detected is not None:
-                    # 実施日の時価総額はヒット銘柄だけで解決する。ユニバース全体
-                    # (800〜900銘柄)に追加リクエストを掛けるとスキャン時間がほぼ倍に
-                    # なるうえ、表示に必要なのはヒット行だけ。
-                    cap_asof, cap_date = _resolve_asof_cap(
-                        df, row["code"], row["market_cap"]
-                    )
-                    results.append(
-                        {
-                            "ticker": row["code"],
-                            "name": row["name"],
-                            "market_cap": row["market_cap"],
-                            "market_cap_asof": cap_asof,
-                            "market_cap_date": cap_date,
-                            "score": detected["score"],
-                            "score_detail": detected["score_detail"],
-                            "pivots": detected["pivots"],
-                            "break_date": detected["break_date"],
-                            "closes": _closes_tail(df),
-                        }
-                    )
+                    n_hit = None
+                try:
+                    ppp_hit = detect_ppp(df)
+                except Exception:
+                    ppp_hit = None
+                if n_hit is not None or ppp_hit is not None:
+                    # 実施日の時価総額は**表示されうる行だけ**で解決する。
+                    # **両パターンで 1 回だけ**解決する(2 回撃つとレート制限を無駄に食う)。
+                    if _needs_asof_cap(n_hit, ppp_hit):
+                        cap_asof, cap_date = _resolve_asof_cap(
+                            df, row["code"], row["market_cap"]
+                        )
+                    else:
+                        cap_asof, cap_date = None, None
+                    # base は ** 展開で複製して使う。base 自体を mutate すると
+                    # 2 パターン間で辞書が共有され、片方の編集がもう片方に漏れる。
+                    base = {
+                        "ticker": row["code"],
+                        "name": row["name"],
+                        "market_cap": row["market_cap"],
+                        "market_cap_asof": cap_asof,
+                        "market_cap_date": cap_date,
+                        "closes": _closes_tail(df),
+                    }
+                    if n_hit is not None:
+                        n_results.append(
+                            {
+                                **base,
+                                "score": n_hit["score"],
+                                "score_detail": n_hit["score_detail"],
+                                "pivots": n_hit["pivots"],
+                                "break_date": n_hit["break_date"],
+                            }
+                        )
+                    if ppp_hit is not None:
+                        ppp_results.append(
+                            {
+                                **base,
+                                "established_date": ppp_hit["established_date"],
+                                "duration_days": ppp_hit["duration_days"],
+                            }
+                        )
             with _state_lock:
                 _scan_state["done"] = i + 1
             if SCAN_SLEEP_SECONDS:
                 time.sleep(SCAN_SLEEP_SECONDS)
 
-        # ブレイク日の新しい順。スコア降順にしないのは、スコアに前方リターンの
-        # 予測力が無いことがバックテストで確定したため(docs/n_pattern_backtest_spec.md
-        # §16.2)。順位付けに期待値の含意を持たせない。
-        # 同着は ticker 昇順にしたいので、sort の安定性を使って2段階で並べる
-        # (タプルキー + reverse=True では ticker まで降順になってしまう)。
-        results.sort(key=lambda r: r["ticker"])
-        results.sort(key=lambda r: r["break_date"], reverse=True)
-        payload = {
+        _sort_results(n_results, "break_date")
+        _sort_results(ppp_results, "established_date")
+        # メタ情報は同一スキャンの値なので両ファイルで共有する。
+        meta = {
             "generated_at": now_iso(),
             "universe_count": len(universe),
             "scanned_count": len(universe),
             "universe_id": universe_id,
             "universe_name": universe_name,
-            "results": results,
         }
-        atomic_write_json(_results_path(), payload)
+        payloads = {
+            N_PATTERN: {**meta, "results": n_results},
+            PPP_PATTERN: {**meta, "results": ppp_results},
+        }
+        for pattern, payload in payloads.items():
+            atomic_write_json(_results_path(pattern), payload)
         with _state_lock:
             _scan_state.update(status="done")
-        return payload
+        return payloads
     except Exception as exc:  # noqa: BLE001 - surface to status instead of dying silently
         with _state_lock:
             _scan_state.update(status="error", error=str(exc))
-        return load_results()
+        return {p: load_results(p) for p in PATTERNS}
 
 
 def start_scan_thread(

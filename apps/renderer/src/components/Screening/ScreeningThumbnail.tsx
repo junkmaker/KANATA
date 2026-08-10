@@ -3,14 +3,25 @@ import type { ScreeningClose, ScreeningPivot } from '../../types';
 
 type Props = {
   closes: ScreeningClose[];
-  pivots: ScreeningPivot[];
+  /** N字のピボット。PPP など持たないパターンでは省略する。 */
+  pivots?: ScreeningPivot[];
   width?: number;
   height?: number;
 };
 
 const PAD = { top: 6, right: 6, bottom: 6, left: 6 };
 
-export function ScreeningThumbnail({ closes, pivots, width = 180, height = 48 }: Props) {
+// 既定値をモジュールスコープの定数にするのは、`pivots = []` だと毎レンダで
+// 新しい参照になり、下の useEffect（依存に pivots を含む）が毎回再実行されるため。
+// PPP 表は行数が多い（既定でも数十行）ので Canvas の再描画が無駄に走る。
+const NO_PIVOTS: ScreeningPivot[] = [];
+
+export function ScreeningThumbnail({
+  closes,
+  pivots = NO_PIVOTS,
+  width = 180,
+  height = 48,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {

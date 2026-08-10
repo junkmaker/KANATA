@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { ScreeningResult, ScreeningScoreDetail } from '../types';
 import {
-  BADGE_DEFS,
+  AGE_LABEL,
   ageInDays,
+  BADGE_DEFS,
+  DEFAULT_MAX_AGE_DAYS,
   filterByAge,
   formatMarketCap,
   resolveMarketCap,
   sortByBreakDate,
+  sortByDateDesc,
   toBadges,
 } from '../lib/screeningView';
+import type { PppResult, ScreeningResult, ScreeningScoreDetail } from '../types';
+
+const byBreakDate = (r: ScreeningResult) => r.break_date;
+const byEstablishedDate = (r: PppResult) => r.established_date;
 
 function detail(over: Partial<ScreeningScoreDetail> = {}): ScreeningScoreDetail {
   return {
@@ -70,6 +76,77 @@ describe('sortByBreakDate', () => {
   });
 });
 
+function pppResult(over: Partial<PppResult> = {}): PppResult {
+  return {
+    ticker: '7203',
+    name: 'トヨタ自動車',
+    market_cap: null,
+    market_cap_asof: null,
+    market_cap_date: null,
+    established_date: '2026-07-01',
+    duration_days: 5,
+    closes: [],
+    ...over,
+  };
+}
+
+describe('sortByDateDesc', () => {
+  it('成立日の新しい順に並べる（PPP でも並び順の規約は共通）', () => {
+    const rows = [
+      pppResult({ ticker: '1111', established_date: '2026-07-01' }),
+      pppResult({ ticker: '2222', established_date: '2026-07-10' }),
+      pppResult({ ticker: '3333', established_date: '2026-07-05' }),
+    ];
+
+    expect(sortByDateDesc(rows, byEstablishedDate).map((r) => r.ticker)).toEqual([
+      '2222',
+      '3333',
+      '1111',
+    ]);
+  });
+
+  it('同着は ticker 昇順', () => {
+    const rows = [
+      pppResult({ ticker: '9984', established_date: '2026-07-10' }),
+      pppResult({ ticker: '6758', established_date: '2026-07-10' }),
+      pppResult({ ticker: '7203', established_date: '2026-07-10' }),
+    ];
+
+    expect(sortByDateDesc(rows, byEstablishedDate).map((r) => r.ticker)).toEqual([
+      '6758',
+      '7203',
+      '9984',
+    ]);
+  });
+
+  it('入力を破壊しない', () => {
+    const rows = [
+      pppResult({ ticker: '1111', established_date: '2026-07-01' }),
+      pppResult({ ticker: '2222', established_date: '2026-07-10' }),
+    ];
+    sortByDateDesc(rows, byEstablishedDate);
+
+    expect(rows.map((r) => r.ticker)).toEqual(['1111', '2222']);
+  });
+});
+
+describe('パターン別の表示規約', () => {
+  it('鮮度ラベルはパターンごとに語が違う（選択肢は共有）', () => {
+    expect(AGE_LABEL['n-pattern']).toBe('ブレイク');
+    expect(AGE_LABEL.ppp).toBe('成立');
+    // 登録漏れの検出（Record 型なので tsc も落とすが、実体でも確認する）
+    expect(Object.keys(AGE_LABEL).sort()).toEqual(['n-pattern', 'ppp']);
+  });
+
+  it('既定の鮮度は N字=全件 / PPP=7日', () => {
+    // PPP だけ絞るのは、成立イベントが 1 年窓で銘柄の 8 割超に出るため
+    // （全件だとユニバースの部分集合コピーになる）。既定値の変更をここで固定する。
+    expect(DEFAULT_MAX_AGE_DAYS['n-pattern']).toBeNull();
+    expect(DEFAULT_MAX_AGE_DAYS.ppp).toBe(7);
+    expect(Object.keys(DEFAULT_MAX_AGE_DAYS).sort()).toEqual(['n-pattern', 'ppp']);
+  });
+});
+
 describe('toBadges', () => {
   it('発火した要素だけを BADGE_DEFS の順で返す', () => {
     const badges = toBadges(detail({ volume: 10, breakout: 15 }));
@@ -86,9 +163,7 @@ describe('toBadges', () => {
 
   it('pullback_penalty は減点ではなく事実として出す', () => {
     // 実測では減点群のほうが超過リターンが高い。UI に減点の含意を持ち込まない。
-    expect(toBadges(detail({ pullback_penalty: 15 })).map((b) => b.label)).toEqual([
-      '浅い押し目',
-    ]);
+    expect(toBadges(detail({ pullback_penalty: 15 })).map((b) => b.label)).toEqual(['浅い押し目']);
   });
 
   it('何も発火していなければ空（それは「弱い候補」ではない）', () => {
@@ -142,19 +217,36 @@ describe('filterByAge', () => {
   const asOf = '2026-07-08T09:30:00+09:00';
 
   it('null なら全件返す（既定は絞らない）', () => {
-    expect(filterByAge(rows, null, asOf)).toHaveLength(3);
+    expect(filterByAge(rows, null, asOf, byBreakDate)).toHaveLength(3);
   });
 
   it('指定日数以内だけ残す', () => {
-    expect(filterByAge(rows, 7, asOf).map((r) => r.ticker)).toEqual(['1111', '2222']);
-    expect(filterByAge(rows, 3, asOf).map((r) => r.ticker)).toEqual(['1111']);
+    expect(filterByAge(rows, 7, asOf, byBreakDate).map((r) => r.ticker)).toEqual(['1111', '2222']);
+    expect(filterByAge(rows, 3, asOf, byBreakDate).map((r) => r.ticker)).toEqual(['1111']);
   });
 
   it('経過日数を判定できない行は落とさず残す', () => {
     // 黙って消すと件数が合わない理由が読み手に分からなくなる。
     const withBroken = [...rows, result({ ticker: '4444', break_date: 'n/a' })];
 
-    expect(filterByAge(withBroken, 3, asOf).map((r) => r.ticker)).toEqual(['1111', '4444']);
+    expect(filterByAge(withBroken, 3, asOf, byBreakDate).map((r) => r.ticker)).toEqual([
+      '1111',
+      '4444',
+    ]);
+  });
+
+  it('アクセサ経由で PPP の成立日でも絞れる', () => {
+    const rows = [
+      pppResult({ ticker: '1111', established_date: '2026-07-08' }), // 0 日
+      pppResult({ ticker: '2222', established_date: '2026-07-04' }), // 4 日
+      pppResult({ ticker: '3333', established_date: '2026-06-20' }), // 18 日
+    ];
+
+    expect(filterByAge(rows, 7, asOf, byEstablishedDate).map((r) => r.ticker)).toEqual([
+      '1111',
+      '2222',
+    ]);
+    expect(filterByAge(rows, null, asOf, byEstablishedDate)).toHaveLength(3);
   });
 });
 
@@ -195,6 +287,15 @@ describe('resolveMarketCap', () => {
 
     expect(v.source).toBe('none');
     expect(v.text).toBe('—');
+  });
+
+  it('PPP の行でも同じ規約で解決する（時価総額はパターン非依存）', () => {
+    const v = resolveMarketCap(
+      pppResult({ market_cap_asof: 5.1e13, market_cap_date: '2026-07-31' }),
+    );
+
+    expect(v.source).toBe('asof');
+    expect(v.text).toBe('51.0兆');
   });
 
   it('実測値があれば CSV 値より優先する（古い値に戻らない）', () => {
