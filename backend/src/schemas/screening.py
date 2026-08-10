@@ -56,6 +56,33 @@ class ScreeningResultsResponse(BaseModel):
     results: list[ScreeningResult] = []
 
 
+class PppResult(BaseModel):
+    ticker: str
+    name: str
+    market_cap: int | None = None
+    market_cap_asof: int | None = None
+    market_cap_date: str | None = None
+    # 成立イベント日(out -> in の遷移バー)。銘柄ごとに**最新の 1 件**だけを持つ。
+    established_date: str
+    # 成立日から最終バーまでの経過**本数**(暦日ではない)。JSON には持つが列には
+    # しない — 成立日と 1 対 1 の情報で、鮮度フィルタが既に同じ軸を扱っているため。
+    # 検証時に群分けの材料として使う。
+    duration_days: int
+    closes: list[ClosePoint] = []
+    # 乖離値(gap_short / gap_long)は**持たない**。N字がスコアを残したのは
+    # 「閾値を戻して測り直す」経路を潰さないためだが、PPP の乖離は検出条件そのもの
+    # なので同じ df から常に再計算でき、保存する必要がない。出すと大小比較が始まる。
+
+
+class PppResultsResponse(BaseModel):
+    generated_at: str | None = None
+    universe_count: int = 0
+    scanned_count: int = 0
+    universe_id: str | None = None
+    universe_name: str | None = None
+    results: list[PppResult] = []
+
+
 class ScanStatusResponse(BaseModel):
     status: str
     done: int

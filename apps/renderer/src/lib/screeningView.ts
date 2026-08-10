@@ -1,4 +1,4 @@
-import type { ScreeningResult, ScreeningScoreDetail } from '../types';
+import type { ScreeningPattern, ScreeningResult, ScreeningScoreDetail } from '../types';
 
 /**
  * スクリーニング表の並び替え・バッジ導出・鮮度フィルタ（純関数）。
@@ -32,7 +32,7 @@ export const BADGE_DEFS: ScreeningBadge[] = [
   { key: 'pullback_penalty', label: '浅い押し目' },
 ];
 
-/** 鮮度フィルタの選択肢（暦日）。`null` は全件。既定は全件 — 絞ると見落とすため。 */
+/** 鮮度フィルタの選択肢（暦日）。`null` は全件。選択肢はパターン間で共有する。 */
 export const AGE_OPTIONS: { value: number | null; label: string }[] = [
   { value: null, label: '全件' },
   { value: 3, label: '3日以内' },
@@ -40,16 +40,53 @@ export const AGE_OPTIONS: { value: number | null; label: string }[] = [
 ];
 
 /**
- * ブレイク日の新しい順。同着は ticker 昇順（並びを決定的にするため）。
+ * 鮮度フィルタのラベル語。選択肢（AGE_OPTIONS）は共有し、語だけ差し替える。
+ *
+ * `Record<ScreeningPattern, _>` にしてあるので、パターンを増やしたときに
+ * 登録漏れを tsc が落とす。
+ */
+export const AGE_LABEL: Record<ScreeningPattern, string> = {
+  'n-pattern': 'ブレイク',
+  ppp: '成立',
+};
+
+/**
+ * 鮮度の既定値（暦日）。`null` は全件。
+ *
+ * N字は「全件」— 絞って開くと見落とすため（docs/screening_ui_repositioning_plan.md §6）。
+ * **PPP だけ 7 日**にするのは、成立イベントが 1 年窓で銘柄の 8 割超に出るため
+ * （較正実測: ユニバース 563 銘柄中 464 が成立を持つ）。全件で開くと
+ * 「上昇トレンド銘柄がほぼ全部並び、ユニバースの部分集合コピーになる」という、
+ * 状態表示を却下したときの状態に逆戻りする（docs/ppp_screening_spec.md §5.2）。
+ */
+export const DEFAULT_MAX_AGE_DAYS: Record<ScreeningPattern, number | null> = {
+  'n-pattern': null,
+  ppp: 7,
+};
+
+/**
+ * 日付の新しい順。同着は ticker 昇順（並びを決定的にするため）。
+ *
+ * 日付フィールド名がパターンで違う（`break_date` / `established_date`）ため
+ * アクセサで受ける。**並び順の規約はパターン間で共通**。
  *
  * バックエンドも同じ順に並べるが、表示前に非破壊で並べ直して二重に担保する
  * （旧バージョンが書いた結果 JSON がスコア順のまま残っていても正しく出る）。
  */
-export function sortByBreakDate(results: ScreeningResult[]): ScreeningResult[] {
-  return [...results].sort((a, b) => {
-    if (a.break_date !== b.break_date) return a.break_date < b.break_date ? 1 : -1;
+export function sortByDateDesc<T extends { ticker: string }>(
+  rows: T[],
+  dateOf: (r: T) => string,
+): T[] {
+  return [...rows].sort((a, b) => {
+    const [da, db] = [dateOf(a), dateOf(b)];
+    if (da !== db) return da < db ? 1 : -1;
     return a.ticker < b.ticker ? -1 : a.ticker > b.ticker ? 1 : 0;
   });
+}
+
+/** ブレイク日の新しい順（`sortByDateDesc` の N字向けラッパ）。 */
+export function sortByBreakDate(results: ScreeningResult[]): ScreeningResult[] {
+  return sortByDateDesc(results, (r) => r.break_date);
 }
 
 /**
@@ -84,9 +121,7 @@ function calendarDayMs(value: string): number | null {
   const back = new Date(ms);
   // Date.UTC は 2026-13-45 のような値を繰り上げて受理するため往復で弾く。
   const valid =
-    back.getUTCFullYear() === year &&
-    back.getUTCMonth() === month - 1 &&
-    back.getUTCDate() === day;
+    back.getUTCFullYear() === year && back.getUTCMonth() === month - 1 && back.getUTCDate() === day;
   return valid ? ms : null;
 }
 
@@ -117,15 +152,19 @@ export function ageInDays(breakDate: string, asOf: string | null): number | null
  *
  * 経過日数を判定できない行は**落とさず残す**。日付の解釈に失敗しただけの行を
  * 黙って消すと、件数が合わない理由が読み手に分からなくなる。
+ *
+ * `dateOf` を省略可にしないのは、既定を `break_date` にすると PPP で
+ * `undefined` を渡して黙って全件通ってしまうため（型では捕まらない）。
  */
-export function filterByAge(
-  results: ScreeningResult[],
+export function filterByAge<T>(
+  rows: T[],
   maxAgeDays: number | null,
   asOf: string | null,
-): ScreeningResult[] {
-  if (maxAgeDays === null) return results;
-  return results.filter((r) => {
-    const age = ageInDays(r.break_date, asOf);
+  dateOf: (r: T) => string,
+): T[] {
+  if (maxAgeDays === null) return rows;
+  return rows.filter((r) => {
+    const age = ageInDays(dateOf(r), asOf);
     return age === null || age <= maxAgeDays;
   });
 }
@@ -152,6 +191,12 @@ export function formatMarketCap(cap: number | null): string {
   return String(cap);
 }
 
+/** 時価総額の解決に必要なフィールドだけを要求する（パターン非依存にするため）。 */
+export type MarketCapSource = Pick<
+  ScreeningResult,
+  'market_cap' | 'market_cap_asof' | 'market_cap_date'
+>;
+
 /**
  * 表示に使う時価総額を決める。**実施日の実測値を優先**し、無ければ CSV 値へ落とす。
  *
@@ -160,7 +205,7 @@ export function formatMarketCap(cap: number | null): string {
  * 何ヶ月前かは誰にも分からない。色だけで区別しないのは、テーマによっては
  * muted 色の差が読み取れないから（記号と色の二重化）。
  */
-export function resolveMarketCap(r: ScreeningResult): MarketCapView {
+export function resolveMarketCap(r: MarketCapSource): MarketCapView {
   const asof = r.market_cap_asof ?? null;
   if (asof !== null) {
     const date = r.market_cap_date ?? null;
@@ -175,7 +220,11 @@ export function resolveMarketCap(r: ScreeningResult): MarketCapView {
     return {
       text: `${formatMarketCap(csv)}*`,
       source: 'universe',
-      title: 'ユニバース CSV の登録値（実施日の値を取得できず）',
+      // 「取得できず」と言い切らないのは、実施日の値を**取りに行っていない**場合が
+      // あるため。バックエンドは表示されうる行（鮮度の新しい行）でのみ実測値を
+      // 解決する（screening_provider._needs_asof_cap）。取得失敗と未取得を
+      // UI から区別する手段は無く、どちらも「実施日の値が無い」で正しい。
+      title: 'ユニバース CSV の登録値（実施日の値は未取得）',
     };
   }
   return { text: '—', source: 'none', title: '時価総額データなし' };

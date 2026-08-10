@@ -395,7 +395,7 @@
     <tr><td>チャート</td><td>ローソク足チャート + テクニカル指標 + 描画ツール（既定）</td></tr>
     <tr><td>パターン</td><td>ローソク足パターンの自動検出・一覧表示（<a href="#s6">6. パターン分析</a>）</td></tr>
     <tr><td>マクロ</td><td>マクロ経済指標ダッシュボード（<a href="#s7">7. マクロダッシュボード</a>）</td></tr>
-    <tr><td>スクリーニング</td><td>N字パターンによる銘柄スクリーニング（<a href="#s8">8. スクリーニング</a>）</td></tr>
+    <tr><td>スクリーニング</td><td>N字・PPP パターンによる銘柄スクリーニング（<a href="#s8">8. スクリーニング</a>）</td></tr>
   </table></div>
 
   <h3 id="s2-3">2.3 ウォッチリストへの銘柄登録</h3>
@@ -820,22 +820,36 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   <p>画面下部の <code>3M</code> / <code>6M</code> / <code>1Y</code> / <code>2Y</code> ボタンで表示期間を切り替えられます（既定は <code>1Y</code>）。RSP/SPY・NS倍率・NT倍率のカードでは、期間内の最安値を示す基準線も表示されます。10年-2年のカードでは、逆イールドの境界である 0bp の破線が表示されます。</p>
 
   <h2 id="s8"><span class="sec-num">8</span>スクリーニング</h2>
-  <p>上部バーの「<strong>スクリーニング</strong>」タブに切り替えると、N字パターンによる銘柄スクリーニング機能が使えます。</p>
+  <p>上部バーの「<strong>スクリーニング</strong>」タブに切り替えると、銘柄スクリーニング機能が使えます。<strong>N字</strong>と <strong>PPP（パーフェクトオーダー）</strong> の 2 パターンをタブで切り替えて表示できます。</p>
 
   <figure class="shot">
-    <a class="shot-link" href="images/screening.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/screening.png" alt="スクリーニングビュー。上部ツールバーにスキャン実行・ユニバース選択・CSV登録・最終スキャン日時・最小スコア、下にスコア降順の結果テーブル"></a>
-    <figcaption>スキャン完了後のスクリーニングビュー。上部ツールバーに <b>スキャン実行</b>・<b>ユニバース選択</b>・<b>CSV登録</b>・<b>最終スキャン日時</b>・<b>最小スコア</b>が並び、下の結果テーブルはコード・銘柄名・時価総額・<b>スコア（降順）</b>・サムネイルで構成されます。</figcaption>
+    <a class="shot-link" href="images/screening.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/screening.png" alt="スクリーニングビュー。上部ツールバーにスキャン実行・ユニバース選択・CSV登録・最終スキャン日時・鮮度フィルタ、下に結果テーブル"></a>
+    <figcaption>スキャン完了後のスクリーニングビュー。上部ツールバーに <b>スキャン実行</b>・<b>ユニバース選択</b>・<b>CSV登録</b>・<b>最終スキャン日時</b>・<b>鮮度フィルタ</b>が並び、その下のパターンタブで表を切り替えます。</figcaption>
   </figure>
 
   <h3>ツールバー</h3>
   <div class="table-wrap"><table>
     <tr><th>要素</th><th>機能</th></tr>
-    <tr><td>スキャン実行</td><td>選択中のユニバース（銘柄群）に対してスキャンを開始する（実行中は「スキャン中…」表示）</td></tr>
+    <tr><td>スキャン実行</td><td>選択中のユニバース（銘柄群）に対してスキャンを開始する（実行中は「スキャン中…」表示）。<strong>1 回のスキャンで両パターンが同時に判定されます</strong></td></tr>
     <tr><td>ユニバース選択</td><td>スキャン対象の銘柄群を選択する（下記参照）</td></tr>
     <tr><td>進捗表示</td><td>スキャン実行中に「進捗 x/y」の形式で表示される</td></tr>
     <tr><td>最終スキャン日時</td><td>直近のスキャン完了時刻（未実行時は「未スキャン」）</td></tr>
-    <tr><td>最小スコア</td><td>結果を絞り込むスコアの下限（<code>0</code> / <code>50</code> / <code>60</code> / <code>70</code> / <code>80</code> から選択、既定 <code>50</code>）</td></tr>
+    <tr><td>鮮度フィルタ</td><td>検出日からの経過日数で絞り込む（<code>全件</code> / <code>3日以内</code> / <code>7日以内</code>）。ラベルと既定値はパターンで異なります（下記）</td></tr>
+    <tr><td>件数</td><td>絞り込み後の件数（絞っている場合は「x / y 件」の形式）</td></tr>
   </table></div>
+
+  <h3>パターンタブ</h3>
+  <p>ツールバーの下に <code>N字</code> / <code>PPP</code> のタブがあり、クリックで表示する表を切り替えます。ツールバーは両パターンで共通です（スキャンボタンは 1 つだけで、押すと両パターンの結果が同時に更新されます）。</p>
+  <ul>
+    <li>選択したパターンは保存され、次回起動時も前回のタブが開きます。</li>
+    <li>鮮度フィルタの選択はタブごとに独立して保持されます（PPP で絞ってから N字に切り替えて戻っても、選択は維持されます）。</li>
+  </ul>
+  <div class="table-wrap"><table>
+    <tr><th>パターン</th><th>鮮度ラベル</th><th>鮮度の既定値</th><th>意味</th></tr>
+    <tr><td>N字</td><td>ブレイク</td><td>全件</td><td>高値更新（ブレイク）からの経過日数</td></tr>
+    <tr><td>PPP</td><td>成立</td><td>7日以内</td><td>移動平均が短期→長期の順に並んだ日（成立日）からの経過日数</td></tr>
+  </table></div>
+  <p>PPP だけ既定で絞り込んでいるのは、成立イベントが 1 年の観察期間で多くの銘柄に発生し、全件表示ではユニバースのほぼ全体が並んでしまうためです。「全件」を選べばすべて表示できます。</p>
 
   <h3>ユニバース管理</h3>
   <ul>
@@ -844,15 +858,27 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
     <li>「<strong>削除</strong>」ボタンで選択中のユニバースを削除できます（内蔵の既定ユニバースは削除不可）。</li>
   </ul>
 
-  <h3>結果一覧</h3>
+  <h3>結果一覧（N字）</h3>
   <div class="table-wrap"><table>
     <tr><th>列</th><th>内容</th></tr>
     <tr><td>コード</td><td>銘柄コード</td></tr>
     <tr><td>銘柄名</td><td>銘柄名（CSVに無ければコードで代用）</td></tr>
-    <tr><td>時価総額</td><td>兆/億単位で表示。取得不可の場合は「—」</td></tr>
-    <tr><td>スコア</td><td>N字パターンの一致度（降順ソート）</td></tr>
+    <tr><td>時価総額</td><td>兆/億単位で表示。取得不可の場合は「—」。<code>*</code> 付きはユニバース CSV の登録値（スキャン実施日の値を取得できなかった場合）</td></tr>
+    <tr><td>ブレイク日</td><td>高値を更新した日（新しい順にソート）</td></tr>
+    <tr><td>特徴</td><td>検出されたパターンの要素（強いブレイク / 出来高急増 / MACD GC / 浅い押し目）</td></tr>
+    <tr><td>サムネイル</td><td>直近の値動きを示す小さなチャート（▲▼ は N字の起点・高値・押し目・高値更新）</td></tr>
+  </table></div>
+
+  <h3>結果一覧（PPP）</h3>
+  <div class="table-wrap"><table>
+    <tr><th>列</th><th>内容</th></tr>
+    <tr><td>コード</td><td>銘柄コード</td></tr>
+    <tr><td>銘柄名</td><td>銘柄名（CSVに無ければコードで代用）</td></tr>
+    <tr><td>時価総額</td><td>N字と同じ</td></tr>
+    <tr><td>成立日</td><td>移動平均が短期→長期の順に並んだ日（新しい順にソート）</td></tr>
     <tr><td>サムネイル</td><td>直近の値動きを示す小さなチャート</td></tr>
   </table></div>
+  <p>PPP の表には数値列がありません。移動平均どうしの間隔などの検出条件は表に出さず、<strong>成立したという事実だけ</strong>を並べます。</p>
   <p>結果行をクリックすると、その銘柄をチャート表示に切り替えます（ウォッチリスト未登録の銘柄は <a href="#s2-3">2.3</a> の手順で追加できます）。</p>
 
   <h2 id="s9"><span class="sec-num">9</span>設定パネル</h2>
