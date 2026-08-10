@@ -86,6 +86,69 @@ def test_search_yfinance_failure_returns_empty(client):
 
 
 @pytest.mark.integration
+def test_search_preset_jp_name_is_japanese(client):
+    res = client.get("/api/search?q=7203")
+    data = res.json()["data"]
+    assert data[0]["name"] == "トヨタ自動車"
+
+
+@pytest.mark.integration
+def test_search_preset_english_alias_still_matches(client):
+    # 日本語化しても既存の英語クエリを壊さない
+    res = client.get("/api/search?q=toyota")
+    codes = [d["code"] for d in res.json()["data"]]
+    assert "7203" in codes
+
+
+@pytest.mark.integration
+def test_search_preset_matches_japanese_name(client):
+    res = client.get("/api/search?q=トヨタ")
+    codes = [d["code"] for d in res.json()["data"]]
+    assert "7203" in codes
+
+
+@pytest.mark.integration
+def test_search_us_preset_name_unchanged(client):
+    res = client.get("/api/search?q=AAPL")
+    data = res.json()["data"]
+    assert data[0]["name"] == "Apple Inc."
+
+
+@pytest.mark.integration
+def test_search_yf_result_localized(client):
+    mock_quotes = [
+        {"symbol": "5713.T", "shortname": "SUMITOMO METAL MINING CO", "exchange": "TSE"},
+    ]
+
+    class MockSearch:
+        def __init__(self, *args, **kwargs):
+            self.quotes = mock_quotes
+
+    with patch("src.routes.search.yf.Search", MockSearch):
+        res = client.get("/api/search?q=sumitomometal")
+    assert res.status_code == 200
+    data = res.json()["data"]
+    hit = next(d for d in data if d["code"] == "5713")
+    assert hit["name"] == "住友金属鉱山"
+
+
+@pytest.mark.integration
+def test_search_yf_us_result_not_localized(client):
+    mock_quotes = [
+        {"symbol": "AMD", "shortname": "Advanced Micro Devices", "exchange": "NMS"},
+    ]
+
+    class MockSearch:
+        def __init__(self, *args, **kwargs):
+            self.quotes = mock_quotes
+
+    with patch("src.routes.search.yf.Search", MockSearch):
+        res = client.get("/api/search?q=advancedmicro")
+    data = res.json()["data"]
+    assert data[0]["name"] == "Advanced Micro Devices"
+
+
+@pytest.mark.integration
 def test_search_results_capped_at_ten(client):
     mock_quotes = [
         {"symbol": f"SYM{i}", "shortname": f"Company {i}", "exchange": "NMS"}

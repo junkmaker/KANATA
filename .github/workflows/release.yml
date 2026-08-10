@@ -29,19 +29,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Cache Python resources
+      # キャッシュするのは重い Python 埋め込み配布だけ。
+      # resources/backend は backend/src と backend/data のコピーなので
+      # **キャッシュしない** — キーが requirements.txt のハッシュしか見ないため、
+      # ソースを変えてもキャッシュヒットして古い backend が同梱される事故になる。
+      # (v2: resources/backend を含んでいた旧キャッシュを引かないためのキー更新)
+      - name: Cache Python distribution
         id: cache-resources
         uses: actions/cache@v4
         with:
-          path: |
-            resources/python
-            resources/backend
-          key: resources-py3.12.9-${{ hashFiles('backend/requirements.txt') }}
+          path: resources/python
+          key: resources-py3.12.9-v2-${{ hashFiles('backend/requirements.txt') }}
           restore-keys: |
-            resources-py3.12.9-
+            resources-py3.12.9-v2-
 
+      # スキップ条件を付けない。スクリプト側が Python 構築だけを既存判定でスキップし、
+      # backend のコピーは毎回やり直すので、キャッシュヒット時も数秒で終わる。
       - name: Prepare Python distribution
-        if: steps.cache-resources.outputs.cache-hit != 'true'
         shell: pwsh
         run: pwsh -ExecutionPolicy Bypass -File scripts/prepare-python-dist.ps1
 
