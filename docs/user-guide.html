@@ -756,15 +756,29 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   </figure>
 
   <h4>絞り込みチップ</h4>
+  <p>チップは「すべて」と、方向（強気・弱気・中立）でまとめた3行に分かれています。選べるのは1つだけです。</p>
   <div class="table-wrap"><table>
-    <tr><th>チップ</th><th>対象パターン</th></tr>
-    <tr><td>すべて</td><td>すべてのパターンを表示</td></tr>
-    <tr><td>陽線包み</td><td>Bullish Engulfing（強気シグナル）</td></tr>
-    <tr><td>同時線</td><td>Doji（中立シグナル）</td></tr>
-    <tr><td>宵の明星</td><td>Evening Star（弱気シグナル）</td></tr>
-    <tr><td>ハンマー</td><td>Hammer（強気シグナル）</td></tr>
+    <tr><th>方向</th><th>チップ</th><th>対象パターン</th></tr>
+    <tr><td>—</td><td>すべて</td><td>すべてのパターンを表示</td></tr>
+    <tr><td>強気</td><td>陽線包み</td><td>Bullish Engulfing</td></tr>
+    <tr><td>強気</td><td>陽線はらみ</td><td>Bullish Harami</td></tr>
+    <tr><td>強気</td><td>ハンマー</td><td>Hammer</td></tr>
+    <tr><td>強気</td><td>明けの明星</td><td>Morning Star</td></tr>
+    <tr><td>強気</td><td>上放れ並び赤</td><td>Upside Gap Two White</td></tr>
+    <tr><td>強気</td><td>アイランドボトム</td><td>Island Bottom</td></tr>
+    <tr><td>弱気</td><td>陰線包み</td><td>Bearish Engulfing</td></tr>
+    <tr><td>弱気</td><td>陰線はらみ</td><td>Bearish Harami</td></tr>
+    <tr><td>弱気</td><td>首吊り線</td><td>Hanging Man</td></tr>
+    <tr><td>弱気</td><td>宵の明星</td><td>Evening Star</td></tr>
+    <tr><td>弱気</td><td>下放れ二本黒</td><td>Two Black Gapping</td></tr>
+    <tr><td>弱気</td><td>アイランド天井</td><td>Island Top</td></tr>
+    <tr><td>中立</td><td>同時線</td><td>Doji</td></tr>
   </table></div>
   <p>検出されたパターンはチャート上にマーカー表示され、下部の一覧に日時・種別とともに列挙されます。</p>
+  <p>「上放れ並び赤」と「下放れ二本黒」の2つだけは<b>継続</b>を示すパターンで、矢印はトレンドが続く方向を指します。「同時線」は中立（買い方と売り方が拮抗した形）で、方向を示しません。残りの10種は反転パターンです。</p>
+  <p>矢印が下向きになるのは弱気シグナルだけです。中立の同時線は橙色の上向き矢印で描かれるので、<b>上向き＝強気とは限りません</b>。色（緑＝強気 / 赤＝弱気 / 橙＝中立）で見分けてください。</p>
+  <p>なお「ハンマー」は<b>直前10本の下降（-5%以上）があった場合にのみ</b>表示されます。上昇（+5%以上）のあとに同じ形が出た場合は「首吊り線」（弱気シグナル）として表示され、横ばいの場合はどちらも表示されません。</p>
+  <p>この ±5% というしきい値は<b>日足を前提に決めています</b>。分足では「10本で ±5%」が厳しすぎてハンマー・首吊り線がほとんど表示されず、週足・月足では逆にほとんどの形がどちらかに分類されます。日足以外での表示は目安として扱ってください。</p>
 
   <h2 id="s7"><span class="sec-num">7</span>マクロダッシュボード</h2>
   <p>上部バーの「<strong>マクロ</strong>」タブに切り替えると、マクロ経済指標のダッシュボードが表示されます。</p>
