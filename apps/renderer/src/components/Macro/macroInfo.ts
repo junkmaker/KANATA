@@ -4,7 +4,7 @@
 // evaluate_signal / _overall_signal と config/macro_thresholds.json。
 // 閾値の数値を変更する場合は macro_thresholds.json と本ファイルを両方更新すること。
 //
-// キー集合は MacroCard.tsx の TITLE/SUBTITLE と同一（6 指標）。
+// キー集合は MacroCard.tsx の TITLE/SUBTITLE と同一（7 指標）。
 
 export interface MacroInfoCriteria {
   green: string;
@@ -75,6 +75,16 @@ export const MACRO_INFO: Record<string, MacroInfo> = {
       green: '正常帯（$1.5〜$7）内',
       yellow: '正常帯（$1.5〜$7）外',
       red: '$0以下（逆転）または$10以上（極端拡大）',
+    },
+    displayOnly: true,
+  },
+  t10y2y: {
+    what: '米10年債利回りから米2年債利回りを引いたスプレッド（bp）。金融政策サイクルの位置を示す。',
+    read: 'マイナス＝逆イールド（短期金利が長期を上回る状態）。水準そのものに意味がある指標で、0 が定義上の境界。総合シグナルには寄与しない表示専用指標。',
+    criteria: {
+      green: '+50bp 超',
+      yellow: '0bp 以上 +50bp 以下',
+      red: '0bp 未満（逆イールド）',
     },
     displayOnly: true,
   },

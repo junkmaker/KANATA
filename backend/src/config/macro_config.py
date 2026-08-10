@@ -30,6 +30,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "topix_etf": "1306",
         "brent": "BZ=F",
         "wti": "CL=F",
+        "t10y2y": "T10Y2Y",
     },
     "default_lookback_days": 730,
     "thresholds": {
@@ -60,6 +61,10 @@ _DEFAULT_CONFIG: dict[str, Any] = {
             "red_inversion_max": 0.0,
             "red_extreme_min": 10.0,
         },
+        "t10y2y": {
+            "green_min_bp": 50.0,
+            "red_max_bp": 0.0,
+        },
     },
     "sanitize": {
         "spike_window_half_points": 5,
@@ -80,12 +85,35 @@ def _config_path() -> Path:
     return Path(__file__).parent / "macro_thresholds.json"
 
 
+def _merge_with_default(loaded: dict[str, Any]) -> dict[str, Any]:
+    """``_DEFAULT_CONFIG`` を土台に、読み込んだ設定を 2 階層まで上書きした dict を返す。
+
+    丸ごと差し替えではなく合成にする理由: 設定ファイルは ``MACRO_CONFIG_PATH`` で
+    ユーザーが差し替えられる。新しい指標を足したとき、旧版のファイルを指したままの
+    環境では ``series``/``thresholds`` にそのキーが無く、ビルダーの ``cfg["series"][key]``
+    が ``KeyError`` を投げる。ルート層の広域 except がこれを 502 に変換するため、
+    **1 指標の設定漏れでダッシュボード全体が落ちる**（部分稼働の方針に反する）。
+
+    合成は 2 階層まで（``series`` / ``thresholds`` などの dict は指標キー単位でマージ）。
+    指標ブロックの内側の欠落は ``evaluate_signal`` の ``t.get(name, default)`` が吸収する。
+    """
+    merged: dict[str, Any] = {}
+    for key in {*_DEFAULT_CONFIG, *loaded}:
+        default_value = _DEFAULT_CONFIG.get(key)
+        loaded_value = loaded.get(key, default_value)
+        if isinstance(default_value, dict) and isinstance(loaded_value, dict):
+            merged[key] = {**default_value, **loaded_value}
+        else:
+            merged[key] = loaded_value
+    return merged
+
+
 def load_macro_config() -> dict[str, Any]:
-    """Return the macro config dict, falling back to the built-in default."""
+    """Return the macro config dict, merged over the built-in default."""
     path = _config_path()
     try:
         with path.open(encoding="utf-8") as f:
-            return json.load(f)
+            return _merge_with_default(json.load(f))
     except FileNotFoundError:
         logger.warning("macro config not found at %s; using built-in default", path)
     except (json.JSONDecodeError, OSError) as e:

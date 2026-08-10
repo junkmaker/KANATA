@@ -9,10 +9,11 @@ const EXPECTED_KEYS = [
   'nikkei_sp',
   'nikkei_topix',
   'brent_wti',
+  't10y2y',
 ];
 
 describe('MACRO_INFO', () => {
-  it('期待する6キー集合と過不足なく一致する', () => {
+  it('期待する7キー集合と過不足なく一致する', () => {
     expect(Object.keys(MACRO_INFO).sort()).toEqual([...EXPECTED_KEYS].sort());
   });
 
@@ -31,12 +32,12 @@ describe('MACRO_INFO', () => {
     }
   });
 
-  it('表示専用3指標のみ displayOnly=true を持つ', () => {
+  it('表示専用4指標のみ displayOnly=true を持つ', () => {
     const displayOnly = Object.entries(MACRO_INFO)
       .filter(([, info]) => info.displayOnly)
       .map(([key]) => key)
       .sort();
-    expect(displayOnly).toEqual(['brent_wti', 'nikkei_sp', 'nikkei_topix'].sort());
+    expect(displayOnly).toEqual(['brent_wti', 'nikkei_sp', 'nikkei_topix', 't10y2y'].sort());
   });
 });
 

@@ -41,6 +41,10 @@ def _fred_side_effect(series_id, start, end):
             {"date": "2026-01-07", "value": 700.0},
             {"date": "2026-01-14", "value": 700.0},
         ],
+        "T10Y2Y": [
+            {"date": "2026-01-07", "value": 0.53},
+            {"date": "2026-01-14", "value": 0.60},
+        ],
     }
     return data.get(series_id, [])
 
@@ -108,6 +112,19 @@ def test_brent_wti_endpoint_shape(client):
 
 
 @pytest.mark.integration
+def test_t10y2y_endpoint_shape(client):
+    with patch("src.services.macro_provider.fetch_fred_series", side_effect=_fred_side_effect):
+        res = client.get(f"/api/macro/t10y2y{WIDE}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["indicator"] == "t10y2y"
+    assert body["unit"] == "bp"
+    assert body["lens"] == "rates"
+    assert body["series"][0]["value"] == 53.0  # 0.53% -> 53bp
+    assert body["meta"]["available"] is True
+
+
+@pytest.mark.integration
 def test_dashboard_partial_when_fred_key_missing(client):
     """No FRED key -> hy-oas/net-liquidity unavailable, rsp-spy still works."""
     with patch(
@@ -120,6 +137,8 @@ def test_dashboard_partial_when_fred_key_missing(client):
     by_key = {i["indicator"]: i for i in body["indicators"]}
     assert by_key["hy_oas"]["meta"]["available"] is False
     assert by_key["net_liquidity"]["meta"]["available"] is False
+    assert by_key["t10y2y"]["meta"]["available"] is False
+    assert by_key["t10y2y"]["signal"] == "gray"
     assert by_key["rsp_spy"]["meta"]["available"] is True
 
 
@@ -151,10 +170,10 @@ def test_dashboard_overall_signal_aggregation(client):
     assert res.status_code == 200
     body = res.json()
     assert body["overall_signal"] in {"green", "yellow", "red", "gray"}
-    # Core 3 (hy_oas/net_liquidity/rsp_spy) + extra 3 (nikkei_sp/nikkei_topix/brent_wti).
-    assert len(body["indicators"]) == 6
+    # Core 3 (hy_oas/net_liquidity/rsp_spy) + extra 4 (nikkei_sp/nikkei_topix/brent_wti/t10y2y).
+    assert len(body["indicators"]) == 7
     by_key = {i["indicator"]: i for i in body["indicators"]}
-    for key in ("nikkei_sp", "nikkei_topix", "brent_wti"):
+    for key in ("nikkei_sp", "nikkei_topix", "brent_wti", "t10y2y"):
         assert key in by_key
     # (non-contamination of overall_signal is proven in test_macro_provider.py)
 

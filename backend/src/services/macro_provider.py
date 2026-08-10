@@ -28,6 +28,7 @@ _THRESHOLD_TEXT: dict[str, dict[str, Any]] = {
     "nikkei_sp": {"green_max": None, "yellow_band": "中期下降トレンド", "red": "直近安値割れ"},
     "nikkei_topix": {"green_max": None, "yellow_band": "中期下降トレンド", "red": "直近安値割れ"},
     "brent_wti": {"green_max": None, "yellow_band": "正常帯($1.5〜7)外", "red": "逆転/極端拡大"},
+    "t10y2y": {"green_max": None, "yellow_band": "0〜+50bp", "red": "0未満（逆イールド）"},
 }
 
 
@@ -166,11 +167,29 @@ def _unavailable(*, key: str, indicator: str, unit: str, lens: str, source: str)
 # --------------------------------------------------------------------------- #
 def evaluate_signal(indicator_key: str, series: list[dict], cfg: dict) -> Signal:
     values = [p["value"] for p in series]
-    if len(values) < 2:
+    if not values:
         return "green"
 
     thresholds = cfg.get("thresholds", {})
     latest = values[-1]
+
+    if indicator_key == "t10y2y":
+        # 水準そのもので判定する（直近 N 点の高値/安値は参照しない）。0 は統計的に
+        # 決めた閾値ではなく「短期金利 > 長期金利」という定義上の境界（逆イールド）。
+        # green_min_bp は仮置きの値で、根拠となる検証は無い（docs/macro_t10y2y_spec.md §2）。
+        #
+        # 他指標が使う「2 点未満は green」の早期 return より前に置く。あちらは前後比較が
+        # 前提で 1 点では何も計算できないが、水準判定は 1 点あれば正しく答えられるため、
+        # 早期 return の後ろに置くと -80bp の単点が green になってしまう。
+        t = thresholds.get("t10y2y", {})
+        if latest < float(t.get("red_max_bp", 0.0)):
+            return "red"
+        if latest > float(t.get("green_min_bp", 50.0)):
+            return "green"
+        return "yellow"
+
+    if len(values) < 2:
+        return "green"
 
     if indicator_key == "hy_oas":
         t = thresholds.get("hy_oas", {})
@@ -262,6 +281,43 @@ def build_hy_oas(start: str, end: str, cfg: dict | None = None) -> dict:
         indicator="hy_oas",
         unit="bp",
         lens="liquidity",
+        series=series,
+        signal=signal,
+        source="FRED",
+        stale=stale,
+        available=True,
+        provisional=False,
+    )
+
+
+def build_t10y2y(start: str, end: str, cfg: dict | None = None) -> dict:
+    """米10年債利回り − 米2年債利回り（イールドカーブ）。表示専用指標。
+
+    build_hy_oas と同型（FRED 単系列 → ×100 → 水準判定）。マイナスは逆イールドで、
+    一度入ると 1〜2 年継続するため red に張り付くが、これは指標の故障ではなく事実の
+    正しい反映（docs/macro_t10y2y_spec.md §2）。表示専用のため総合シグナルは汚さない。
+    """
+    cfg = cfg or load_macro_config()
+    series_id = cfg["series"]["t10y2y"]
+    try:
+        observations = fetch_fred_series(series_id, start, end)
+    except MissingFredKey:
+        return _unavailable(
+            key="t10y2y", indicator="t10y2y", unit="bp", lens="rates", source="FRED"
+        )
+
+    # FRED returns percent; display unit is basis points (×100).
+    series = [
+        {"date": o["date"], "value": round(o["value"] * 100.0, 2)}
+        for o in sorted(observations, key=lambda x: x["date"])
+    ]
+    stale = not series
+    signal = evaluate_signal("t10y2y", series, cfg) if series else "gray"
+    return _indicator(
+        key="t10y2y",
+        indicator="t10y2y",
+        unit="bp",
+        lens="rates",
         series=series,
         signal=signal,
         source="FRED",
@@ -473,8 +529,8 @@ def _overall_signal(indicators: list[dict], cfg: dict) -> Signal:
 
 def build_dashboard(start: str, end: str, cfg: dict | None = None) -> dict:
     cfg = cfg or load_macro_config()
-    # 総合シグナルは米国流動性の既存3指標のみで算出する。日本株/原油の追加3指標は
-    # 表示専用で overall_signal には寄与させない（意味論を汚さないため）。
+    # 総合シグナルは米国流動性の既存3指標のみで算出する。日本株/原油/イールドカーブの
+    # 追加4指標は表示専用で overall_signal には寄与させない（意味論を汚さないため）。
     core = [
         build_hy_oas(start, end, cfg),
         build_net_liquidity(start, end, cfg),
@@ -484,6 +540,7 @@ def build_dashboard(start: str, end: str, cfg: dict | None = None) -> dict:
         build_nikkei_sp(start, end, cfg),
         build_nikkei_topix(start, end, cfg),
         build_brent_wti(start, end, cfg),
+        build_t10y2y(start, end, cfg),
     ]
     return {
         "overall_signal": _overall_signal(core, cfg),  # 既存3指標のみ
