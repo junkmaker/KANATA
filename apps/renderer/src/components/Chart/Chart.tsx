@@ -296,6 +296,16 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     return PAD_T + (1 - t) * priceH;
   };
 
+  /**
+   * 価格ペインの表示単位。paneDefs の fmtVal と Y 軸ラベルの両方がここを見る。
+   * 導出を二重化すると単位の決め方を変えたとき片方だけ直して食い違う。
+   * '' は「単位なし」（VIX 等）なので || で潰さない。
+   */
+  const priceCurrency = useMemo(
+    () => tickers.find((t) => t.code === primary)?.currency ?? '$',
+    [tickers, primary],
+  );
+
   interface PaneDef {
     id: PaneId;
     y0: number;
@@ -307,9 +317,6 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
   }
 
   const paneDefs = useMemo<PaneDef[]>(() => {
-    const tk = tickers.find((t) => t.code === primary);
-    // '' は「単位なし」（指数など）なので || で潰さない
-    const cur = tk?.currency ?? '$';
     return [
       {
         id: 'price',
@@ -318,7 +325,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         active: !isExpanded,
         yScale: (v) => PAD_T + (1 - (v - yRange.min) / (yRange.max - yRange.min)) * priceH,
         yInvert: (py) => yRange.max - ((py - PAD_T) / priceH) * (yRange.max - yRange.min),
-        fmtVal: (v) => fmtPrice(v, cur),
+        fmtVal: (v) => fmtPrice(v, priceCurrency),
       },
       {
         id: 'stoch',
@@ -364,8 +371,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     state.indicators.stoch,
     state.indicators.macd,
     state.indicators.rsi,
-    tickers,
-    primary,
+    priceCurrency,
     isExpanded,
     expandedPane,
   ]);
@@ -412,8 +418,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
         ctx.stroke();
         const v = yRange.max - (yRange.max - yRange.min) * (i / nLines);
         ctx.textAlign = 'left';
-        const tk = tickers.find((t) => t.code === primary);
-        ctx.fillText(fmtPrice(v, tk?.currency ?? '$'), PAD_L + priceW + 6, y);
+        ctx.fillText(fmtPrice(v, priceCurrency), PAD_L + priceW + 6, y);
       }
     }
 
@@ -858,8 +863,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
     view,
     state,
     indi,
-    tickers,
-    primary,
+    priceCurrency,
     priceW,
     priceH,
     volY0,
