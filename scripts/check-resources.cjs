@@ -5,6 +5,7 @@ module.exports = async function checkResources() {
   const root = join(__dirname, '..');
   const pyExe = join(root, 'resources', 'python', 'python.exe');
   const backendSrc = join(root, 'resources', 'backend', 'src', 'main.py');
+  const jpNames = join(root, 'resources', 'backend', 'data', 'jp_names.csv');
 
   if (!existsSync(pyExe)) {
     throw new Error(
@@ -14,6 +15,12 @@ module.exports = async function checkResources() {
   if (!existsSync(backendSrc)) {
     throw new Error(
       '[beforeBuild] resources/backend/src/main.py not found.\n' + 'Run: npm run prepare:dist',
+    );
+  }
+  if (!existsSync(jpNames)) {
+    throw new Error(
+      '[beforeBuild] resources/backend/data/jp_names.csv not found.\n' +
+        'Run: npm run prepare:dist',
     );
   }
   console.log('[beforeBuild] resources OK');

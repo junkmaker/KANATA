@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..db.database import get_db
 from ..db.models import Watchlist, WatchlistItem
 from ..schemas.common import fail, ok
+from ..services import jp_names
 from ..schemas.watchlist import (
     ItemReorderRequest,
     ReorderRequest,
@@ -27,7 +28,17 @@ USER_ID = "local"
 
 
 def _serialize(wl: Watchlist) -> dict:
-    return WatchlistRead.model_validate(wl).model_dump(mode="json")
+    """JP 銘柄は同梱マスタの日本語名を優先する(DB の display_name は書き換えない)。
+
+    表示時解決にしているので、マスタ更新が既存行にも即反映され、マイグレーションも
+    要らない。マスタに無いコードは保存値のままフォールバックする。
+    """
+    payload = WatchlistRead.model_validate(wl).model_dump(mode="json")
+    payload["items"] = [
+        {**item, "display_name": jp_names.jp_name(item["symbol"]) or item["display_name"]}
+        for item in payload["items"]
+    ]
+    return payload
 
 
 def _load_all(db: Session) -> list[Watchlist]:

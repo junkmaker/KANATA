@@ -48,6 +48,12 @@ cd backend && pytest
 - **スキャンは 1 ジョブ・結果はパターン別 JSON**。`run_scan` は銘柄あたり `_fetch_daily_df` を 1 回だけ呼び、その df で `detect_n_pattern` と `detect_ppp` の両方を回す。時価総額（`_resolve_asof_cap`）も**どちらかにヒットした銘柄で 1 回だけ**解決して両パターンの行で使い回す。返り値は `{pattern: payload}`。代償として「N字だけスキャンし直す」はできず常に両方走る（受け入れ済み）。エンドポイントは `POST /api/screening/scan` / `GET /api/screening/status` でパターン名を持たない
 - **`PPP_GAP_K = 1.0` は効果で選んでいない**。「SMA 間隔が ATR 1 本ぶん」という物理的意味で先験的に置いた値。1 日あたり成立件数はどの `k` でも実用域に収まり件数では選べないことが較正済み（[docs/ppp_screening_spec.md](docs/ppp_screening_spec.md) §5.1）。変更するときも**前方リターンを見て選ばない**こと（in-sample への当てはめになる）
 - ユニバース CSV の必須列は `code` のみ。`name` 欠落は code 代用、`market_cap` 欠落は None でフィルタ非適用
+- **銘柄名の供給系統は 2 つあり、意図的に別管理**。**ウォッチリスト・検索の表示名**は `backend/data/jp_names.csv`（JPX 公式）が真実源で、`services/jp_names.py` がそれを読む唯一の場所。**スクリーニングの `name` はユニバース CSV の `name` 列**が真実源で、マスタを適用しない（ユーザーがアップロードした CSV の名前はユーザーの真実源であり、上書きは想定外の挙動になる）。結果として同一銘柄が画面間で表記揺れする（内蔵ユニバースは半角 `三菱UFJ…`、マスタは JPX 公式の全角 `三菱ＵＦＪ…`）。**揃えるならユニバース CSV 側を JPX 表記に寄せること** — screening にマスタを適用する方向へ広げない
+- **`services/jp_names.py` はリーフモジュール**。`storage` 以外の services を import しない。依存方向は `search / watchlists → jp_names → storage` の一方向のみ。マスタは JP コードしか持たないので**引けたこと自体が「JP 銘柄」の判定**になる（`market` を条件に足すと `285A` のような英数混在コードを取りこぼす）。マスタが読めないときは warning を出して英語名へ縮退する（黙って無効化しない）
+- **マスタは DB の `display_name` に勝つ**。`routes/watchlists.py` の `_serialize` が表示時に上書きするので既存行のマイグレーションは不要で、マスタに無いコードは保存値へフォールバックする。**DB を書き換える方向に戻さないこと**（ユーザーが手で直した名前を潰す）
+- **マスタは手動更新**。`python scripts/build_jp_names.py --download` を回して差分をコミットする（`.xls` 読取に `pip install xlrd` が要る）。実行時にダウンロードしない — オフライン動作を守るため。JPX のコード列は数字のみが数値セル・英数混在が文字列セルという型混在なので、正規化は `_norm_code` を通す
+- **`PRESETS`（`routes/search.py`）の英語名は表示用ではなく検索エイリアス**。日本語表示はマスタが担うので、`q=toyota` を壊さないために英語名を消さない
+- **`backend/data/*.csv` は `prepare-python-dist.ps1` が `resources/backend/data/` へコピーする**（`backend_data_dir()` が読む読み取り専用リソース）。ここに CSV を足したらコピー対象に入っているか確認する。`check-resources.cjs` が `jp_names.csv` の同梱を beforeBuild で検査する
 
 ## レンダラーの制約
 
