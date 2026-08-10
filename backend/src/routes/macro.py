@@ -1,4 +1,4 @@
-"""Macro dashboard endpoints (HY OAS / net liquidity / RSP-SPY / dashboard).
+"""Macro dashboard endpoints (per-indicator + aggregated dashboard).
 
 Mirrors quotes.py: synchronous routes, shared TTLCache, default date window.
 Indicators degrade gracefully (FRED key missing -> unavailable) rather than 500,
@@ -21,6 +21,7 @@ from ..services.macro_provider import (
     build_nikkei_sp,
     build_nikkei_topix,
     build_rsp_spy,
+    build_t10y2y,
 )
 
 router = APIRouter()
@@ -126,6 +127,21 @@ def get_brent_wti(start: str | None = Query(default=None), end: str | None = Que
         return cached
     try:
         result = build_brent_wti(s, e)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Data fetch failed: {exc}")
+    cache.set(cache_key, result, _DASHBOARD_TTL_SECONDS)
+    return result
+
+
+@router.get("/macro/t10y2y", response_model=IndicatorResponse)
+def get_t10y2y(start: str | None = Query(default=None), end: str | None = Query(default=None)):
+    s, e = _resolve_window(start, end)
+    cache_key = f"macro:t10y2y:{s}:{e}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        result = build_t10y2y(s, e)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Data fetch failed: {exc}")
     cache.set(cache_key, result, _DASHBOARD_TTL_SECONDS)

@@ -12,6 +12,7 @@ const TITLE: Record<string, string> = {
   nikkei_sp: 'NS倍率',
   nikkei_topix: 'NT倍率',
   brent_wti: 'ブレント-WTI',
+  t10y2y: '10年-2年',
 };
 
 const SUBTITLE: Record<string, string> = {
@@ -21,6 +22,7 @@ const SUBTITLE: Record<string, string> = {
   nikkei_sp: '日経225 ÷ S&P500',
   nikkei_topix: '日経225 ÷ TOPIX(1306)',
   brent_wti: 'ブレント − WTI スプレッド',
+  t10y2y: '米国債スプレッド',
 };
 
 // yfinance 由来（FRED キー非依存）の指標。unavailable 時に FRED_API_KEY ヒントを出さない。
@@ -28,6 +30,10 @@ const YFINANCE_INDICATORS = ['rsp_spy', 'nikkei_sp', 'nikkei_topix', 'brent_wti'
 
 // 上昇=良好で安値線が意味を持つ指標（安値ラインをオーバーレイ表示する）。
 const LOW_LINE_INDICATORS = ['rsp_spy', 'nikkei_sp', 'nikkei_topix'];
+
+// 0（逆イールド境界）を基準線として描く指標。MacroLineChart の extraVals に合流する
+// ため、渡すだけで y 軸レンジに 0 が必ず含まれる（描画とスケーリングが同時に解決）。
+const ZERO_LINE_INDICATORS = ['t10y2y'];
 
 const SIGNAL_LINE_COLOR: Record<MacroSignal, string> = {
   green: 'var(--bull)',
@@ -106,6 +112,12 @@ export function MacroCard({ indicator }: Props) {
     return Math.min(...series.map((p) => p.value));
   }, [indicator.indicator, series]);
 
+  // インライン配列で渡すと毎レンダー参照が変わり MacroLineChart の useEffect が再実行される。
+  const thresholdLines = useMemo(
+    () => (ZERO_LINE_INDICATORS.includes(indicator.indicator) ? [{ value: 0 }] : undefined),
+    [indicator.indicator],
+  );
+
   const changeUp = latest?.change != null && latest.change >= 0;
 
   return (
@@ -135,6 +147,7 @@ export function MacroCard({ indicator }: Props) {
           <MacroLineChart
             series={series}
             color={SIGNAL_LINE_COLOR[signal]}
+            thresholdLines={thresholdLines}
             lowLine={lowLine}
           />
           <div className="macro-card-flags">

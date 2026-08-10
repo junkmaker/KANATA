@@ -735,6 +735,7 @@
     <tr><td><code>GET /api/macro/nikkei-sp</code></td><td><code>nikkei_sp</code></td><td>日経平均トレンド（表示専用・momentum 系）</td></tr>
     <tr><td><code>GET /api/macro/nikkei-topix</code></td><td><code>nikkei_topix</code></td><td>日経平均/TOPIX 比（表示専用・momentum 系）</td></tr>
     <tr><td><code>GET /api/macro/brent-wti</code></td><td><code>brent_wti</code></td><td>Brent/WTI 原油スプレッド（表示専用・momentum 系）</td></tr>
+    <tr><td><code>GET /api/macro/t10y2y</code></td><td><code>t10y2y</code></td><td>米国債イールドカーブ 10年-2年（FRED <code>T10Y2Y</code>、bp、表示専用・rates 系）</td></tr>
   </table>
   <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし）</p>
   <pre><span class="lang-tag">typescript</span><code><span class="kw">type</span> <span class="ty">Signal</span> = <span class="st">'green'</span> | <span class="st">'yellow'</span> | <span class="st">'red'</span> | <span class="st">'gray'</span>;
@@ -764,7 +765,7 @@
   series: <span class="ty">SeriesPoint</span>[];
   meta: <span class="ty">IndicatorMeta</span>;
 }</code></pre>
-  <p class="callout">FRED バックエンドの3指標（<code>hy_oas</code> / <code>net_liquidity</code> の WALCL・RRP・TGA）は <code>FRED_API_KEY</code> 未設定でも 500 を返さず、該当指標を <code>meta.available=false</code>, <code>signal="gray"</code> で返す（部分稼働）。<code>rsp_spy</code> と日本株/原油系3指標は yfinance のみで完結するためキー不要。</p>
+  <p class="callout">FRED 由来の指標（<code>hy_oas</code> / <code>net_liquidity</code> の WALCL・RRP・TGA / <code>t10y2y</code>）は <code>FRED_API_KEY</code> 未設定でも 500 を返さず、該当指標を <code>meta.available=false</code>, <code>signal="gray"</code> で返す（部分稼働）。<code>rsp_spy</code> と日本株/原油系3指標は yfinance のみで完結するためキー不要。</p>
 
   <h3 id="ep-macro-dashboard">7-2. 総合ダッシュボード</h3>
   <div class="endpoint-title">
@@ -774,9 +775,9 @@
   <p><strong>レスポンス</strong> <span class="status s200">200</span>（エンベロープなし）</p>
   <pre><span class="lang-tag">typescript</span><code><span class="kw">interface</span> <span class="ty">DashboardResponse</span> {
   overall_signal: <span class="ty">Signal</span>;
-  indicators: <span class="ty">IndicatorResponse</span>[]; <span class="cm">// hy_oas, net_liquidity, rsp_spy, nikkei_sp, nikkei_topix, brent_wti の順</span>
+  indicators: <span class="ty">IndicatorResponse</span>[]; <span class="cm">// hy_oas, net_liquidity, rsp_spy, nikkei_sp, nikkei_topix, brent_wti, t10y2y の順</span>
 }</code></pre>
-  <p class="callout"><code>overall_signal</code> は <strong>hy_oas / net_liquidity / rsp_spy の3指標（コア）のみ</strong>から算出される。<code>nikkei_sp</code> / <code>nikkei_topix</code> / <code>brent_wti</code>（momentum 系の追加3指標）は表示専用で総合シグナルには寄与しない。判定ルール: 利用可能な指標が0件 → <code>gray</code>。いずれか <code>red</code> → <code>red</code>（<code>red_if_any_red</code>）。<code>yellow</code> が2件以上 → <code>yellow</code>（<code>yellow_if_yellow_count_gte</code>）。それ以外 → <code>green</code>。</p>
+  <p class="callout"><code>overall_signal</code> は <strong>hy_oas / net_liquidity / rsp_spy の3指標（コア）のみ</strong>から算出される。<code>nikkei_sp</code> / <code>nikkei_topix</code> / <code>brent_wti</code> / <code>t10y2y</code>（表示専用の追加4指標）は総合シグナルには寄与しない。判定ルール: 利用可能な指標が0件 → <code>gray</code>。いずれか <code>red</code> → <code>red</code>（<code>red_if_any_red</code>）。<code>yellow</code> が2件以上 → <code>yellow</code>（<code>yellow_if_yellow_count_gte</code>）。それ以外 → <code>green</code>。</p>
 
   <h4>閾値設定（<code>config/macro_thresholds.json</code>）</h4>
   <p>シリーズ ID・ルックバック期間・閾値は JSON で外出し。<strong>ハードコード禁止、変更は JSON 編集のみ</strong>（<code>MACRO_CONFIG_PATH</code> 環境変数で差し替え可）。</p>
@@ -794,6 +795,8 @@
     <tr><td rowspan="3">brent_wti</td><td><code>green_band_min</code> / <code>green_band_max</code></td><td>1.5 〜 7.0</td></tr>
     <tr><td><code>red_inversion_max</code></td><td>0.0</td></tr>
     <tr><td><code>red_extreme_min</code></td><td>10.0</td></tr>
+    <tr><td rowspan="2">t10y2y</td><td><code>green_min_bp</code></td><td>50.0（仮置き・未検証）</td></tr>
+    <tr><td><code>red_max_bp</code></td><td>0.0（定義上の境界）</td></tr>
     <tr><td rowspan="2">overall</td><td><code>red_if_any_red</code></td><td>true</td></tr>
     <tr><td><code>yellow_if_yellow_count_gte</code></td><td>2</td></tr>
   </table>

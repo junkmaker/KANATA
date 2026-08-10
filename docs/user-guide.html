@@ -784,8 +784,8 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   <p>上部バーの「<strong>マクロ</strong>」タブに切り替えると、マクロ経済指標のダッシュボードが表示されます。</p>
 
   <figure class="shot">
-    <a class="shot-link" href="images/macro.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/macro.png" alt="マクロダッシュボード。上部に総合シグナル、6つの指標カード、下部に期間切り替えボタン。FRED キー未設定のため HY OAS と Fed 純流動性は取得不可と表示されている"></a>
-    <figcaption>マクロダッシュボード。上部に <b>総合シグナル</b>、その下に <b>6つの指標カード</b>、最下部に <b>期間切り替え（3M / 6M / 1Y / 2Y）</b>が並びます。この例は <code>FRED_API_KEY</code> 未設定の状態で、FRED を使う HY OAS と Fed純流動性が「データ取得不可」になり、yfinance ベースの4指標のみ稼働しています（部分稼働）。</figcaption>
+    <a class="shot-link" href="images/macro.png" target="_blank" rel="noopener" title="クリックで等倍表示"><img src="images/macro.png" alt="マクロダッシュボード。上部に総合シグナル、指標カード、下部に期間切り替えボタン。FRED キー未設定のため HY OAS と Fed 純流動性は取得不可と表示されている"></a>
+    <figcaption>マクロダッシュボード。上部に <b>総合シグナル</b>、その下に <b>指標カード</b>、最下部に <b>期間切り替え（3M / 6M / 1Y / 2Y）</b>が並びます。この例は <code>FRED_API_KEY</code> 未設定の状態で、FRED を使う HY OAS と Fed純流動性が「データ取得不可」になり、yfinance ベースの4指標のみ稼働しています（部分稼働）。</figcaption>
   </figure>
 
   <h3>総合シグナル</h3>
@@ -799,7 +799,7 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
   </table></div>
 
   <h3>指標カード</h3>
-  <p>以下6つの指標がカード形式で表示されます。各カードには最新値・前回比・シグナルバッジ・折れ線チャートが含まれます。</p>
+  <p>以下7つの指標がカード形式で表示されます。各カードには最新値・前回比・シグナルバッジ・折れ線チャートが含まれます。</p>
   <div class="table-wrap"><table>
     <tr><th>カード</th><th>内容</th><th>データソース</th></tr>
     <tr><td>HY OAS</td><td>ハイイールド・スプレッド</td><td>FRED</td></tr>
@@ -808,15 +808,16 @@ Drag to pan · scroll to zoom · double-click row to set primary</code></pre>
     <tr><td>NS倍率</td><td>日経225 ÷ S&amp;P500</td><td>yfinance</td></tr>
     <tr><td>NT倍率</td><td>日経225 ÷ TOPIX(1306)</td><td>yfinance</td></tr>
     <tr><td>ブレント-WTI</td><td>ブレント − WTI スプレッド</td><td>yfinance</td></tr>
+    <tr><td>10年-2年</td><td>米国債スプレッド（10年 − 2年、bp）</td><td>FRED</td></tr>
   </table></div>
 
   <div class="callout callout-note">
-    <p>FRED を参照する指標（HY OAS・Fed純流動性）は <code>FRED_API_KEY</code> が未設定の場合「データ取得不可」「FRED_API_KEY 未設定」と表示されます。設定パネルからキーを登録できます（<a href="#s9">9. 設定パネル</a>）。yfinance ベースの4指標はキー不要で常に稼働します。</p>
+    <p>FRED を参照する指標（HY OAS・Fed純流動性・10年-2年）は <code>FRED_API_KEY</code> が未設定の場合「データ取得不可」「FRED_API_KEY 未設定」と表示されます。設定パネルからキーを登録できます（<a href="#s9">9. 設定パネル</a>）。yfinance ベースの4指標はキー不要で常に稼働します。</p>
     <p>データが更新中で確定値でない場合は「速報値」、キャッシュの取得に失敗し古いデータを暫定表示している場合はその旨のマークが付きます。</p>
   </div>
 
   <h3>期間切り替え</h3>
-  <p>画面下部の <code>3M</code> / <code>6M</code> / <code>1Y</code> / <code>2Y</code> ボタンで表示期間を切り替えられます（既定は <code>1Y</code>）。RSP/SPY・NS倍率・NT倍率のカードでは、期間内の最安値を示す基準線も表示されます。</p>
+  <p>画面下部の <code>3M</code> / <code>6M</code> / <code>1Y</code> / <code>2Y</code> ボタンで表示期間を切り替えられます（既定は <code>1Y</code>）。RSP/SPY・NS倍率・NT倍率のカードでは、期間内の最安値を示す基準線も表示されます。10年-2年のカードでは、逆イールドの境界である 0bp の破線が表示されます。</p>
 
   <h2 id="s8"><span class="sec-num">8</span>スクリーニング</h2>
   <p>上部バーの「<strong>スクリーニング</strong>」タブに切り替えると、N字パターンによる銘柄スクリーニング機能が使えます。</p>

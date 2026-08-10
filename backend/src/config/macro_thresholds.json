@@ -8,7 +8,8 @@
     "sp500": "^GSPC",
     "topix_etf": "1306",
     "brent": "BZ=F",
-    "wti": "CL=F"
+    "wti": "CL=F",
+    "t10y2y": "T10Y2Y"
   },
   "default_lookback_days": 730,
   "thresholds": {
@@ -38,6 +39,10 @@
       "green_band_max": 7.0,
       "red_inversion_max": 0.0,
       "red_extreme_min": 10.0
+    },
+    "t10y2y": {
+      "green_min_bp": 50.0,
+      "red_max_bp": 0.0
     }
   },
   "sanitize": {

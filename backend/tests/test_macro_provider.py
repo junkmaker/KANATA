@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from src.config.macro_config import load_macro_config
+from src.services.fred_provider import MissingFredKey
 from src.services.macro_provider import (
     _overall_signal,
     build_brent_wti,
@@ -15,6 +16,7 @@ from src.services.macro_provider import (
     build_nikkei_sp,
     build_nikkei_topix,
     build_rsp_spy,
+    build_t10y2y,
     evaluate_signal,
 )
 
@@ -189,6 +191,43 @@ def test_brent_wti_degrades_to_unavailable_on_fetch_error():
 
     with patch("src.services.macro_provider.fetch_daily_closes", side_effect=boom):
         result = build_brent_wti("2020-01-01", "2030-01-01", CFG)
+
+    assert result["meta"]["available"] is False
+    assert result["signal"] == "gray"
+    assert result["series"] == []
+
+
+# --------------------------------------------------------------------------- #
+# T10Y2Y（FRED 単系列 → bp 換算）
+# --------------------------------------------------------------------------- #
+def test_t10y2y_percent_to_basis_points():
+    """FRED は percent で返す（0.53 = 53bp）。表示単位は bp。"""
+
+    def fred_side_effect(series_id, start, end):
+        if series_id == "T10Y2Y":
+            return [
+                {"date": "2026-01-07", "value": 0.53},
+                {"date": "2026-01-14", "value": -0.40},
+            ]
+        return []
+
+    with patch("src.services.macro_provider.fetch_fred_series", side_effect=fred_side_effect):
+        result = build_t10y2y("2020-01-01", "2030-01-01", CFG)
+
+    assert result["unit"] == "bp"
+    assert result["lens"] == "rates"
+    assert result["series"][0]["value"] == pytest.approx(53.0, abs=1e-6)
+    assert result["series"][1]["value"] == pytest.approx(-40.0, abs=1e-6)
+    assert result["meta"]["available"] is True
+
+
+def test_t10y2y_degrades_to_unavailable_without_fred_key():
+    """FRED キー未設定でも例外を投げず unavailable に degrade する。"""
+    with patch(
+        "src.services.macro_provider.fetch_fred_series",
+        side_effect=MissingFredKey("no key"),
+    ):
+        result = build_t10y2y("2020-01-01", "2030-01-01", CFG)
 
     assert result["meta"]["available"] is False
     assert result["signal"] == "gray"
@@ -390,6 +429,41 @@ def test_signal_brent_wti_green_in_band():
     assert evaluate_signal("brent_wti", _series(values), CFG) == "green"
 
 
+def test_signal_t10y2y_red_on_inversion():
+    assert evaluate_signal("t10y2y", _series([100.0, -1.0]), CFG) == "red"
+
+
+def test_signal_t10y2y_yellow_at_zero():
+    """0 ちょうどは red ではない（red_max_bp は strict less-than で判定する）。"""
+    assert evaluate_signal("t10y2y", _series([100.0, 0.0]), CFG) == "yellow"
+
+
+def test_signal_t10y2y_yellow_at_green_min():
+    """green_min_bp ちょうどは green ではない（strict greater-than で判定する）。"""
+    assert evaluate_signal("t10y2y", _series([100.0, 50.0]), CFG) == "yellow"
+
+
+def test_signal_t10y2y_green_above_band():
+    assert evaluate_signal("t10y2y", _series([100.0, 51.0]), CFG) == "green"
+
+
+def test_signal_t10y2y_evaluates_single_point():
+    """水準判定は 1 点でも答えを出せる。
+
+    他指標が使う「2 点未満は green」の早期 return に巻き込まれると、逆イールドの
+    単点（?start=X&end=X などで発生しうる）が green になり警告と真逆の表示になる。
+    """
+    assert evaluate_signal("t10y2y", _series([-80.0]), CFG) == "red"
+    assert evaluate_signal("t10y2y", _series([80.0]), CFG) == "green"
+    assert evaluate_signal("t10y2y", _series([20.0]), CFG) == "yellow"
+
+
+def test_signal_other_indicators_still_green_on_single_point():
+    """t10y2y を早期 return より前に出したことで、他指標の既存挙動が変わっていないこと。"""
+    for key in ("hy_oas", "net_liquidity", "rsp_spy", "nikkei_sp", "nikkei_topix", "brent_wti"):
+        assert evaluate_signal(key, _series([-999.0]), CFG) == "green", key
+
+
 # --------------------------------------------------------------------------- #
 # Overall signal rule
 # --------------------------------------------------------------------------- #
@@ -421,7 +495,7 @@ def test_overall_gray_when_none_available():
 # Dashboard: extras are display-only and must not contaminate overall_signal
 # --------------------------------------------------------------------------- #
 def test_dashboard_extras_do_not_contaminate_overall():
-    """Core 3 が全て green のとき、extra の brent_wti が red でも overall は green のまま。"""
+    """Core 3 が全て green のとき、extra の brent_wti / t10y2y が red でも overall は green のまま。"""
 
     def fred_side_effect(series_id, start, end):
         data = {
@@ -431,6 +505,8 @@ def test_dashboard_extras_do_not_contaminate_overall():
             "WALCL": [{"date": "2026-01-07", "value": 7_000_000}, {"date": "2026-01-14", "value": 7_500_000}],
             "RRPONTSYD": [{"date": "2026-01-06", "value": 400.0}, {"date": "2026-01-13", "value": 400.0}],
             "WTREGEN": [{"date": "2026-01-07", "value": 700.0}, {"date": "2026-01-14", "value": 700.0}],
+            # 逆イールド -40bp -> red（extra だが overall には影響しない想定）
+            "T10Y2Y": [{"date": "2026-01-07", "value": -0.30}, {"date": "2026-01-14", "value": -0.40}],
         }
         return data.get(series_id, [])
 
@@ -455,10 +531,11 @@ def test_dashboard_extras_do_not_contaminate_overall():
         result = build_dashboard("2020-01-01", "2030-01-01", CFG)
 
     by_key = {i["indicator"]: i for i in result["indicators"]}
-    assert len(result["indicators"]) == 6
-    # Core all green, extra brent_wti red -> overall stays green (extras excluded).
+    assert len(result["indicators"]) == 7
+    # Core all green, extras (brent_wti / t10y2y) red -> overall stays green (extras excluded).
     assert by_key["hy_oas"]["signal"] == "green"
     assert by_key["net_liquidity"]["signal"] == "green"
     assert by_key["rsp_spy"]["signal"] == "green"
     assert by_key["brent_wti"]["signal"] == "red"
+    assert by_key["t10y2y"]["signal"] == "red"
     assert result["overall_signal"] == "green"
