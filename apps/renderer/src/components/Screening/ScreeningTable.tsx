@@ -1,5 +1,5 @@
-import type { ScreeningResult } from '../../types';
 import { resolveMarketCap, sortByBreakDate, toBadges } from '../../lib/screeningView';
+import type { ScreeningResult } from '../../types';
 import { ScreeningThumbnail } from './ScreeningThumbnail';
 
 type Props = {

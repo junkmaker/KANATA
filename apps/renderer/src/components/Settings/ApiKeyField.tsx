@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import type { FredKeyStatus } from '@kanata/shared-types';
+import { useEffect, useState } from 'react';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -61,7 +61,9 @@ export function ApiKeyField() {
       </div>
 
       {encryptionUnavailable ? (
-        <div className="apikey-hint err">この環境では OS 暗号化が利用できないため保存できません</div>
+        <div className="apikey-hint err">
+          この環境では OS 暗号化が利用できないため保存できません
+        </div>
       ) : (
         <>
           <input

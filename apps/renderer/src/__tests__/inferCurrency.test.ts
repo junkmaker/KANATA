@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { inferCurrency } from '../lib/watchlistTickers';
 import { fmtPrice } from '../lib/formatters';
+import { inferCurrency } from '../lib/watchlistTickers';
 
 describe('inferCurrency', () => {
   it('市場コードで既定の単位を決める', () => {

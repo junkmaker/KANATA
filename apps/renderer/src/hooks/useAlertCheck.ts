@@ -26,9 +26,7 @@ export function useAlertCheck(
       if (Notification.permission !== 'granted') return;
 
       // Fetch price data for alert symbols not in the active watchlist
-      const missingSymbols = [
-        ...new Set(pending.map((a) => a.symbol).filter((s) => !data[s])),
-      ];
+      const missingSymbols = [...new Set(pending.map((a) => a.symbol).filter((s) => !data[s]))];
       const extraData: Record<string, OHLCBar[]> = {};
       await Promise.all(
         missingSymbols.map(async (symbol) => {
