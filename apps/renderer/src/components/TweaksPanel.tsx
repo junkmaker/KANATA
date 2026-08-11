@@ -21,7 +21,7 @@ export function TweaksPanel({
     <div className="tweaks-panel" data-chart-shortcuts="off">
       <div className="tweaks-head">
         <span>設定</span>
-        <button className="link-btn" onClick={onClose}>
+        <button type="button" className="link-btn" onClick={onClose}>
           閉じる
         </button>
       </div>
@@ -40,6 +40,7 @@ export function TweaksPanel({
             ] as [string, string][]
           ).map(([id, label]) => (
             <button
+              type="button"
               key={id}
               className={`chip${aesthetic === id ? ' on' : ''}`}
               onClick={() => setAesthetic(id)}
@@ -60,6 +61,7 @@ export function TweaksPanel({
             ] as [string, string][]
           ).map(([id, label]) => (
             <button
+              type="button"
               key={id}
               className={`chip${String(state.showSqMarkers) === id ? ' on' : ''}`}
               onClick={() => setState((s) => ({ ...s, showSqMarkers: id === 'true' }))}
@@ -80,6 +82,7 @@ export function TweaksPanel({
             ] as [string, string][]
           ).map(([id, label]) => (
             <button
+              type="button"
               key={id}
               className={`chip${state.compareMode === id ? ' on' : ''}`}
               onClick={() =>
@@ -100,6 +103,7 @@ export function TweaksPanel({
         <div className="tweak-label">クイックプリセット</div>
         <div className="tweak-chips">
           <button
+            type="button"
             className="chip"
             onClick={() =>
               setState((s) => ({
@@ -121,6 +125,7 @@ export function TweaksPanel({
             スイング
           </button>
           <button
+            type="button"
             className="chip"
             onClick={() =>
               setState((s) => ({
@@ -142,6 +147,7 @@ export function TweaksPanel({
             デイトレ
           </button>
           <button
+            type="button"
             className="chip"
             onClick={() =>
               setState((s) => ({
@@ -163,6 +169,7 @@ export function TweaksPanel({
             一目
           </button>
           <button
+            type="button"
             className="chip"
             onClick={() =>
               setState((s) => ({

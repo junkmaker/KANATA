@@ -125,12 +125,13 @@ export function App() {
   useEffect(() => subscribeBackendUrlChange(), []);
 
   // One-shot migration of legacy localStorage watchlist on first ready load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 一度きりの移行処理。wl.reload / wl.watchlists を依存に入れると reload のたびに再実行される
   useEffect(() => {
     if (wl.status !== 'ready') return;
     migrateLegacyWatchlist(wl.watchlists).then((created) => {
       if (created) wl.reload();
     });
-  }, [wl.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wl.status]);
 
   // Resolve the active watchlist (fall back to default / first if missing)
   const activeList = useMemo(() => {

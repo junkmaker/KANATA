@@ -26,7 +26,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
-    "check": "biome check .",
+    "check": "biome check --error-on-warnings .",
     "check:fix": "biome check --write ."
   },
   "build": {

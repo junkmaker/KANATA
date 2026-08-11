@@ -66,6 +66,11 @@ cd backend && pytest
 - **Chart サブペインの Y 座標チェーンに手を入れない**（`Chart.tsx` の `priceH` → `volY0` 以降の連鎖）。ペイン高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - `useChartData` は `symbols.join(',')` を useEffect 依存にして配列の参照等価性問題を回避している
+- **意図的な依存配列は `biome-ignore` + 理由コメントで残す**。biome の `useExhaustiveDependencies` が誤検知する箇所が 9 つある — `useChartData` の `symbolsKey`（上記の参照等価性回避）、`useMacroDashboard` / `useScreening` / `useUniverses` の `reloadToken`（サイドカー再起動後の再取得トリガー。effect 内で読まないので「過剰」と判定される）、`App.tsx` の一度きりの localStorage 移行、`Chart.tsx` の描画 effect 2 本と `hitTest`、`RightPanel.tsx` の `primaryTicker?.code`。**`biome check --write` をルール無指定で走らせるとこれらが自動書き換えされ、無限フェッチや再取得停止が復活する**。修正は必ず `--only=<ルール>` で対象を絞ること。ESLint 形式の `eslint-disable` は biome に一切効かないので使わない（効かない `biome-ignore` は `suppressions/unused` 警告として CI が落とす）
+
+## lint / CI ゲート
+
+`npm run check`（= `biome check .`）は **error / warning / info すべて 0** が正常状態。CI（`.github/workflows/ci.yml`）は `biome ci . --error-on-warnings` なので、警告を 1 件でも増やすと PR が赤くなる。ランナーは `@biomejs/cli-win32-x64` を直接 devDependency に持つ都合で全ジョブ windows-latest 固定（Linux では `npm ci` が EBADPLATFORM）。
 
 ## ローソク足パターン（TS / Python 同値実装）
 

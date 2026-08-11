@@ -13,12 +13,13 @@ export function drawLine(
   ctx.beginPath();
   let started = false;
   for (let i = 0; i < ys.length; i++) {
-    if (ys[i] == null) {
+    const yv = ys[i];
+    if (yv == null) {
       started = false;
       continue;
     }
     const x = xs(i),
-      y = ys[i]!;
+      y = yv;
     if (!started) {
       ctx.moveTo(x, y);
       started = true;

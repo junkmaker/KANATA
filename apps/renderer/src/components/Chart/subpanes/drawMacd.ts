@@ -10,17 +10,20 @@ export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDPar
   let min = Infinity,
     max = -Infinity;
   for (let i = viewStart; i < viewEnd; i++) {
-    if (macdLine[i] != null) {
-      if (macdLine[i]! > max) max = macdLine[i]!;
-      if (macdLine[i]! < min) min = macdLine[i]!;
+    const m = macdLine[i];
+    if (m != null) {
+      if (m > max) max = m;
+      if (m < min) min = m;
     }
-    if (signalLine[i] != null) {
-      if (signalLine[i]! > max) max = signalLine[i]!;
-      if (signalLine[i]! < min) min = signalLine[i]!;
+    const s = signalLine[i];
+    if (s != null) {
+      if (s > max) max = s;
+      if (s < min) min = s;
     }
-    if (histogram[i] != null) {
-      if (histogram[i]! > max) max = histogram[i]!;
-      if (histogram[i]! < min) min = histogram[i]!;
+    const h = histogram[i];
+    if (h != null) {
+      if (h > max) max = h;
+      if (h < min) min = h;
     }
   }
   if (min === Infinity) return;
@@ -50,8 +53,8 @@ export function drawMacd(pane: SubPaneContext, macd: MACDResult, params: MACDPar
 
   const bodyW = Math.max(1, bw * 0.6);
   for (let i = viewStart; i < viewEnd; i++) {
-    if (histogram[i] == null) continue;
-    const h = histogram[i]!;
+    const h = histogram[i];
+    if (h == null) continue;
     const prev = i > 0 ? histogram[i - 1] : null;
     const rising = prev == null || h >= prev;
     let color: string;

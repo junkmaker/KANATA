@@ -43,6 +43,7 @@ function ToolBtn({
   const active = activeTool === id;
   return (
     <button
+      type="button"
       className={`tool-btn${active ? ' active' : ''}`}
       onClick={() => setTool(id)}
       title={label}
@@ -161,6 +162,7 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
         <div className="tf-grid">
           {timeframes.map((tf) => (
             <button
+              type="button"
               key={tf}
               className={`tf-btn${state.timeframe === tf ? ' active' : ''}`}
               onClick={() => setState((s) => ({ ...s, timeframe: tf }))}
