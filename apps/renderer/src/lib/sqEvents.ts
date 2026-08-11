@@ -81,7 +81,8 @@ function findBarIndexForEvent(bars: OHLCBar[], eventTs: number, timeframe: strin
   if (timeframe === '1W') {
     for (let i = 0; i < bars.length; i++) {
       const barStart = bars[i].t - DAILY_TOLERANCE_MS;
-      const barEnd = (i + 1 < bars.length ? bars[i + 1].t : bars[i].t + 7 * 86400000) + DAILY_TOLERANCE_MS;
+      const barEnd =
+        (i + 1 < bars.length ? bars[i + 1].t : bars[i].t + 7 * 86400000) + DAILY_TOLERANCE_MS;
       if (eventTs >= barStart && eventTs < barEnd) return i;
     }
     return -1;
@@ -102,7 +103,11 @@ function findBarIndexForEvent(bars: OHLCBar[], eventTs: number, timeframe: strin
 }
 
 // Finds the best-matching future bar index (>= bars.length) for a 1D event timestamp.
-function findFutureBarIndexForEvent(bars: OHLCBar[], eventTs: number, maxFutureBars: number): number {
+function findFutureBarIndexForEvent(
+  bars: OHLCBar[],
+  eventTs: number,
+  maxFutureBars: number,
+): number {
   let bestIdx = -1;
   let bestDiff = Infinity;
   for (let i = bars.length; i < bars.length + maxFutureBars; i++) {

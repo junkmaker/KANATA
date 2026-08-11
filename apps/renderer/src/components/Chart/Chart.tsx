@@ -1,8 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { addAlert } from '../../lib/alertStorage';
 import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS, DRAWING_COLORS, withAlpha } from '../../lib/colors';
+import {
+  isDrawingsToggleKey,
+  isTypingTarget,
+  PAN_TOOL,
+  SHORTCUT_OPT_OUT_SELECTOR,
+  toggleDrawingsVisibility,
+} from '../../lib/drawingVisibility';
 import { fmtDate, fmtPrice, fmtVol } from '../../lib/formatters';
-import { BOLL, EMA, ICHI, ICHI_DISPLACEMENT, MACD, PSAR, RSI, SMA, STOCH } from '../../lib/indicators';
+import { barTimestampAt } from '../../lib/futureBars';
+import {
+  BOLL,
+  EMA,
+  ICHI,
+  ICHI_DISPLACEMENT,
+  MACD,
+  PSAR,
+  RSI,
+  SMA,
+  STOCH,
+} from '../../lib/indicators';
+import type { SqEvent } from '../../lib/sqEvents';
+import { buildSqEventMap } from '../../lib/sqEvents';
+import { tickStepForLabels, widestDateLabel } from '../../lib/xAxisTicks';
 import type {
   AlertDirection,
   AppState,
@@ -15,25 +37,13 @@ import type {
   Ticker,
   YRange,
 } from '../../types';
-import { addAlert } from '../../lib/alertStorage';
-import {
-  isDrawingsToggleKey,
-  isTypingTarget,
-  PAN_TOOL,
-  SHORTCUT_OPT_OUT_SELECTOR,
-  toggleDrawingsVisibility,
-} from '../../lib/drawingVisibility';
-import { tickStepForLabels, widestDateLabel } from '../../lib/xAxisTicks';
+import { drawPatternHighlights, drawPatternMarkers } from './overlays/drawPatternMarkers';
+import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers';
 import { drawMacd } from './subpanes/drawMacd';
 import { drawRsi } from './subpanes/drawRsi';
 import { drawStoch } from './subpanes/drawStoch';
 import { drawLine } from './subpanes/drawUtils';
 import { drawVolume } from './subpanes/drawVolume';
-import { drawSqMarkerLabels, drawSqMarkerLines } from './overlays/drawSqMarkers';
-import { drawPatternHighlights, drawPatternMarkers } from './overlays/drawPatternMarkers';
-import { buildSqEventMap } from '../../lib/sqEvents';
-import type { SqEvent } from '../../lib/sqEvents';
-import { barTimestampAt } from '../../lib/futureBars';
 
 // SQマーカーは日足のときだけ表示する
 const SQ_TIMEFRAMES = new Set(['1D']);
@@ -74,7 +84,14 @@ function getSnapMode(tool: string): SnapMode {
   return 'highlow';
 }
 
-export function Chart({ state, setState, tickers, data, patternMatches, allowPaneExpand = true }: ChartProps) {
+export function Chart({
+  state,
+  setState,
+  tickers,
+  data,
+  patternMatches,
+  allowPaneExpand = true,
+}: ChartProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -228,7 +245,9 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
   // dataEnd: 実データ範囲の末尾（未来バーを含まない）
   const dataEnd = primaryData ? Math.min(view.end, primaryData.length) : view.end;
   // cloudEnd: 一目均衡表の雲（未来 ICHI_DISPLACEMENT 本分）を含む末尾
-  const cloudEnd = primaryData ? Math.min(view.end, primaryData.length + ICHI_DISPLACEMENT) : view.end;
+  const cloudEnd = primaryData
+    ? Math.min(view.end, primaryData.length + ICHI_DISPLACEMENT)
+    : view.end;
 
   const yRange = useMemo<YRange>(() => {
     if (!primaryData) return { min: 0, max: 1 };
@@ -1573,12 +1592,7 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
       }
       setView({ start: ns, end: ne });
     } else if (dragging?.type === 'drawing' && tempDrawing) {
-      const { idx: si, v: sv } = snapPoint(
-        sx,
-        sy,
-        getSnapMode(tempDrawing.type),
-        tempDrawing.pane,
-      );
+      const { idx: si, v: sv } = snapPoint(sx, sy, getSnapMode(tempDrawing.type), tempDrawing.pane);
       setTempDrawing({ ...tempDrawing, i2: si, v2: sv });
     } else if (
       dragging?.type === 'move-drawing' &&
@@ -1964,45 +1978,45 @@ export function Chart({ state, setState, tickers, data, patternMatches, allowPan
 
       {allowPaneExpand &&
         (['stoch', 'macd', 'rsi'] as const).map((paneId) => {
-        const isThisExpanded = expandedPane === paneId;
-        if (isExpanded && !isThisExpanded) return null;
-        const paneActive =
-          paneId === 'stoch'
-            ? state.indicators.stoch
-            : paneId === 'macd'
-              ? state.indicators.macd
-              : state.indicators.rsi;
-        if (!isExpanded && !paneActive) return null;
-        const y0 = paneId === 'stoch' ? stochY0 : paneId === 'macd' ? macdY0 : rsiY0;
-        const label = { stoch: 'Stochastics', macd: 'MACD', rsi: 'RSI' }[paneId];
-        return (
-          <button
-            key={paneId}
-            type="button"
-            onClick={() => setExpandedPane(isThisExpanded ? null : paneId)}
-            title={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
-            aria-label={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
-            style={{
-              position: 'absolute',
-              top: y0 + 6,
-              left: PAD_L + priceW + 4,
-              width: 24,
-              height: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'oklch(0.24 0.006 250 / 0.85)',
-              border: '1px solid oklch(0.34 0.006 250)',
-              borderRadius: 4,
-              color: COLORS.text,
-              cursor: 'pointer',
-              zIndex: 101,
-            }}
-          >
-            {isThisExpanded ? '⤡' : '⤢'}
-          </button>
-        );
-      })}
+          const isThisExpanded = expandedPane === paneId;
+          if (isExpanded && !isThisExpanded) return null;
+          const paneActive =
+            paneId === 'stoch'
+              ? state.indicators.stoch
+              : paneId === 'macd'
+                ? state.indicators.macd
+                : state.indicators.rsi;
+          if (!isExpanded && !paneActive) return null;
+          const y0 = paneId === 'stoch' ? stochY0 : paneId === 'macd' ? macdY0 : rsiY0;
+          const label = { stoch: 'Stochastics', macd: 'MACD', rsi: 'RSI' }[paneId];
+          return (
+            <button
+              key={paneId}
+              type="button"
+              onClick={() => setExpandedPane(isThisExpanded ? null : paneId)}
+              title={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
+              aria-label={isThisExpanded ? 'デフォルト表示に戻す' : `${label}を拡大`}
+              style={{
+                position: 'absolute',
+                top: y0 + 6,
+                left: PAD_L + priceW + 4,
+                width: 24,
+                height: 24,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'oklch(0.24 0.006 250 / 0.85)',
+                border: '1px solid oklch(0.34 0.006 250)',
+                borderRadius: 4,
+                color: COLORS.text,
+                cursor: 'pointer',
+                zIndex: 101,
+              }}
+            >
+              {isThisExpanded ? '⤡' : '⤢'}
+            </button>
+          );
+        })}
 
       <ChartLegend
         state={state}

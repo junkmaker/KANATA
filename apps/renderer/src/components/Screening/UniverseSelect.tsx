@@ -1,5 +1,5 @@
-import { useRef } from 'react';
 import type { ChangeEvent } from 'react';
+import { useRef } from 'react';
 import type { ScreeningUniverse } from '../../types';
 
 type Props = {
