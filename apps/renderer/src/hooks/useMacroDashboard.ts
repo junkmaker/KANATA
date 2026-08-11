@@ -24,6 +24,7 @@ export function useMacroDashboard(period: MacroPeriod): UseMacroDashboardResult 
     return unsubscribe;
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadToken はサイドカー再起動後の再取得トリガー。effect 内で値を読まないため biome は不要と判断するが、依存から外すと再取得が起きなくなる
   useEffect(() => {
     let cancelled = false;
     setStatus('loading');

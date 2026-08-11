@@ -77,6 +77,7 @@ export function useScreening(pattern: ScreeningPattern): UseScreeningResult {
   // reloadToken / pattern 変化でキャッシュ結果を取得。
   // 絞り込みはサーバに投げない — 鮮度フィルタは日付から表示側で計算でき、
   // 取り直す理由がない(選択のたびに fetch すると再スキャン中に取りこぼす)。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadToken はサイドカー再起動後の再取得トリガー。effect 内で値を読まないため biome は不要と判断するが、依存から外すと再取得が起きなくなる
   useEffect(() => {
     let cancelled = false;
     setLoadStatus('loading');

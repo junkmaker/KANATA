@@ -56,9 +56,11 @@ export function useWatchlists(): UseWatchlistsResult {
     reload();
   }, [reload]);
 
-  const replaceList = (updated: Watchlist) => {
+  // setWatchlists は React が同一性を保証する setter なので依存は空でよい。
+  // メモ化しないと、これを呼ぶ 4 つの useCallback が毎レンダーで実質再生成される。
+  const replaceList = useCallback((updated: Watchlist) => {
     setWatchlists((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
-  };
+  }, []);
 
   const create = useCallback(async (name: string) => {
     try {
@@ -71,16 +73,19 @@ export function useWatchlists(): UseWatchlistsResult {
     }
   }, []);
 
-  const rename = useCallback(async (id: number, name: string) => {
-    try {
-      const wl = await updateWatchlist(id, { name });
-      replaceList(wl);
-      return wl;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'rename failed');
-      return null;
-    }
-  }, []);
+  const rename = useCallback(
+    async (id: number, name: string) => {
+      try {
+        const wl = await updateWatchlist(id, { name });
+        replaceList(wl);
+        return wl;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'rename failed');
+        return null;
+      }
+    },
+    [replaceList],
+  );
 
   const setDefault = useCallback(async (id: number) => {
     try {
@@ -125,30 +130,36 @@ export function useWatchlists(): UseWatchlistsResult {
         throw e;
       }
     },
-    [],
+    [replaceList],
   );
 
-  const removeItem = useCallback(async (listId: number, symbol: string) => {
-    try {
-      const wl = await removeWatchlistItem(listId, symbol);
-      replaceList(wl);
-      return wl;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'remove item failed');
-      return null;
-    }
-  }, []);
+  const removeItem = useCallback(
+    async (listId: number, symbol: string) => {
+      try {
+        const wl = await removeWatchlistItem(listId, symbol);
+        replaceList(wl);
+        return wl;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'remove item failed');
+        return null;
+      }
+    },
+    [replaceList],
+  );
 
-  const reorderItems = useCallback(async (listId: number, symbols: string[]) => {
-    try {
-      const wl = await reorderWatchlistItems(listId, symbols);
-      replaceList(wl);
-      return wl;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'reorder items failed');
-      return null;
-    }
-  }, []);
+  const reorderItems = useCallback(
+    async (listId: number, symbols: string[]) => {
+      try {
+        const wl = await reorderWatchlistItems(listId, symbols);
+        replaceList(wl);
+        return wl;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'reorder items failed');
+        return null;
+      }
+    },
+    [replaceList],
+  );
 
   const clearError = useCallback(() => setError(null), []);
 

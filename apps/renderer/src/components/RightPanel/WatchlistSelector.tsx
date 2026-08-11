@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Watchlist } from '../../types';
 
 interface WatchlistSelectorProps {
@@ -28,6 +28,19 @@ export function WatchlistSelector({
   const [draftName, setDraftName] = useState('');
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+
+  // autoFocus 属性の代わりに ref で明示的にフォーカスする（a11y/noAutofocus 回避）。
+  // どちらの入力欄も条件付きレンダリングなので、表示された瞬間にフォーカスが入り挙動は同じ。
+  const createInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (creating) createInputRef.current?.focus();
+  }, [creating]);
+
+  useEffect(() => {
+    if (renamingId !== null) renameInputRef.current?.focus();
+  }, [renamingId]);
 
   const active = watchlists.find((w) => w.id === activeId) || null;
 
@@ -77,6 +90,7 @@ export function WatchlistSelector({
           ))}
         </select>
         <button
+          type="button"
           className={`ws-btn${editing ? ' active' : ''}`}
           onClick={onToggleEdit}
           disabled={status !== 'ready'}
@@ -85,6 +99,7 @@ export function WatchlistSelector({
           {editing ? '完了' : '編集'}
         </button>
         <button
+          type="button"
           className="ws-btn"
           onClick={() => setCreating(true)}
           disabled={status !== 'ready'}
@@ -97,8 +112,8 @@ export function WatchlistSelector({
       {creating && (
         <div className="ws-row">
           <input
+            ref={createInputRef}
             className="ws-input"
-            autoFocus
             placeholder="リスト名"
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
@@ -110,10 +125,11 @@ export function WatchlistSelector({
               }
             }}
           />
-          <button className="ws-btn" onClick={handleCreate}>
+          <button type="button" className="ws-btn" onClick={handleCreate}>
             OK
           </button>
           <button
+            type="button"
             className="ws-btn"
             onClick={() => {
               setCreating(false);
@@ -130,8 +146,8 @@ export function WatchlistSelector({
           {renamingId === active.id ? (
             <>
               <input
+                ref={renameInputRef}
                 className="ws-input"
-                autoFocus
                 value={renameDraft}
                 onChange={(e) => setRenameDraft(e.target.value)}
                 onKeyDown={(e) => {
@@ -139,13 +155,14 @@ export function WatchlistSelector({
                   if (e.key === 'Escape') setRenamingId(null);
                 }}
               />
-              <button className="ws-btn" onClick={handleRename}>
+              <button type="button" className="ws-btn" onClick={handleRename}>
                 OK
               </button>
             </>
           ) : (
             <>
               <button
+                type="button"
                 className="ws-btn"
                 onClick={() => {
                   setRenamingId(active.id);
@@ -155,6 +172,7 @@ export function WatchlistSelector({
                 名前変更
               </button>
               <button
+                type="button"
                 className="ws-btn ws-btn-danger"
                 onClick={() => handleDelete(active.id)}
                 disabled={watchlists.length <= 1}

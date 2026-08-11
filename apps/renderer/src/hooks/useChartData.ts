@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchQuotes } from '../lib/api';
 import type { OHLCBar } from '../types';
 
@@ -16,6 +16,7 @@ export function useChartData(symbols: string[], timeframe: string): UseChartData
   const [errors, setErrors] = useState<Record<string, string>>({});
   const symbolsKey = symbols.join(',');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: symbols 配列は毎レンダーで参照が変わるため、join 済み文字列の symbolsKey を依存にしている。symbols 自体（.length/.map/.every）を依存に入れると毎レンダー再フェッチの無限ループになる
   useEffect(() => {
     if (!symbols.length) {
       setStatus('idle');

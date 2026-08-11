@@ -70,7 +70,7 @@ export function TopBar({
     <header className="topbar" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
       <div className="brand">
         <div className="brand-mark">
-          <svg width={20} height={20} viewBox="0 0 20 20">
+          <svg aria-hidden="true" width={20} height={20} viewBox="0 0 20 20">
             <rect x={1} y={11} width={3} height={8} fill="currentColor" />
             <rect x={6} y={6} width={3} height={13} fill="currentColor" />
             <rect x={11} y={9} width={3} height={10} fill="currentColor" />
@@ -150,6 +150,7 @@ export function TopBar({
           aria-label="設定"
         >
           <svg
+            aria-hidden="true"
             width={15}
             height={15}
             viewBox="0 0 24 24"

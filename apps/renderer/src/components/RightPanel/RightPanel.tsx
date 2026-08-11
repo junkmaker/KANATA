@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchFundamentals } from '../../lib/api';
 import { COMPARE_COLORS } from '../../lib/colors';
 import { fmtPrice } from '../../lib/formatters';
-import { toggleSelection } from '../../lib/selection';
+import { COMPARE_MODE_NONE, toggleSelection } from '../../lib/selection';
 import type { AppState, FinMetrics, OHLCBar, Ticker, Watchlist } from '../../types';
 import { AddSymbolForm } from './AddSymbolForm';
 import { ExtraTickerBanner } from './ExtraTickerBanner';
@@ -88,6 +88,7 @@ export function RightPanel({
   }, [watchlist.status]);
 
   const primaryTicker = tickers.find((t) => t.code === state.selected[0]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primaryTicker?.code の変化時のみ再取得する。オブジェクト参照は find が毎レンダー新しい値を返すので依存にできない
   useEffect(() => {
     if (!primaryTicker) {
       setFetchedFin(null);
@@ -104,7 +105,7 @@ export function RightPanel({
     return () => {
       cancelled = true;
     };
-  }, [primaryTicker?.code]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [primaryTicker?.code]);
 
   const toggle = (code: string) => {
     setState((s) => ({ ...s, selected: toggleSelection(s.selected, code, s.compareMode) }));
@@ -289,8 +290,17 @@ export function RightPanel({
         <ExtraTickerBanner ticker={extraTicker} onAdd={onAddExtra} />
       )}
 
+      {/* 銘柄の選択リストなので listbox/option ロールを与える。
+          ロールが無いと a11y/noStaticElementInteractions が立つうえ、
+          キーボードだけでは行を選択できない状態のままになる。
+          比較モードでは複数行が aria-selected="true" になるため multiselectable を連動させる。
+          既知の制約: 編集モードの削除ボタンが option の子になり nested-interactive になる。
+          解消には .ticker-row のグリッド（1fr auto auto）ごと組み直す必要があるため別対応。 */}
       <div
         className="ticker-list"
+        role="listbox"
+        aria-label="ウォッチリスト銘柄"
+        aria-multiselectable={state.compareMode !== COMPARE_MODE_NONE}
         ref={listRef}
         onDragOver={isDraggable ? handleListDragOver : undefined}
         onDragLeave={isDraggable ? handleListDragLeave : undefined}
@@ -320,7 +330,7 @@ export function RightPanel({
               .map((b, i) => {
                 const x = (i / (spark.length - 1)) * 52;
                 const y = 14 - ((b.c - min) / (max - min + 1e-9)) * 12;
-                return x.toFixed(1) + ',' + y.toFixed(1);
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
               })
               .join(' ');
           }
@@ -328,6 +338,20 @@ export function RightPanel({
           return (
             <div
               key={t.code}
+              role="option"
+              aria-selected={selected}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                // 行そのものにフォーカスがある時だけ処理する。
+                // 入れ子の削除ボタン上での Enter/Space を横取りしないため
+                // （onClick 側の stopPropagation は keydown を止められない）。
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  // Space は既定でスクロールするので必ず抑止する
+                  e.preventDefault();
+                  toggle(t.code);
+                }
+              }}
               className={[
                 'ticker-row',
                 selected ? 'selected' : '',
@@ -372,7 +396,13 @@ export function RightPanel({
                 </div>
               </div>
               <div className="tick-mid">
-                <svg width={54} height={16} viewBox="0 0 52 14" className="spark">
+                <svg
+                  aria-hidden="true"
+                  width={54}
+                  height={16}
+                  viewBox="0 0 52 14"
+                  className="spark"
+                >
                   {pts && (
                     <polyline
                       points={pts}
@@ -391,6 +421,7 @@ export function RightPanel({
               </div>
               {editing && (
                 <button
+                  type="button"
                   className="tick-remove"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -413,11 +444,11 @@ export function RightPanel({
             <span className="hint">{primaryTicker.code}</span>
           </div>
           <div className="fund-grid">
-            <Metric label="ROE" value={displayFin.roe.toFixed(1) + '%'} color="var(--lime)" />
-            <Metric label="ROIC" value={displayFin.roic.toFixed(1) + '%'} color="var(--teal)" />
-            <Metric label="PER" value={displayFin.per.toFixed(1) + '×'} color="var(--amber)" />
-            <Metric label="PBR" value={displayFin.pbr.toFixed(2) + '×'} />
-            <Metric label="DIV" value={displayFin.div.toFixed(1) + '%'} />
+            <Metric label="ROE" value={`${displayFin.roe.toFixed(1)}%`} color="var(--lime)" />
+            <Metric label="ROIC" value={`${displayFin.roic.toFixed(1)}%`} color="var(--teal)" />
+            <Metric label="PER" value={`${displayFin.per.toFixed(1)}×`} color="var(--amber)" />
+            <Metric label="PBR" value={`${displayFin.pbr.toFixed(2)}×`} />
+            <Metric label="DIV" value={`${displayFin.div.toFixed(1)}%`} />
             <Metric label="MCAP" value={displayFin.mcap} />
           </div>
           <div className="sector">

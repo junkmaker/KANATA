@@ -46,7 +46,8 @@ export function BOLL(data: OHLCBar[], period = 20, mult = 2): BOLLResult {
   const lower: (number | null)[] = new Array(data.length).fill(null);
   for (let i = period - 1; i < data.length; i++) {
     let s = 0;
-    const m = mid[i]!;
+    const m = mid[i];
+    if (m == null) continue;
     for (let j = i - period + 1; j <= i; j++) s += (data[j].c - m) ** 2;
     const sd = Math.sqrt(s / period);
     upper[i] = m + mult * sd;
@@ -72,8 +73,9 @@ export function STOCH(data: OHLCBar[], kPeriod = 14, dPeriod = 3, slowing = 3): 
       let s = 0,
         n = 0;
       for (let j = i - slowing + 1; j <= i; j++) {
-        if (rawK[j] != null) {
-          s += rawK[j]!;
+        const rk = rawK[j];
+        if (rk != null) {
+          s += rk;
           n++;
         }
       }
@@ -84,7 +86,11 @@ export function STOCH(data: OHLCBar[], kPeriod = 14, dPeriod = 3, slowing = 3): 
   for (let i = 0; i < data.length; i++) {
     if (k[i] != null && i >= kPeriod - 1 + slowing - 1 + dPeriod - 1) {
       let s = 0;
-      for (let j = i - dPeriod + 1; j <= i; j++) s += k[j]!;
+      // null は加算に寄与しない（`s += null` と同値）。ガードは範囲外の保険
+      for (let j = i - dPeriod + 1; j <= i; j++) {
+        const kv = k[j];
+        if (kv != null) s += kv;
+      }
       d[i] = s / dPeriod;
     }
   }
@@ -140,23 +146,25 @@ function emaFromArray(values: (number | null)[], period: number): (number | null
   let prev: number | null = null;
   let count = 0;
   for (let i = 0; i < values.length; i++) {
-    if (values[i] == null) continue;
-    const v = values[i]!;
+    const v = values[i];
+    if (v == null) continue;
     count++;
     if (count < period) continue;
     if (count === period) {
       let sum = 0,
         n = 0;
       for (let j = i; j >= 0 && n < period; j--) {
-        if (values[j] != null) {
-          sum += values[j]!;
+        const vj = values[j];
+        if (vj != null) {
+          sum += vj;
           n++;
         }
       }
       prev = sum / period;
       out[i] = prev;
     } else {
-      prev = v * k + prev! * (1 - k);
+      // count > period に入る時点で prev は必ず代入済み（count === period の分岐を通っている）
+      prev = v * k + (prev ?? 0) * (1 - k);
       out[i] = prev;
     }
   }
@@ -168,12 +176,16 @@ export function MACD(data: OHLCBar[], fast = 12, slow = 26, signal = 9): MACDRes
   const emaSlow = EMA(data, slow);
   const macdLine: (number | null)[] = new Array(data.length).fill(null);
   for (let i = 0; i < data.length; i++) {
-    if (emaFast[i] != null && emaSlow[i] != null) macdLine[i] = emaFast[i]! - emaSlow[i]!;
+    const f = emaFast[i];
+    const s = emaSlow[i];
+    if (f != null && s != null) macdLine[i] = f - s;
   }
   const signalLine = emaFromArray(macdLine, signal);
   const histogram: (number | null)[] = new Array(data.length).fill(null);
   for (let i = 0; i < data.length; i++) {
-    if (macdLine[i] != null && signalLine[i] != null) histogram[i] = macdLine[i]! - signalLine[i]!;
+    const m = macdLine[i];
+    const s = signalLine[i];
+    if (m != null && s != null) histogram[i] = m - s;
   }
   return { macd: macdLine, signal: signalLine, histogram };
 }
@@ -228,7 +240,9 @@ export function ICHI(
   for (let i = 0; i < n; i++) {
     if (i >= tenkanP - 1) tenkan[i] = (hh(i, tenkanP) + ll(i, tenkanP)) / 2;
     if (i >= kijunP - 1) kijun[i] = (hh(i, kijunP) + ll(i, kijunP)) / 2;
-    if (tenkan[i] != null && kijun[i] != null) senkouA[i + disp] = (tenkan[i]! + kijun[i]!) / 2;
+    const tk = tenkan[i];
+    const kj = kijun[i];
+    if (tk != null && kj != null) senkouA[i + disp] = (tk + kj) / 2;
     if (i >= senkouBP - 1) senkouB[i + disp] = (hh(i, senkouBP) + ll(i, senkouBP)) / 2;
     if (i - disp >= 0) chikou[i - disp] = data[i].c;
   }

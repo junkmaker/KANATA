@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# ランナーを windows-latest に固定する理由:
+# `@biomejs/cli-win32-x64` が root の devDependencies に直接入っており
+# （os: ["win32"] 固定）、Linux ランナーでは npm ci が EBADPLATFORM で失敗する。
+# Windows ネイティブ製品なので、検証環境を製品と揃える意味でも正しい。
+jobs:
+  lint:
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      # `biome check` ではなく `biome ci` を使う（書き込みを一切せず GitHub 注釈を出す）。
+      # --error-on-warnings で warning / info も CI を落とす = 警告ゼロを不可逆にする。
+      - name: Biome
+        run: npx biome ci . --error-on-warnings --reporter=github
+
+  typecheck:
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck (renderer + main)
+        run: npm run typecheck
+
+  test-js:
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      # `npm run test` は test:backend まで含むので個別に 3 本呼ぶ
+      - name: Vitest (main)
+        run: npm run test:main
+      - name: Vitest (renderer)
+        run: npm run test:renderer
+      - name: Vitest (scripts)
+        run: npm run test:scripts
+
+  # electron-vite build まで通す。preload の CJS 出力崩れ（package.json の
+  # "type": "module" で Rollup が .mjs を吐く問題）は tsc では検出できず、
+  # ここを通さないとリリース時まで顕在化しない。
+  # `npm run dist` と違い埋め込み Python も GUI も不要なので CI に載せられる。
+  build:
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (electron-vite)
+        run: npm run build
+      - name: Verify preload is CJS
+        shell: pwsh
+        run: |
+          if (-not (Test-Path out/preload/index.js)) {
+            throw "preload が out/preload/index.js に出力されていない（.mjs になっている可能性）"
+          }
+
+  test-backend:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 同梱ディストリが 3.12.9（release.yml のキャッシュキー参照）なので製品と揃える
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      # pytest.ini の `testpaths = tests` はリポジトリルートからだと解決しない
+      - name: Pytest
+        working-directory: backend
+        run: python -m pytest -q

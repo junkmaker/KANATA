@@ -1,5 +1,7 @@
 # KANATA /TERMINAL
 
+[![CI](https://github.com/junkmaker/KANATA/actions/workflows/ci.yml/badge.svg)](https://github.com/junkmaker/KANATA/actions/workflows/ci.yml)
+
 **Karte for Analytical Navigation And Technical Analysis**
 
 TradingView ライクな株式チャートビューアの Windows ネイティブ Electron アプリ。
@@ -169,6 +171,24 @@ npm run dist
 # バックエンド単独起動（デバッグ用）
 cd backend && uvicorn src.main:app --reload --port 8000
 ```
+
+---
+
+## CI
+
+`.github/workflows/ci.yml` が PR と `main` への push で以下を並列実行する。
+
+| ジョブ | 内容 |
+|---|---|
+| `lint` | `biome ci . --error-on-warnings`（**警告・info も CI を落とす**） |
+| `typecheck` | `npm run typecheck`（renderer + main） |
+| `test-js` | `test:main` / `test:renderer` / `test:scripts` |
+| `test-backend` | `pytest`（Python 3.12 = 同梱ディストリと同じ系列） |
+| `build` | `npm run build`（electron-vite build。preload の CJS 出力崩れを検出する） |
+
+- ランナーは全ジョブ **windows-latest**。`@biomejs/cli-win32-x64` を直接 devDependency に持つため、Linux ランナーでは `npm ci` が EBADPLATFORM で失敗する
+- **E2E（Playwright）と `npm run dist` は CI 対象外**。ビルド済みバイナリ・GUI セッション・埋め込み Python の構築が要るため、リリース時の `release.yml` が担当する
+- 手元の `npm run check` にも `--error-on-warnings` を付けてあるので、CI と判定がずれない（フラグが無いと warn 級ルールはローカルだけ exit 0 になり、CI で初めて赤くなる）
 
 ---
 

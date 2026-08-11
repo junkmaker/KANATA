@@ -105,6 +105,7 @@ export function Chart({
   useEffect(() => {
     ichiRef.current = state.indicators.ichi;
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primary / primaryData?.length の変化時のみビューをリセットする（下のコメント参照）。primaryData 全体を依存にすると毎レンダーでパン・ズーム位置が飛ぶ
   useEffect(() => {
     if (!primaryData) return;
     const futureMargin = ichiRef.current ? ICHI_DISPLACEMENT : 0;
@@ -262,8 +263,10 @@ export function Chart({
     }
     if (state.indicators.boll && indi.boll) {
       for (let i = view.start; i < end; i++) {
-        if (indi.boll.upper[i] != null && indi.boll.upper[i]! > max) max = indi.boll.upper[i]!;
-        if (indi.boll.lower[i] != null && indi.boll.lower[i]! < min) min = indi.boll.lower[i]!;
+        const bu = indi.boll.upper[i];
+        const bl = indi.boll.lower[i];
+        if (bu != null && bu > max) max = bu;
+        if (bl != null && bl < min) min = bl;
       }
     }
     if (state.indicators.ichi && indi.ichi) {
@@ -408,18 +411,20 @@ export function Chart({
 
   let volMax = 1;
   for (let i = view.start; i < dataEnd; i++)
-    if (primaryData && primaryData[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
+    if (primaryData?.[i] && primaryData[i].v > volMax) volMax = primaryData[i].v;
 
   // Main canvas draw
+  // biome-ignore lint/correctness/useExhaustiveDependencies: bw/xScale/yScale/nVis/lastPaneBottom/finY0/FIN_H/cloudEnd/data はすべて既存 26 依存から毎レンダー再計算される派生値。依存に加えても再描画契機は変わらず、関数系（xScale/yScale）は毎レンダー同一性が変わるため全レンダー再描画になる
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs || !primaryData || !size.w) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
     cvs.width = size.w * dpr;
     cvs.height = size.h * dpr;
-    cvs.style.width = size.w + 'px';
-    cvs.style.height = size.h + 'px';
-    const ctx = cvs.getContext('2d')!;
+    cvs.style.width = `${size.w}px`;
+    cvs.style.height = `${size.h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
@@ -482,16 +487,18 @@ export function Chart({
         ctx.beginPath();
         let first = true;
         for (let i = view.start; i < cloudEnd; i++) {
-          if (senkouA[i] == null || senkouB[i] == null) continue;
+          const sa = senkouA[i];
+          if (sa == null || senkouB[i] == null) continue;
           const x = xScale(i);
           if (first) {
-            ctx.moveTo(x, yScale(senkouA[i]!));
+            ctx.moveTo(x, yScale(sa));
             first = false;
-          } else ctx.lineTo(x, yScale(senkouA[i]!));
+          } else ctx.lineTo(x, yScale(sa));
         }
         for (let i = cloudEnd - 1; i >= view.start; i--) {
-          if (senkouA[i] == null || senkouB[i] == null) continue;
-          ctx.lineTo(xScale(i), yScale(senkouB[i]!));
+          const sb = senkouB[i];
+          if (senkouA[i] == null || sb == null) continue;
+          ctx.lineTo(xScale(i), yScale(sb));
         }
         ctx.closePath();
         // 中点付近が senkouA/B 未算出（範囲外）の可能性があるため、
@@ -504,7 +511,8 @@ export function Chart({
           }
         }
         if (colorIdx >= 0) {
-          const green = senkouA[colorIdx]! >= senkouB[colorIdx]!;
+          // colorIdx は senkouA/B がともに非 null と確認できた添字（上のループ参照）
+          const green = (senkouA[colorIdx] ?? 0) >= (senkouB[colorIdx] ?? 0);
           ctx.fillStyle = green ? COLORS.cloudGreen : COLORS.cloudRed;
           ctx.fill();
         }
@@ -583,9 +591,10 @@ export function Chart({
       if (state.indicators.psar && indi.psar) {
         ctx.fillStyle = 'oklch(0.78 0.20 350)';
         for (let i = view.start; i < dataEnd; i++) {
-          if (indi.psar[i] == null) continue;
+          const ps = indi.psar[i];
+          if (ps == null) continue;
           const x = xScale(i),
-            y = yScale(indi.psar[i]!);
+            y = yScale(ps);
           ctx.beginPath();
           ctx.arc(x, y, 1.6, 0, Math.PI * 2);
           ctx.fill();
@@ -1157,18 +1166,21 @@ export function Chart({
       }
       return null;
     },
+    // biome-ignore lint/correctness/useExhaustiveDependencies: primary は本体で直接読まないが、銘柄切替時に hitTest を作り直すための明示的な依存として残す
     [state.drawings, state.showDrawings, primary, dataToScreen, xScale, paneDefs],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: オーバーレイ描画。上のメイン描画 effect と同じ理由で、既存依存から再計算される派生値（bw/xScale/yScale/lastPaneBottom ほか）を依存に含めない
   useEffect(() => {
     const cvs = overlayRef.current;
     if (!cvs) return;
+    const ctx = cvs.getContext('2d');
+    if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
     cvs.width = size.w * dpr;
     cvs.height = size.h * dpr;
-    cvs.style.width = size.w + 'px';
-    cvs.style.height = size.h + 'px';
-    const ctx = cvs.getContext('2d')!;
+    cvs.style.width = `${size.w}px`;
+    cvs.style.height = `${size.h}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
@@ -1666,7 +1678,7 @@ export function Chart({
     if (!cvs) return;
     const handler = (e: WheelEvent) => {
       e.preventDefault();
-      const { view: v, bw: b, primaryData: pd, priceW: pw } = wheelRef.current;
+      const { view: v, primaryData: pd, priceW: pw } = wheelRef.current;
       if (!pd) return;
       const rect = cvs.getBoundingClientRect();
       const sx = e.clientX - rect.left;
@@ -1732,7 +1744,7 @@ export function Chart({
   const rawHoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : dataEnd - 1;
   // 未来領域（一目均衡表の雲など）にカーソルが乗っても、凡例には直近の実データを表示し続ける
   const hoverIdx = Math.min(rawHoverIdx, dataEnd - 1);
-  const hoverBar = primaryData && primaryData[hoverIdx];
+  const hoverBar = primaryData?.[hoverIdx];
 
   return (
     <div
@@ -2149,8 +2161,9 @@ function ChartLegend({
       </div>
       {indRows.length > 0 && (
         <div className="legend-ind">
-          {indRows.map((r, k) => (
-            <span key={k} className="ind-pill">
+          {/* label はインジケーター種別ごとに一意（各 push が別々のトグルで守られている） */}
+          {indRows.map((r) => (
+            <span key={r.label} className="ind-pill">
               <i style={{ background: r.c }} />
               {r.label} {r.v != null ? (r.fmt ? r.fmt(r.v) : fmtPrice(r.v, tk.currency)) : '—'}
               {r.extra || ''}
