@@ -1,0 +1,9 @@
+# biome.json の formatter.lineEnding = "lf" に合わせ、チェックアウト時の改行を LF に固定する。
+# これが無いと windows ランナー（git 既定 core.autocrlf=true）が CRLF で展開し、
+# biome ci が全ファイルを "File content differs from formatting output" として落とす。
+* text=auto eol=lf
+
+# 自動判定の取りこぼし防止（内容は変換しない）
+*.png binary
+*.gif binary
+*.ico binary
