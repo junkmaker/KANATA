@@ -2,7 +2,7 @@
 
 移動平均が短期→長期の順に並ぶ状態への**転換日**を、ATR 単位の乖離量と
 ヒステリシスを持つ 3 状態の機械で検出する。設計判断とその根拠は
-docs/ppp_screening_spec.md に記録済み。
+docs/completed/ppp_screening_spec.md に記録済み。
 
 このモジュールは pandas.DataFrame を入力に取るだけで、yfinance 取得やファイル I/O は
 一切行わない(呼び出し側 = services.screening_provider が担う)。
@@ -24,7 +24,7 @@ SMA_LONG = 75
 # **物理的意味**で先験的に置いた値で、前方リターンを見て選んでいない(効果で閾値を
 # 選ぶと in-sample への当てはめになる — n_pattern の TREND_BONUS を反転させなかった
 # のと同じ規律)。ユニバース 563 銘柄の較正では 1 日あたり成立 4.7 件・鮮度 7 日で
-# 44 行と、運用上の件数制約も満たす(docs/ppp_screening_spec.md §5.1)。
+# 44 行と、運用上の件数制約も満たす(docs/completed/ppp_screening_spec.md §5.1)。
 #
 # 件数だけでは k を選べないことが較正で分かっている: 1 日あたり成立件数は
 # k=0.1〜1.5 の全域で「数件〜数十件」に収まるため、最小を採ると k=0.1 になり
@@ -130,7 +130,7 @@ def detect_ppp(
     銘柄ごとに最新 1 件だけを採るのは、結果 JSON と表が「1 銘柄 1 行」を前提に
     しているため。鮮度の打ち切りはここでは行わず表示側に任せる — バックエンドで
     切ると「なぜ出ないのか」が JSON を見ても分からなくなる
-    (docs/ppp_screening_spec.md §5.2)。
+    (docs/completed/ppp_screening_spec.md §5.2)。
 
     ``duration_days`` は成立日から最終バーまでの**バー本数**(暦日ではない)。
     """

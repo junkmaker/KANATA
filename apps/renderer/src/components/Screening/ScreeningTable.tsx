@@ -11,7 +11,7 @@ type Props = {
  * N字候補の一覧。**スコアは表示しない**。
  *
  * スコアにも構成要素にも前方リターンの予測力が無いことがバックテストで確定したため
- * (docs/n_pattern_backtest_spec.md §16.2)、順位付けに期待値の含意を持たせない。
+ * (docs/completed/n_pattern_backtest_spec.md §16.2)、順位付けに期待値の含意を持たせない。
  * 並びはブレイク日の新しい順で、要素は集約せずバッジで individually 出す。
  */
 export function ScreeningTable({ results, onSelectSymbol }: Props) {

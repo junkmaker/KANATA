@@ -14,7 +14,7 @@ KANATA (Karte for Analytical Navigation And Technical Analysis) は TradingView 
 - `packages/shared-types/` — `PreloadApi` 型と `window.kanata` 宣言
 - `scripts/` — 開発起動・リリース・バックテスト CLI
 
-主な設計ドキュメント: [docs/n_pattern_backtest_spec.md](docs/n_pattern_backtest_spec.md) / [docs/n_pattern_screening_spec.md](docs/n_pattern_screening_spec.md) / [docs/screening_ui_repositioning_plan.md](docs/screening_ui_repositioning_plan.md)
+主な設計ドキュメント: [docs/completed/n_pattern_backtest_spec.md](docs/completed/n_pattern_backtest_spec.md) / [docs/completed/n_pattern_screening_spec.md](docs/completed/n_pattern_screening_spec.md) / [docs/completed/screening_ui_repositioning_plan.md](docs/completed/screening_ui_repositioning_plan.md)
 
 ## 開発コマンド
 
@@ -46,7 +46,7 @@ cd backend && pytest
 - **`services/storage.py` は他 services を import しないリーフモジュール**。**依存方向は `screening_provider` → `universe_provider` の一方向のみ**（`DEFAULT_UNIVERSE_CSV` は universe_provider 側で定義）
 - **`analysis/series.py` も同じくリーフモジュール**（他の analysis を import しない）。`atr_series` / `date_iso` はここが真実源で、依存方向は `n_pattern → series` と `ppp → series` の一方向のみ。**`n_pattern ↔ ppp` の横方向依存を作らない**（片方だけ別の ATR 実装にすると「ATR 単位」という言葉が 2 つの意味を持つ）
 - **スキャンは 1 ジョブ・結果はパターン別 JSON**。`run_scan` は銘柄あたり `_fetch_daily_df` を 1 回だけ呼び、その df で `detect_n_pattern` と `detect_ppp` の両方を回す。時価総額（`_resolve_asof_cap`）も**どちらかにヒットした銘柄で 1 回だけ**解決して両パターンの行で使い回す。返り値は `{pattern: payload}`。代償として「N字だけスキャンし直す」はできず常に両方走る（受け入れ済み）。エンドポイントは `POST /api/screening/scan` / `GET /api/screening/status` でパターン名を持たない
-- **`PPP_GAP_K = 1.0` は効果で選んでいない**。「SMA 間隔が ATR 1 本ぶん」という物理的意味で先験的に置いた値。1 日あたり成立件数はどの `k` でも実用域に収まり件数では選べないことが較正済み（[docs/ppp_screening_spec.md](docs/ppp_screening_spec.md) §5.1）。変更するときも**前方リターンを見て選ばない**こと（in-sample への当てはめになる）
+- **`PPP_GAP_K = 1.0` は効果で選んでいない**。「SMA 間隔が ATR 1 本ぶん」という物理的意味で先験的に置いた値。1 日あたり成立件数はどの `k` でも実用域に収まり件数では選べないことが較正済み（[docs/completed/ppp_screening_spec.md](docs/completed/ppp_screening_spec.md) §5.1）。変更するときも**前方リターンを見て選ばない**こと（in-sample への当てはめになる）
 - ユニバース CSV の必須列は `code` のみ。`name` 欠落は code 代用、`market_cap` 欠落は None でフィルタ非適用
 - **銘柄名の供給系統は 2 つあり、意図的に別管理**。**ウォッチリスト・検索の表示名**は `backend/data/jp_names.csv`（JPX 公式）が真実源で、`services/jp_names.py` がそれを読む唯一の場所。**スクリーニングの `name` はユニバース CSV の `name` 列**が真実源で、マスタを適用しない（ユーザーがアップロードした CSV の名前はユーザーの真実源であり、上書きは想定外の挙動になる）。結果として同一銘柄が画面間で表記揺れする（内蔵ユニバースは半角 `三菱UFJ…`、マスタは JPX 公式の全角 `三菱ＵＦＪ…`）。**揃えるならユニバース CSV 側を JPX 表記に寄せること** — screening にマスタを適用する方向へ広げない
 - **`services/jp_names.py` はリーフモジュール**。`storage` 以外の services を import しない。依存方向は `search / watchlists → jp_names → storage` の一方向のみ。マスタは JP コードしか持たないので**引けたこと自体が「JP 銘柄」の判定**になる（`market` を条件に足すと `285A` のような英数混在コードを取りこぼす）。マスタが読めないときは warning を出して英語名へ縮退する（黙って無効化しない）
@@ -88,11 +88,11 @@ cd backend && pytest
 
 **`hammer` はトレンド文脈で三分されている**（下降後=ハンマー / 上昇後=首吊り線 / 横ばい=どちらも出さない。`HAMMER_TREND_LOOKBACK = 10` / `HAMMER_TREND_RATIO = 0.05`）。形状だけで判定していた旧定義は上昇後のハンマーに強気ラベルを出していた。Python の `shooting_star` は文脈を見ない非対称が残っている（UI に出さない検出器のため）。
 
-**14 種は検証済みで、形状に予測力は無い**（2026-08・[docs/candle_pattern_backtest.md](docs/candle_pattern_backtest.md)）。ハンマーが有意に見えるのは形状ではなく `HAMMER_TREND_RATIO` の条件（＝短期リバーサル）由来。同じ文脈の非ハンマーと比べた増分は 8 行中 6 行で 0 を跨ぎ、残る 2 行は**形状があるほうが有意に悪い**（符号は期間で反転する）。**勝率・期待値を UI に出さない根拠**。ただし否決は表示をやめる理由にはならない（立場は中立な観察ツール）。**条件を 2 つ以上持つ検出器を足したら、条件ごとに分けて測ること。**
+**14 種は検証済みで、形状に予測力は無い**（2026-08・[docs/completed/candle_pattern_backtest.md](docs/completed/candle_pattern_backtest.md)）。ハンマーが有意に見えるのは形状ではなく `HAMMER_TREND_RATIO` の条件（＝短期リバーサル）由来。同じ文脈の非ハンマーと比べた増分は 8 行中 6 行で 0 を跨ぎ、残る 2 行は**形状があるほうが有意に悪い**（符号は期間で反転する）。**勝率・期待値を UI に出さない根拠**。ただし否決は表示をやめる理由にはならない（立場は中立な観察ツール）。**条件を 2 つ以上持つ検出器を足したら、条件ごとに分けて測ること。**
 
 ## バックテスト・データ品質
 
-N字バックテストと OHLCV ストアを触る前に [docs/backtest_gotchas.md](docs/backtest_gotchas.md) を読むこと。統計の取り扱い（ブートストラップの単位、打ち切りの扱い、品質フィルタの両側適用）とベンチマーク汚染の罠がまとまっている。
+N字バックテストと OHLCV ストアを触る前に [docs/completed/backtest_gotchas.md](docs/completed/backtest_gotchas.md) を読むこと。統計の取り扱い（ブートストラップの単位、打ち切りの扱い、品質フィルタの両側適用）とベンチマーク汚染の罠がまとまっている。
 
 ## リリース
 

@@ -176,7 +176,7 @@ def evaluate_signal(indicator_key: str, series: list[dict], cfg: dict) -> Signal
     if indicator_key == "t10y2y":
         # 水準そのもので判定する（直近 N 点の高値/安値は参照しない）。0 は統計的に
         # 決めた閾値ではなく「短期金利 > 長期金利」という定義上の境界（逆イールド）。
-        # green_min_bp は仮置きの値で、根拠となる検証は無い（docs/macro_t10y2y_spec.md §2）。
+        # green_min_bp は仮置きの値で、根拠となる検証は無い（docs/completed/macro_t10y2y_spec.md §2）。
         #
         # 他指標が使う「2 点未満は green」の早期 return より前に置く。あちらは前後比較が
         # 前提で 1 点では何も計算できないが、水準判定は 1 点あれば正しく答えられるため、
@@ -295,7 +295,7 @@ def build_t10y2y(start: str, end: str, cfg: dict | None = None) -> dict:
 
     build_hy_oas と同型（FRED 単系列 → ×100 → 水準判定）。マイナスは逆イールドで、
     一度入ると 1〜2 年継続するため red に張り付くが、これは指標の故障ではなく事実の
-    正しい反映（docs/macro_t10y2y_spec.md §2）。表示専用のため総合シグナルは汚さない。
+    正しい反映（docs/completed/macro_t10y2y_spec.md §2）。表示専用のため総合シグナルは汚さない。
     """
     cfg = cfg or load_macro_config()
     series_id = cfg["series"]["t10y2y"]
