@@ -4,7 +4,7 @@ import type { ScreeningPattern, ScreeningResult, ScreeningScoreDetail } from '..
  * スクリーニング表の並び替え・バッジ導出・鮮度フィルタ（純関数）。
  *
  * スコアを表に出さないのは、前方リターンの予測力が無いことがバックテストで
- * 確定したため（docs/n_pattern_backtest_spec.md §16.2）。順位付けにも絞り込みにも
+ * 確定したため（docs/completed/n_pattern_backtest_spec.md §16.2）。順位付けにも絞り込みにも
  * スコアを使わず、**ブレイク日の鮮度**という作業上の軸だけで扱う。
  */
 
@@ -53,11 +53,11 @@ export const AGE_LABEL: Record<ScreeningPattern, string> = {
 /**
  * 鮮度の既定値（暦日）。`null` は全件。
  *
- * N字は「全件」— 絞って開くと見落とすため（docs/screening_ui_repositioning_plan.md §6）。
+ * N字は「全件」— 絞って開くと見落とすため（docs/completed/screening_ui_repositioning_plan.md §6）。
  * **PPP だけ 7 日**にするのは、成立イベントが 1 年窓で銘柄の 8 割超に出るため
  * （較正実測: ユニバース 563 銘柄中 464 が成立を持つ）。全件で開くと
  * 「上昇トレンド銘柄がほぼ全部並び、ユニバースの部分集合コピーになる」という、
- * 状態表示を却下したときの状態に逆戻りする（docs/ppp_screening_spec.md §5.2）。
+ * 状態表示を却下したときの状態に逆戻りする（docs/completed/ppp_screening_spec.md §5.2）。
  */
 export const DEFAULT_MAX_AGE_DAYS: Record<ScreeningPattern, number | null> = {
   'n-pattern': null,

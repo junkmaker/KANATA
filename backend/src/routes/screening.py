@@ -7,7 +7,7 @@ universe_provider が管理し、カスタム例外をここで HTTPException �
 
 **スキャン・ステータスからパターン名を外してある**。ジョブは 1 本で全パターンを
 同時に処理するため、``/n-pattern/scan`` という名前は嘘になる(代償として
-「N字だけスキャンし直す」はできない — docs/ppp_screening_spec.md 決定#7)。
+「N字だけスキャンし直す」はできない — docs/completed/ppp_screening_spec.md 決定#7)。
 
 結果 GET はパターンごとに**明示ルートを並べる**。``/screening/{pattern}`` の
 パス引数にしない理由は 2 つ: (1) response_model がパターン別の型なので、パス引数
@@ -57,7 +57,7 @@ def get_ppp():
     銘柄ごとに**最新の成立イベント 1 件**だけが入っている。鮮度の打ち切りは
     しない — バックエンドで切ると「なぜ出ないのか」が JSON を見ても分からなく
     なるため、絞り込みは表示側が established_date の鮮度で行う
-    (docs/ppp_screening_spec.md §5.2)。
+    (docs/completed/ppp_screening_spec.md §5.2)。
 
     乖離値は含めない。検出条件そのもので、同じ df から常に再計算できる。
     """

@@ -126,7 +126,7 @@ def _fetch_shares(symbol: str) -> pd.Series | None:
     """発行済株式数の時系列を取得。失敗・空なら None(時価総額は未取得扱い)。
 
     ``.info`` や ``fast_info.market_cap`` を使わないのは、前者が銘柄あたり重い
-    リクエストになり(docs/n_pattern_screening_spec.md §3.4)、後者が内部で
+    リクエストになり(docs/completed/n_pattern_screening_spec.md §3.4)、後者が内部で
     1年分の履歴を**再取得**するため — その履歴は _fetch_daily_df で既に
     手元にある。ここは株式数だけを 1 リクエストで取り、価格は df から使う。
     """
@@ -288,7 +288,7 @@ def _needs_asof_cap(n_hit: dict | None, ppp_hit: dict | None) -> bool:
     11%(63/563) しかなく、残りは UI の鮮度フィルタ(最大 7 日)で表示されない行。
 
     そこで**時価総額の解決だけ**を鮮度で絞る。**行そのものは落とさない**ので
-    docs/ppp_screening_spec.md §5.2 の決定(バックエンドで打ち切らない)は保たれ、
+    docs/completed/ppp_screening_spec.md §5.2 の決定(バックエンドで打ち切らない)は保たれ、
     落ちるのは表示用フィールドだけ。その場合は CSV 登録値へのフォールバックが
     `*` 付きで出るので、値の出所は UI 上も区別できる。
 
@@ -304,7 +304,7 @@ def _sort_results(rows: list[dict], date_key: str) -> None:
     """日付の新しい順に並べる(同着は ticker 昇順)。in-place。
 
     スコア降順にしないのは、スコアに前方リターンの予測力が無いことがバックテストで
-    確定したため(docs/n_pattern_backtest_spec.md §16.2)。順位付けに期待値の含意を
+    確定したため(docs/completed/n_pattern_backtest_spec.md §16.2)。順位付けに期待値の含意を
     持たせない。同着は ticker 昇順にしたいので、sort の安定性を使って2段階で並べる
     (タプルキー + reverse=True では ticker まで降順になってしまう)。
 
