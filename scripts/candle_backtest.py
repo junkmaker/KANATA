@@ -7,6 +7,9 @@
     python scripts/candle_backtest.py
     python scripts/candle_backtest.py --patterns morning_star,hammer --horizons 5,10
     python scripts/candle_backtest.py --start 2021-08-01 --end 2023-06-30
+    # 売買代金上位159銘柄に絞る（大型株の検証。docs/large_cap_candle_backtest_spec.md）
+    python scripts/candle_backtest.py --turnover-top 159 --rank-asof 2021-09-24 \
+        --start 2021-08-01 --end 2023-06-30
 
 なぜランダム比が必須か
 ----------------------
@@ -14,6 +17,15 @@
 生の勝率だけを見ると、情報のないパターンでも「勝率 54.7% の有効なシグナル」に見える。
 実測で明けの明星は勝率 54.7% だったが、同日ランダムは 55.3% で**負けていた**。
 生の勝率を単独で出力しない（必ずランダム比を併記する）。
+
+母集団は 1 箇所で決める
+-----------------------
+**品質フィルタは `eligible_codes` が 1 回だけ掛け、その結果をシグナル側と
+ランダム側の両方に渡す。** 以前は `collect_signals` の内側でだけフィルタしており、
+シグナル側 562 銘柄 / ランダム側 565 銘柄という母集団の不一致があった（旧 §7）。
+8303 は 693 行中 245 行が負値で fwd10 の最大値が +1,977万% あり、**1 サンプル
+引かれただけで帰無平均が桁ごと壊れる**。個々の関数の内側でフィルタを足す形に
+戻さないこと — 片方に足し忘れた瞬間に同じ欠陥が復活する。
 """
 from __future__ import annotations
 
@@ -25,6 +37,7 @@ sys.path.insert(0, str(REPO_ROOT / "backend"))  # src.* を解決するため
 
 import argparse  # noqa: E402
 import random  # noqa: E402
+from typing import Callable  # noqa: E402
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -37,43 +50,137 @@ DEFAULT_UNIVERSE = str(REPO_ROOT / "backend" / "data" / "topix_universe.csv")
 DEFAULT_HORIZONS = (5, 10, 20)
 DEFAULT_SAMPLES_PER_DATE = 6
 BOOTSTRAP_ITERS = 2000
+MIN_BARS = 40                    # 検出に必要な最低バー数（母集団判定にも使う）
+TURNOVER_WINDOW = 60             # 売買代金ランキングのローリング窓（本）
 
 
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
-def collect_signals(
+_STORE_CACHE: dict[str, pd.DataFrame | None] = {}
+
+
+def read_cached(code: str) -> pd.DataFrame | None:
+    """ストアの読み込みをプロセス内で 1 回に抑える。
+
+    母集団判定・売買代金ランキング・シグナル検出が同じ Parquet を 3 度読むため。
+    """
+    if code not in _STORE_CACHE:
+        _STORE_CACHE[code] = ohlcv_store.read_ohlcv(code)
+    return _STORE_CACHE[code]
+
+
+def eligible_codes(
+    codes: list[str], min_bars: int = MIN_BARS
+) -> tuple[list[str], list[str], list[str]]:
+    """``(使える, OHLCV 不足, 品質不良)`` に分ける。**母集団の単一の決定点**。
+
+    品質不良の条件は `backtest_report.partition_by_quality` と同じく
+    「非正の価格を含む」または「`sanity_check` が発火する」。ストアの値は消さず、
+    ここで母集団から外すだけにする。
+
+    `min_bars` 未満をここで落とすのは、`collect_signals` が同じ条件で
+    スキップするため — **シグナル側だけが落とす条件をここに集約しないと、
+    ランダム側の母集団だけが広いという旧 §7 の不一致が再発する。**
+    """
+    usable: list[str] = []
+    missing: list[str] = []
+    bad: list[str] = []
+    for code in codes:
+        df = read_cached(code)
+        if df is None or len(df) < min_bars:
+            missing.append(code)
+        elif ohlcv_store.has_non_positive_prices(df) or ohlcv_store.sanity_check(df):
+            bad.append(code)
+        else:
+            usable.append(code)
+    return (usable, missing, bad)
+
+
+def select_by_turnover(
     codes: list[str],
-    patterns: list[str],
+    top: int,
+    asof: str,
+    window: int = TURNOVER_WINDOW,
+) -> list[str]:
+    """売買代金（``Close * Volume``）のローリング中央値で上位 ``top`` 銘柄を返す。
+
+    **規模の指標に時価総額を使わない。** ストアは ``auto_adjust=True`` で保存されており
+    過去バーは実際の株価ではないため、過去時点の時価総額は計算できない
+    （`screening_provider._last_bar` のコメント参照）。``Close * Volume`` は分割に対して
+    不変（価格 1/n・出来高 n 倍）なので、調整済みストアのままで正しく計算できる
+    唯一の規模指標である。
+
+    **``shift(1)`` を落とさないこと。** 当日の売買代金でその日の母集団を決めると、
+    「その日たまたま出来高が膨らんだ銘柄」を後知恵で選ぶことになる。
+
+    ``asof`` 時点で 1 回だけ判定し、期間中は固定する（日次リバランスとの母集団一致率は
+    実測 78%。日次にすると `random_returns` を日次母集団対応に変える必要があり、
+    旧 §7 と同種の不一致を 1200 倍の面で再導入することになる）。
+
+    設計の根拠は docs/large_cap_candle_backtest_spec.md §1.2〜§1.4。
+    """
+    series: dict[str, pd.Series] = {}
+    for code in codes:
+        df = read_cached(code)
+        if df is None or df.empty:
+            continue
+        series[code] = (df["Close"].astype(float) * df["Volume"].astype(float))
+    if not series:
+        raise ValueError("売買代金を計算できる銘柄が無い")
+    panel = pd.DataFrame(series).sort_index()
+    min_periods = max(window * 2 // 3, 2)
+    roll = panel.rolling(window, min_periods=min_periods).median().shift(1)
+    upto = roll.loc[roll.index <= pd.Timestamp(asof)]
+    if upto.empty:
+        raise ValueError(f"--rank-asof {asof} 以前のバーがストアに無い")
+    row = upto.iloc[-1]
+    ranked = row.dropna().sort_values(ascending=False)
+    if len(ranked) < top:
+        raise ValueError(
+            f"--rank-asof {asof} 時点で順位が付くのは {len(ranked)} 銘柄しかない"
+            f"（--turnover-top {top} を満たせない）。ローリング窓 {window} 本には"
+            f" 最低 {min_periods} 本が要る — ストア先頭から十分に離れた日付を指定する"
+        )
+    return sorted(ranked.index[:top].tolist())
+
+
+def collect_masked(
+    codes: list[str],
+    masks: dict[str, "Callable[[pd.DataFrame], np.ndarray]"],
     horizons: tuple[int, ...],
     start: str | None,
     end: str | None,
-    require_gap: bool = False,
 ) -> dict[str, pd.DataFrame]:
-    """全パターンを 1 回の読み込みで検出し、entry と前方リターンを記録する。
+    """任意の bool マスクについて entry と前方リターンを記録する。
 
     entry は **成立バーの翌営業日始値**。リターンは ``close[j+h] / open[j] - 1`` で
     ``backtest.benchmark_outcome`` と同じ規約に揃える（土俵を揃えないと比較できない）。
 
-    銘柄ループを外側にしているのは I/O のため — パターンごとに全銘柄を読み直すと
-    Parquet の読み込みがパターン数倍になり、7 パターンで実用的な時間を超える。
+    銘柄ループを外側にしているのは I/O のため — 系列ごとに全銘柄を読み直すと
+    Parquet の読み込みが系列数倍になる。
+
+    **パターン検出と §4 の要素分解が同じ関数を通ることに意味がある。** entry の取り方が
+    1 バーでもズレた系列を混ぜると、差を取る 2 つの平均が別の規約の上で計算される。
+    `collect_signals`（パターン名）と `candle_factor_backtest`（形状/文脈のマスク）は
+    どちらもここへ集約する。
+
+    **品質フィルタはここで掛けない。** `eligible_codes` を通した `codes` を渡すこと
+    （母集団の決定点は 1 箇所にする。旧 §7 の再発防止）。`len(df) < MIN_BARS` の
+    ガードだけは構造上の要請として残してあるが、事前フィルタ済みなら no-op になる。
     """
-    gapped = {"morning_star", "evening_star"}
-    rows: dict[str, list[dict]] = {p: [] for p in patterns}
+    rows: dict[str, list[dict]] = {name: [] for name in masks}
     for code in codes:
-        df = ohlcv_store.read_ohlcv(code)
-        if df is None or len(df) < 40:
+        df = read_cached(code)
+        if df is None or len(df) < MIN_BARS:
             continue
-        if ohlcv_store.has_non_positive_prices(df) or ohlcv_store.sanity_check(df):
-            continue  # 品質不良は母集団から外す（§14.2）。ストアの値は消さない
         dates = backtest.iso_dates(df.index)
         o = df["Open"].astype(float).to_numpy()
         c = df["Close"].astype(float).to_numpy()
         n = len(c)
-        for pattern in patterns:
-            kwargs = {"require_gap": require_gap} if pattern in gapped else {}
-            hit = candle_patterns.detect(pattern, df, **kwargs)
+        for name, mask_fn in masks.items():
+            hit = mask_fn(df)
             if not hit.any():
                 continue
             for i in np.flatnonzero(hit):
@@ -86,8 +193,26 @@ def collect_signals(
                 for h in horizons:
                     k = j + h
                     rec[f"fwd{h}"] = (c[k] / o[j] - 1.0) if k < n else np.nan
-                rows[pattern].append(rec)
-    return {p: pd.DataFrame(r) for p, r in rows.items()}
+                rows[name].append(rec)
+    return {name: pd.DataFrame(r) for name, r in rows.items()}
+
+
+def collect_signals(
+    codes: list[str],
+    patterns: list[str],
+    horizons: tuple[int, ...],
+    start: str | None,
+    end: str | None,
+    require_gap: bool = False,
+) -> dict[str, pd.DataFrame]:
+    """名前付きパターンを検出して `collect_masked` に流す薄いラッパ。"""
+    gapped = {"morning_star", "evening_star"}
+
+    def _mask(pattern: str):
+        kwargs = {"require_gap": require_gap} if pattern in gapped else {}
+        return lambda df: candle_patterns.detect(pattern, df, **kwargs)
+
+    return collect_masked(codes, {p: _mask(p) for p in patterns}, horizons, start, end)
 
 
 def random_returns(
@@ -101,13 +226,16 @@ def random_returns(
 
     **日付は揃え、銘柄は揃えない**（地合いを相殺するため）。母集団は
     シグナルが出た銘柄ではなく**ユニバース全体**にする（帰無分布が寄るのを防ぐ）。
+
+    **`codes` は `eligible_codes` を通したものであること。** ここで独自にフィルタを
+    足さない — 母集団の決定点が 2 つになると、片方を直し忘れた瞬間に旧 §7 が復活する。
     """
     rng = random.Random(seed)
     cache: dict[str, tuple[list[str], dict[str, int], np.ndarray, np.ndarray] | None] = {}
 
     def _load(code: str):
         if code not in cache:
-            df = ohlcv_store.read_ohlcv(code)
+            df = read_cached(code)
             if df is None or df.empty:
                 cache[code] = None
             else:
@@ -149,6 +277,12 @@ def compare(
 
     再抽出の単位は**日付**。同じ日に出たシグナルは互いに独立でないため、
     シグナル単位で引くと信頼区間が実際より狭くなる。
+
+    ``bound`` は CI の絶対値上限（``max(|lo|, |hi|)``）。**「効果があるとしても
+    この幅以下」を読むための列で、有意/非有意の二値判定の代わりに使う。**
+    CI が 0 を跨いだことは「効果が無い」ではなく「n が足りないかもしれない」を
+    含むため、否決を主張するには上限そのものを示す必要がある
+    （docs/large_cap_candle_backtest_spec.md §2.2）。
     """
     col = f"fwd{horizon}"
     g = sig[sig[col].notna()]
@@ -173,7 +307,35 @@ def compare(
         "diff": ns.sum() / nc.sum() - rs.sum() / rc.sum(),
         "lo": lo,
         "hi": hi,
+        "bound": max(abs(lo), abs(hi)),
     }
+
+
+def resolve_codes(args) -> list[str]:
+    """CSV → 品質フィルタ → （任意で）売買代金上位 N、の順で母集団を確定する。
+
+    **品質フィルタはランキングの前に掛ける。** 8303 は負値を含むため
+    ``Close * Volume`` の順位そのものが無意味で、後に掛けると母集団が
+    ``top`` に満たなくなる（docs/large_cap_candle_backtest_spec.md §1.6）。
+    """
+    raw = [str(r["code"]) for r in load_universe(args.universe, min_market_cap=0)]
+    codes, missing, bad = eligible_codes(raw)
+    _log(
+        f"ユニバース {len(raw)} 銘柄 → 使える {len(codes)}"
+        f"（OHLCV 不足 {len(missing)} / 品質不良 {len(bad)}"
+        + (f": {','.join(bad)}" if bad else "")
+        + "）"
+    )
+    if args.turnover_top:
+        asof = args.rank_asof or args.start
+        if not asof:
+            raise SystemExit("--turnover-top を使うときは --rank-asof か --start が要る")
+        codes = select_by_turnover(codes, args.turnover_top, asof, args.turnover_window)
+        _log(
+            f"売買代金上位 {args.turnover_top} 銘柄に絞る"
+            f"（{args.turnover_window}本中央値・shift(1)・判定日 {asof}）"
+        )
+    return codes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -186,6 +348,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--require-gap", action="store_true", help="明星に窓の条件を課す（古典的定義）")
     p.add_argument("--samples-per-date", type=int, default=DEFAULT_SAMPLES_PER_DATE)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--turnover-top", type=int, default=0,
+        help="売買代金上位 N 銘柄に絞る（0 で無効）。シグナル側とランダム側の両方に効く",
+    )
+    p.add_argument("--turnover-window", type=int, default=TURNOVER_WINDOW)
+    p.add_argument(
+        "--rank-asof", default=None,
+        help="売買代金ランキングの判定日（省略時は --start）",
+    )
     args = p.parse_args(argv)
 
     horizons = tuple(int(h) for h in args.horizons.split(","))
@@ -195,8 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"エラー: 未知のパターン {unknown}")
         return 1
 
-    codes = [str(r["code"]) for r in load_universe(args.universe, min_market_cap=0)]
-    _log(f"ユニバース {len(codes)} 銘柄 / 期間 {args.start or '最初'} 〜 {args.end or '最後'}")
+    codes = resolve_codes(args)
+    _log(f"母集団 {len(codes)} 銘柄 / 期間 {args.start or '最初'} 〜 {args.end or '最後'}")
 
     signals = collect_signals(
         codes, patterns, horizons, args.start, args.end, args.require_gap
@@ -204,7 +375,8 @@ def main(argv: list[str] | None = None) -> int:
     _log("検出: " + " / ".join(f"{n}={len(s)}" for n, s in signals.items()))
 
     # ランダム母集団は全営業日ぶん 1 度だけ引く（パターンごとに引き直すと
-    # 同じ日の帰無分布がパターン間で食い違い、横並び比較にならない）
+    # 同じ日の帰無分布がパターン間で食い違い、横並び比較にならない）。
+    # codes はシグナル側と同一（eligible_codes を通した集合）。
     all_dates = sorted({d for s in signals.values() if not s.empty
                         for d in s["signal_date"].unique()})
     rnd_by_h = {
@@ -212,8 +384,8 @@ def main(argv: list[str] | None = None) -> int:
         for h in horizons
     }
 
-    print("| パターン | 方向 | h | n | 件/週 | 勝率 | ランダム勝率 | 平均 | 差 | 95% CI |")
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    print("| パターン | 方向 | h | n | 件/週 | 勝率 | ランダム勝率 | 平均 | 差 | 95% CI | 上限 |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
     for name in patterns:
         sig = signals[name]
         if sig.empty:
@@ -229,7 +401,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"| {candle_patterns.LABELS[name]} | {candle_patterns.SIGNALS[name]} | {h} "
                 f"| {res['n']} | {res['n']/weeks:.1f} | {res['win']*100:.1f}% "
                 f"| {res['rnd_win']*100:.1f}% | {res['mean']*100:+.2f}% "
-                f"| {res['diff']*100:+.2f}% | [{res['lo']*100:+.2f}%, {res['hi']*100:+.2f}%]{star} |"
+                f"| {res['diff']*100:+.2f}% | [{res['lo']*100:+.2f}%, {res['hi']*100:+.2f}%]{star} "
+                f"| {res['bound']*100:.2f}% |"
             )
     return 0
 
