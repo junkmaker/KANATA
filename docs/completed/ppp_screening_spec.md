@@ -4,7 +4,7 @@
 既存の N字スクリーニングと同じ画面・同じスキャンジョブの上に追加する。
 
 本書は設計決定とその**根拠**を残すことを目的とする。数値の妥当性は測っていない
-（測定設計は [ppp_incremental_measurement.md](ppp_incremental_measurement.md) に分離）。
+（測定設計は [ppp_incremental_measurement.md](../ppp_incremental_measurement.md) に分離）。
 
 ---
 
@@ -234,7 +234,7 @@ PPP 用の同型関数を足す。**並び順の規約は共通**（日付の新
 - 週足・月足での PPP（日足のみ）。
 - N字との共起バッジ表示。同じスキャン結果なので技術的には無料だが、**共起に予測力が
   あるとは誰も測っていない**ため、バッジにすると「2つ揃ったほうが良い」という含意が付く。
-  出すなら [ppp_incremental_measurement.md](ppp_incremental_measurement.md) の枠組みで
+  出すなら [ppp_incremental_measurement.md](../ppp_incremental_measurement.md) の枠組みで
   先に測ること。
 - ザラ場中の逐次更新（日次バッチ前提、N字と同じ）。
 
@@ -312,7 +312,7 @@ PPP 用の同型関数を足す。**並び順の規約は共通**（日付の新
 6. `screeningApi.ts` / `useScreening` のパターン対応
 7. `ScreeningView` のタブ + `kanata.screening.pattern` 永続化
 8. `PppTable`（または `ScreeningTable` のパターン分岐）
-9. 増分測定（[ppp_incremental_measurement.md](ppp_incremental_measurement.md)）— リリースの前提条件ではない
+9. 増分測定（[ppp_incremental_measurement.md](../ppp_incremental_measurement.md)）— リリースの前提条件ではない
 
 ---
 
@@ -324,4 +324,4 @@ PPP 用の同型関数を足す。**並び順の規約は共通**（日付の新
 
 ただし CLAUDE.md の「**条件を 2 つ以上持つ検出器を足したら、条件ごとに分けて測ること**」
 は PPP に直接かかる（並び + 乖離 `k` + ヒステリシス `k_exit`）。測定設計は
-[ppp_incremental_measurement.md](ppp_incremental_measurement.md) に分離した。
+[ppp_incremental_measurement.md](../ppp_incremental_measurement.md) に分離した。
