@@ -293,9 +293,8 @@ npm run dist
 | ドキュメント | 内容 |
 |---|---|
 | [docs/user-guide.md](docs/user-guide.md) | エンドユーザー向け操作ガイド |
-| [docs/architecture.md](docs/architecture.md) | システム全体図・データフロー・型定義 |
-| [docs/api-interface-spec.md](docs/api-interface-spec.md) | バックエンド API インターフェース仕様 |
-| [docs/n_pattern_screening_spec.md](docs/n_pattern_screening_spec.md) | N 字スクリーニングの仕様 |
+| [docs/completed/n_pattern_screening_spec.md](docs/completed/n_pattern_screening_spec.md) | N 字スクリーニングの仕様 |
+| [docs/completed/backtest_gotchas.md](docs/completed/backtest_gotchas.md) | バックテストとデータ品質の落とし穴 |
 | [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) | リリース前の手動確認事項 |
 
 ## コントリビューター向け注意事項

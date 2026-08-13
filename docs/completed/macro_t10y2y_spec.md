@@ -3,7 +3,7 @@
 マクロダッシュボードに `t10y2y`（米10年債利回り − 米2年債利回り）を表示専用指標として 1 枚追加する。本書は設計判断とその根拠、および実装時の変更箇所を記録する。
 
 - 対象: `backend/src/config/macro_thresholds.json` / `backend/src/services/macro_provider.py` / `backend/src/routes/macro.py` / `apps/renderer/src/components/Macro/*`
-- 前提ドキュメント: [CLAUDE.md](../CLAUDE.md)（マクロの規約）
+- 前提ドキュメント: [CLAUDE.md](../../CLAUDE.md)（マクロの規約）
 
 ---
 
