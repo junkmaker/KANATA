@@ -362,6 +362,7 @@ Drag to pan · scroll to zoom · double-click row to set primary
 | SMA 5  | 5期間の単純移動平均          | 琥珀色   |
 | SMA 25 | 25期間の単純移動平均         | 水色     |
 | SMA 75 | 75期間の単純移動平均         | マゼンタ |
+| SMA 200 | 200期間の単純移動平均       | バイオレット |
 | EMA 20 | 20期間の指数移動平均（破線） | ライム   |
 
 ### Overlays（オーバーレイ）

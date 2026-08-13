@@ -31,6 +31,13 @@ describe('SMA', () => {
   it('データ長が period 未満なら全て null', () => {
     expect(SMA(bars([1, 2]), 5)).toEqual([null, null]);
   });
+
+  it('period 200 では 199 番目まで null、200 本目から値が出る', () => {
+    const out = SMA(wave(250), 200);
+    expect(out[198]).toBeNull();
+    expect(out[199]).not.toBeNull();
+    expect(out.length).toBe(250);
+  });
 });
 
 describe('BOLL', () => {

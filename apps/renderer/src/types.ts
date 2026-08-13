@@ -41,6 +41,7 @@ export interface IndicatorState {
   sma5: boolean;
   sma25: boolean;
   sma75: boolean;
+  sma200: boolean;
   ema20: boolean;
   boll: boolean;
   stoch: boolean;
@@ -182,6 +183,7 @@ export interface IndiData {
   sma5?: (number | null)[];
   sma25?: (number | null)[];
   sma75?: (number | null)[];
+  sma200?: (number | null)[];
   ema20?: (number | null)[];
   boll?: BOLLResult;
   stoch?: STOCHResult;

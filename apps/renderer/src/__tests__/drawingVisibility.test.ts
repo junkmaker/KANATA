@@ -24,6 +24,7 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
       sma5: false,
       sma25: true,
       sma75: true,
+      sma200: false,
       ema20: false,
       boll: false,
       stoch: true,

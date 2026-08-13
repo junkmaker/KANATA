@@ -247,6 +247,12 @@ export function LeftPanel({ state, setState }: LeftPanelProps) {
           color="var(--magenta)"
         />
         <Toggle
+          label="単純移動平均線 200期間"
+          value={state.indicators.sma200}
+          onChange={(v) => setInd('sma200', v)}
+          color="var(--violet)"
+        />
+        <Toggle
           label="指数平滑移動平均線 20期間"
           value={state.indicators.ema20}
           onChange={(v) => setInd('ema20', v)}
