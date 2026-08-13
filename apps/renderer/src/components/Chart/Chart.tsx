@@ -22,6 +22,7 @@ import {
   SMA,
   STOCH,
 } from '../../lib/indicators';
+import { computePriceYRange } from '../../lib/priceYRange';
 import type { SqEvent } from '../../lib/sqEvents';
 import { buildSqEventMap } from '../../lib/sqEvents';
 import { tickStepForLabels, widestDateLabel } from '../../lib/xAxisTicks';
@@ -215,6 +216,7 @@ export function Chart({
     if (state.indicators.sma5) o.sma5 = SMA(primaryData, 5);
     if (state.indicators.sma25) o.sma25 = SMA(primaryData, 25);
     if (state.indicators.sma75) o.sma75 = SMA(primaryData, 75);
+    if (state.indicators.sma200) o.sma200 = SMA(primaryData, 200);
     if (state.indicators.ema20) o.ema20 = EMA(primaryData, 20);
     if (state.indicators.boll) o.boll = BOLL(primaryData, 20, 2);
     if (state.indicators.stoch) o.stoch = STOCH(primaryData, 14, 3, 3);
@@ -250,44 +252,17 @@ export function Chart({
     ? Math.min(view.end, primaryData.length + ICHI_DISPLACEMENT)
     : view.end;
 
-  const yRange = useMemo<YRange>(() => {
-    if (!primaryData) return { min: 0, max: 1 };
-    const end = Math.min(view.end, primaryData.length);
-    let min = Infinity,
-      max = -Infinity;
-    for (let i = view.start; i < end; i++) {
-      const b = primaryData[i];
-      if (!b) continue;
-      if (b.h > max) max = b.h;
-      if (b.l < min) min = b.l;
-    }
-    if (state.indicators.boll && indi.boll) {
-      for (let i = view.start; i < end; i++) {
-        const bu = indi.boll.upper[i];
-        const bl = indi.boll.lower[i];
-        if (bu != null && bu > max) max = bu;
-        if (bl != null && bl < min) min = bl;
-      }
-    }
-    if (state.indicators.ichi && indi.ichi) {
-      const { senkouA, senkouB } = indi.ichi;
-      for (let i = view.start; i < cloudEnd; i++) {
-        const a = senkouA[i],
-          b = senkouB[i];
-        if (a != null) {
-          if (a > max) max = a;
-          if (a < min) min = a;
-        }
-        if (b != null) {
-          if (b > max) max = b;
-          if (b < min) min = b;
-        }
-      }
-    }
-    if (min === Infinity) return { min: 0, max: 1 };
-    const pad = (max - min) * 0.08;
-    return { min: min - pad, max: max + pad };
-  }, [primaryData, view, state.indicators.boll, state.indicators.ichi, indi, cloudEnd]);
+  const yRange = useMemo<YRange>(
+    () =>
+      computePriceYRange({
+        data: primaryData ?? [],
+        start: view.start,
+        end: dataEnd,
+        cloudEnd,
+        indi,
+      }),
+    [primaryData, view.start, dataEnd, indi, cloudEnd],
+  );
 
   const macdYRange = useMemo(() => {
     if (!indi.macd) return { min: -0.001, max: 0.001 };
@@ -585,6 +560,8 @@ export function Chart({
         drawLine(ctx, xScale, toY(indi.sma25), COLORS.accent, 1.25);
       if (state.indicators.sma75 && indi.sma75)
         drawLine(ctx, xScale, toY(indi.sma75), COLORS.magenta, 1.25);
+      if (state.indicators.sma200 && indi.sma200)
+        drawLine(ctx, xScale, toY(indi.sma200), COLORS.violet, 1.25);
       if (state.indicators.ema20 && indi.ema20)
         drawLine(ctx, xScale, toY(indi.ema20), COLORS.lime, 1.25, [4, 2]);
 
@@ -2097,6 +2074,12 @@ function ChartLegend({
       label: 'MA75',
       v: SMA(data[primary], 75)[i],
       c: 'var(--magenta)',
+    });
+  if (state.indicators.sma200)
+    indRows.push({
+      label: 'MA200',
+      v: SMA(data[primary], 200)[i],
+      c: 'var(--violet)',
     });
   if (state.indicators.ema20)
     indRows.push({
