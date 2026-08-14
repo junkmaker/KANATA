@@ -3,6 +3,12 @@ import { addAlert } from '../../lib/alertStorage';
 import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS, DRAWING_COLORS, withAlpha } from '../../lib/colors';
 import {
+  applyHandleDrag,
+  type DrawingHandleId,
+  findHandleAt,
+  updateDrawingText,
+} from '../../lib/drawingEdit';
+import {
   isDrawingsToggleKey,
   isTypingTarget,
   PAN_TOOL,
@@ -78,6 +84,14 @@ function useSize(ref: React.RefObject<HTMLElement | null>) {
 }
 
 const SNAP_PX = 14;
+
+/**
+ * 描画の全体移動を開始する最小ドラッグ距離（px）。
+ * これ未満は「クリック（＝選択・ダブルクリック）」として扱い、位置を書き換えない。
+ * 移動はスナップなしの小数座標で差分を取るため、閾値が無いとダブルクリックのたびに
+ * 手ぶれ数 px ぶん描画がずれて戻らなくなる。
+ */
+const MOVE_DRAG_THRESHOLD_PX = 3;
 type SnapMode = 'highlow' | 'time' | 'high';
 function getSnapMode(tool: string): SnapMode {
   if (tool === 'vline') return 'time';
@@ -893,13 +907,14 @@ export function Chart({
   // Overlay: crosshair, drawings
   const [hover, setHover] = useState<{ sx: number; sy: number } | null>(null);
   const [dragging, setDragging] = useState<{
-    type: 'pan' | 'drawing' | 'move-drawing';
+    type: 'pan' | 'drawing' | 'move-drawing' | 'resize-drawing';
     startX?: number;
     startY?: number;
     startView?: typeof view;
     startIdx?: number;
     startV?: number;
     snapshot?: DrawingObject;
+    handle?: DrawingHandleId;
   } | null>(null);
   const [tempDrawing, setTempDrawing] = useState<(typeof state.drawings)[0] | null>(null);
   const [textInput, setTextInput] = useState<{
@@ -908,6 +923,10 @@ export function Chart({
     idx: number;
     v: number;
     paneId: PaneId;
+    /** 既存テキストの編集時はその描画 id。新規作成時は undefined */
+    editingId?: number;
+    /** 編集開始時の本文（入力欄の defaultValue） */
+    initialText?: string;
   } | null>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const textInputReadyRef = useRef(false);
@@ -978,6 +997,13 @@ export function Chart({
   }, [textInput]);
 
   const commitTextNote = (text: string) => {
+    const editingId = textInput?.editingId;
+    if (editingId != null) {
+      // 編集時は activeTool を触らない（openTextEditor が pan へ揃えているので触る必要が無い）
+      setState((s) => ({ ...s, drawings: updateDrawingText(s.drawings, editingId, text) }));
+      setTextInput(null);
+      return;
+    }
     if (text.trim() && textInput) {
       setState((s) => ({
         ...s,
@@ -1056,6 +1082,62 @@ export function Chart({
     [view, bw, paneDefs],
   );
 
+  /**
+   * テキスト描画の本文編集を開く。text 型以外は無視する。
+   * `activeTool` をパンへ戻すのは、右クリックメニュー（`onContextMenu` はツールを問わず開く）から
+   * 到達したときに「非 pan なのに選択中」という状態を作らないため
+   * ＝ 選択解除 effect の不変条件と、commitTextNote の編集分岐の前提を成立させる。
+   */
+  const openTextEditor = (id: number) => {
+    const d = state.drawings.find((x) => x.id === id);
+    if (!d || d.type !== 'text' || d.idx == null || d.v == null) return;
+    const paneId = (d.pane ?? 'price') as PaneId;
+    const p = dataToScreen(d.idx, d.v, paneId);
+    setState((s) => ({ ...s, selectedDrawingId: id, activeTool: PAN_TOOL }));
+    setTextInput({
+      x: p.x,
+      y: p.y,
+      idx: d.idx,
+      v: d.v,
+      paneId,
+      editingId: id,
+      initialText: d.text ?? '',
+    });
+  };
+
+  /**
+   * 選択中の描画のハンドルを画面座標から判定する。
+   * 非表示中・別銘柄・非アクティブペイン（指標オフでペインごと消えている）では null を返す
+   * ＝ 見えていないハンドルは掴ませない（hitTest と同じ抑制条件）。
+   * さらにオーバーレイ描画と同じクリップ矩形を適用する。矩形の隅がペイン外へはみ出すと
+   * ハンドルは描かれないので、そこを掴めてしまうと「見えない当たり判定」になるため。
+   */
+  const findSelectedHandleAt = useCallback(
+    (sx: number, sy: number): DrawingHandleId | null => {
+      if (!state.showDrawings || state.selectedDrawingId == null) return null;
+      const d = state.drawings.find((x) => x.id === state.selectedDrawingId);
+      if (!d || (d.ticker && d.ticker !== primary)) return null;
+      const paneId = d.pane ?? 'price';
+      const dpane = paneDefs.find((p) => p.id === paneId) ?? paneDefs[0];
+      if (!dpane.active) return null;
+      // オーバーレイの ctx.rect(PAD_L, dpane.y0, priceW, dpane.height) と同じ範囲
+      const paneX1 = PAD_L + priceW;
+      const paneY1 = dpane.y0 + dpane.height;
+      const isVisible = (p: { x: number; y: number }) =>
+        p.x >= PAD_L && p.x <= paneX1 && p.y >= dpane.y0 && p.y <= paneY1;
+      return findHandleAt(d, sx, sy, (hi, hv) => dataToScreen(hi, hv, paneId), isVisible);
+    },
+    [
+      state.showDrawings,
+      state.selectedDrawingId,
+      state.drawings,
+      primary,
+      paneDefs,
+      dataToScreen,
+      priceW,
+    ],
+  );
+
   const hitTest = useCallback(
     (sx: number, sy: number): number | null => {
       // 非表示中は見えない描画を掴めないようにする（選択・移動・右クリックメニューを封じる）
@@ -1089,7 +1171,11 @@ export function Chart({
           const dx = p2.x - p1.x;
           const dy = p2.y - p1.y;
           const len2 = dx * dx + dy * dy;
-          if (len2 < 1e-6) continue;
+          if (len2 < 1e-6) {
+            // 2 点が重なった線分。掴めないと選択も削除もできない残骸になるので点として拾う
+            if (Math.hypot(sx - p1.x, sy - p1.y) <= TOL) return d.id;
+            continue;
+          }
           const t = ((sx - p1.x) * dx + (sy - p1.y) * dy) / len2;
           if (t < 0 || t > 1) continue;
           const px = p1.x + t * dx;
@@ -1125,7 +1211,18 @@ export function Chart({
           const cy = (p1.y + p2.y) / 2;
           const rx = Math.abs(p2.x - p1.x) / 2;
           const ry = Math.abs(p2.y - p1.y) / 2;
-          if (rx < 1 || ry < 1) continue;
+          if (rx < 1 || ry < 1) {
+            // 潰れた楕円。正規化すると 0 除算になるので、外接矩形として拾って回収可能にする
+            if (
+              sx >= cx - rx - TOL &&
+              sx <= cx + rx + TOL &&
+              sy >= cy - ry - TOL &&
+              sy <= cy + ry + TOL
+            ) {
+              return d.id;
+            }
+            continue;
+          }
           const nx = (sx - cx) / rx;
           const ny = (sy - cy) / ry;
           const norm = nx * nx + ny * ny;
@@ -1166,6 +1263,22 @@ export function Chart({
       ? [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])]
       : [];
     const HANDLE_COLOR = '#fff';
+    /** 外接矩形の四隅にリサイズハンドルを描く（長方形・楕円で共用） */
+    const drawCornerHandles = (x: number, y: number, w: number, h: number, color: string) => {
+      const corners = [
+        [x, y],
+        [x + w, y],
+        [x, y + h],
+        [x + w, y + h],
+      ];
+      ctx.fillStyle = HANDLE_COLOR;
+      ctx.lineWidth = 1.5;
+      corners.forEach(([cx, cy]) => {
+        ctx.fillRect(cx - 3, cy - 3, 6, 6);
+        ctx.strokeStyle = color;
+        ctx.strokeRect(cx - 3, cy - 3, 6, 6);
+      });
+    };
     allDrawings.forEach((d) => {
       if (d.ticker && d.ticker !== primary) return;
       const dpane = paneDefs.find((p) => p.id === (d.pane ?? 'price')) ?? paneDefs[0];
@@ -1276,19 +1389,7 @@ export function Chart({
           ctx.lineWidth = isSelected ? 2.5 : 1.5;
           ctx.strokeRect(x, y, w, h);
           if (isSelected) {
-            const corners = [
-              [x, y],
-              [x + w, y],
-              [x, y + h],
-              [x + w, y + h],
-            ];
-            ctx.fillStyle = HANDLE_COLOR;
-            ctx.lineWidth = 1.5;
-            corners.forEach(([cx, cy]) => {
-              ctx.fillRect(cx - 3, cy - 3, 6, 6);
-              ctx.strokeStyle = d.color || COLORS.accent;
-              ctx.strokeRect(cx - 3, cy - 3, 6, 6);
-            });
+            drawCornerHandles(x, y, w, h, d.color || COLORS.accent);
           }
         } else if (d.type === 'ellipse') {
           const cx = (p1.x + p2.x) / 2,
@@ -1299,19 +1400,8 @@ export function Chart({
           ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
           ctx.stroke();
           if (isSelected) {
-            const corners = [
-              [cx - rx, cy],
-              [cx + rx, cy],
-              [cx, cy - ry],
-              [cx, cy + ry],
-            ];
-            ctx.fillStyle = HANDLE_COLOR;
-            ctx.lineWidth = 1.5;
-            corners.forEach(([hx, hy]) => {
-              ctx.fillRect(hx - 3, hy - 3, 6, 6);
-              ctx.strokeStyle = d.color || COLORS.accent;
-              ctx.strokeRect(hx - 3, hy - 3, 6, 6);
-            });
+            // 長方形と同じ外接矩形の四隅に揃える（掴む場所とリサイズの意味を 1 系統にするため）
+            drawCornerHandles(cx - rx, cy - ry, rx * 2, ry * 2, d.color || COLORS.accent);
           }
         }
         ctx.restore();
@@ -1482,6 +1572,18 @@ export function Chart({
     // 描かれても画面に出ず hitTest も効かないため、回収できない描画が増えるのを防ぐ
     const tool = state.showDrawings ? state.activeTool : PAN_TOOL;
     if (tool === 'pan' || !tool) {
+      // ハンドル判定は形状判定より先に行う。
+      // - rect の隅は矩形内部でもあるので、後にすると全体移動に食われる
+      // - ellipse の隅は楕円の外側なので、後にすると「空クリック＝選択解除」に食われる
+      const handle = findSelectedHandleAt(sx, sy);
+      const selected =
+        handle != null ? state.drawings.find((x) => x.id === state.selectedDrawingId) : undefined;
+      if (handle && selected) {
+        setDragging({ type: 'resize-drawing', snapshot: selected, handle });
+        e.currentTarget.setPointerCapture(e.pointerId);
+        return;
+      }
+
       const hitId = hitTest(sx, sy);
       if (hitId != null) {
         const d = state.drawings.find((x) => x.id === hitId);
@@ -1589,6 +1691,14 @@ export function Chart({
       dragging.startIdx != null &&
       dragging.startV != null
     ) {
+      // 閾値未満は移動させない（クリック／ダブルクリックの手ぶれで位置がずれるのを防ぐ）
+      if (
+        dragging.startX != null &&
+        dragging.startY != null &&
+        Math.hypot(sx - dragging.startX, sy - dragging.startY) < MOVE_DRAG_THRESHOLD_PX
+      ) {
+        return;
+      }
       const { idx, v } = screenToData(sx, sy, dragging.snapshot.pane);
       const dIdx = idx - dragging.startIdx;
       const dV = v - dragging.startV;
@@ -1624,6 +1734,17 @@ export function Chart({
           return d;
         }),
       }));
+    } else if (dragging?.type === 'resize-drawing' && dragging.snapshot && dragging.handle) {
+      const snap = dragging.snapshot;
+      const handle = dragging.handle;
+      // 作成時と同じスナップ規則（OHLC 吸着）を適用し、ペインは掴んだ描画のものに固定する
+      const { idx: si, v: sv } = snapPoint(sx, sy, getSnapMode(snap.type), snap.pane);
+      setState((s) => ({
+        ...s,
+        drawings: s.drawings.map((d) =>
+          d.id === snap.id ? applyHandleDrag(d, handle, si, sv) : d,
+        ),
+      }));
     }
   };
 
@@ -1635,8 +1756,8 @@ export function Chart({
         activeTool: 'pan',
       }));
       setTempDrawing(null);
-    } else if (dragging?.type === 'move-drawing') {
-      // Move complete — drawings already mutated incrementally during pointer move.
+    } else if (dragging?.type === 'move-drawing' || dragging?.type === 'resize-drawing') {
+      // 移動・リサイズはポインタ移動中に逐次反映済みなので、ここでは何もしない
     }
     setDragging(null);
     try {
@@ -1718,6 +1839,12 @@ export function Chart({
     return () => window.removeEventListener('keydown', onKey);
   }, [textInput, setState]);
 
+  /** 選択中の描画のハンドルにカーソルが乗っているか（カーソル形状のフィードバック用） */
+  const hoveredHandle = useMemo(() => {
+    if (!hover || state.activeTool !== PAN_TOOL) return null;
+    return findSelectedHandleAt(hover.sx, hover.sy);
+  }, [hover, state.activeTool, findSelectedHandleAt]);
+
   const rawHoverIdx = hover ? Math.round(view.start + (hover.sx - PAD_L) / bw) : dataEnd - 1;
   // 未来領域（一目均衡表の雲など）にカーソルが乗っても、凡例には直近の実データを表示し続ける
   const hoverIdx = Math.min(rawHoverIdx, dataEnd - 1);
@@ -1736,7 +1863,9 @@ export function Chart({
             ? 'crosshair'
             : dragging?.type === 'pan'
               ? 'grabbing'
-              : 'crosshair',
+              : hoveredHandle
+                ? 'pointer'
+                : 'crosshair',
       }}
     >
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
@@ -1748,12 +1877,21 @@ export function Chart({
         onPointerUp={onPointerUp}
         onPointerLeave={() => setHover(null)}
         onContextMenu={onContextMenu}
+        onDoubleClick={(e) => {
+          if (!state.showDrawings || state.activeTool !== PAN_TOOL) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const hitId = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+          if (hitId != null) openTextEditor(hitId);
+        }}
       />
       {textInput && (
         <input
+          // 非制御入力なので、別の描画の編集へ切り替わったときは DOM を作り直して
+          // defaultValue を反映させる（key を外すと前の本文が残る）
+          key={textInput.editingId ?? 'new'}
           ref={textInputRef}
           type="text"
-          defaultValue=""
+          defaultValue={textInput.initialText ?? ''}
           placeholder="テキストを入力..."
           style={{
             position: 'absolute',
@@ -1774,7 +1912,9 @@ export function Chart({
             if (e.key === 'Enter') {
               commitTextNote(e.currentTarget.value);
             } else if (e.key === 'Escape') {
-              setState((s) => ({ ...s, activeTool: 'pan' }));
+              if (textInput.editingId == null) {
+                setState((s) => ({ ...s, activeTool: 'pan' }));
+              }
               setTextInput(null);
             }
           }}
@@ -1844,6 +1984,27 @@ export function Chart({
               />
             ))}
           </div>
+          {state.drawings.find((d) => d.id === ctxMenu.drawingId)?.type === 'text' && (
+            <button
+              type="button"
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '6px 14px',
+                textAlign: 'left',
+                color: 'var(--text)',
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                // 閉じる前に id を退避する（setCtxMenu(null) 後は ctxMenu を読めない）
+                const id = ctxMenu.drawingId;
+                setCtxMenu(null);
+                openTextEditor(id);
+              }}
+            >
+              テキストを編集
+            </button>
+          )}
           <button
             type="button"
             style={{
