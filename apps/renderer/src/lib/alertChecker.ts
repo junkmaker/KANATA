@@ -1,4 +1,5 @@
 import type { AlertObject, DrawingObject, OHLCBar } from '../types';
+import { resolveDrawing } from './drawingAnchor';
 
 function trendlineValueAt(d: DrawingObject, idx: number): number | null {
   if (d.i1 == null || d.v1 == null || d.i2 == null || d.v2 == null) return null;
@@ -10,6 +11,7 @@ export function checkAlertCondition(
   alert: AlertObject,
   drawings: DrawingObject[],
   data: Record<string, OHLCBar[]>,
+  timeframe: string,
 ): boolean {
   const drawing = drawings.find((d) => d.id === alert.drawingId);
   if (!drawing) return false;
@@ -25,7 +27,8 @@ export function checkAlertCondition(
   }
 
   if (drawing.type === 'trend') {
-    const lineVal = trendlineValueAt(drawing, bars.length - 1);
+    // 保存時と同じ時刻に解決してから、最終バーでの線の値を出す（チャートと同じインデックス空間で補間する）
+    const lineVal = trendlineValueAt(resolveDrawing(drawing, bars, timeframe), bars.length - 1);
     if (lineVal == null) return false;
     return alert.direction === 'below' ? close < lineVal : close > lineVal;
   }

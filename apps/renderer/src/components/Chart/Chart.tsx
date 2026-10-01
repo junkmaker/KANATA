@@ -3,6 +3,12 @@ import { addAlert } from '../../lib/alertStorage';
 import { fetchQuarterlyFin } from '../../lib/api';
 import { COLORS, COMPARE_COLORS, DRAWING_COLORS, withAlpha } from '../../lib/colors';
 import {
+  anchorDrawing,
+  pinLegacyDrawings,
+  resolveDrawing,
+  resolveDrawings,
+} from '../../lib/drawingAnchor';
+import {
   applyHandleDrag,
   type DrawingHandleId,
   findHandleAt,
@@ -130,6 +136,29 @@ export function Chart({
     // primary/primaryData?.length の変化時のみビューをリセットする。
     // ichi トグルはパン・ズーム位置を保持するため依存に含めず ref で読む
   }, [primary, primaryData?.length]);
+
+  /** 保存形式（時刻アンカー）を現在のデータでのインデックスへ解決した描画。位置を読むのはこちらだけ */
+  const drawings = useMemo(
+    () =>
+      primaryData?.length
+        ? resolveDrawings(state.drawings, primaryData, state.timeframe)
+        : state.drawings,
+    [state.drawings, primaryData, state.timeframe],
+  );
+
+  /** 保存直前に時刻アンカーを付ける。データ未取得時はインデックスのまま保存し、後で pinLegacyDrawings が固定する */
+  const anchor = (d: DrawingObject): DrawingObject =>
+    primaryData?.length ? anchorDrawing(d, primaryData, state.timeframe) : d;
+
+  // 時刻導入前に保存された描画（idx だけを持つ）を、今のデータで固定する。
+  // 既にずれた分は戻せないが、これ以降は日数が経過してもずれなくなる（issue #81）
+  useEffect(() => {
+    if (!primary || !primaryData?.length) return;
+    setState((s) => {
+      const next = pinLegacyDrawings(s.drawings, primaryData, state.timeframe, primary);
+      return next === s.drawings ? s : { ...s, drawings: next };
+    });
+  }, [primary, primaryData, state.timeframe, setState]);
 
   const [finHistory, setFinHistory] = useState<FinBar[] | null>(null);
   useEffect(() => {
@@ -1009,7 +1038,7 @@ export function Chart({
         ...s,
         drawings: [
           ...s.drawings,
-          {
+          anchor({
             type: 'text',
             idx: textInput.idx,
             v: textInput.v,
@@ -1018,7 +1047,7 @@ export function Chart({
             color: s.drawingColor,
             ticker: primary,
             id: Math.random(),
-          },
+          }),
         ],
         activeTool: 'pan',
       }));
@@ -1089,7 +1118,7 @@ export function Chart({
    * ＝ 選択解除 effect の不変条件と、commitTextNote の編集分岐の前提を成立させる。
    */
   const openTextEditor = (id: number) => {
-    const d = state.drawings.find((x) => x.id === id);
+    const d = drawings.find((x) => x.id === id);
     if (!d || d.type !== 'text' || d.idx == null || d.v == null) return;
     const paneId = (d.pane ?? 'price') as PaneId;
     const p = dataToScreen(d.idx, d.v, paneId);
@@ -1115,7 +1144,7 @@ export function Chart({
   const findSelectedHandleAt = useCallback(
     (sx: number, sy: number): DrawingHandleId | null => {
       if (!state.showDrawings || state.selectedDrawingId == null) return null;
-      const d = state.drawings.find((x) => x.id === state.selectedDrawingId);
+      const d = drawings.find((x) => x.id === state.selectedDrawingId);
       if (!d || (d.ticker && d.ticker !== primary)) return null;
       const paneId = d.pane ?? 'price';
       const dpane = paneDefs.find((p) => p.id === paneId) ?? paneDefs[0];
@@ -1130,7 +1159,7 @@ export function Chart({
     [
       state.showDrawings,
       state.selectedDrawingId,
-      state.drawings,
+      drawings,
       primary,
       paneDefs,
       dataToScreen,
@@ -1143,7 +1172,6 @@ export function Chart({
       // 非表示中は見えない描画を掴めないようにする（選択・移動・右クリックメニューを封じる）
       if (!state.showDrawings) return null;
       const TOL = 5;
-      const drawings = state.drawings || [];
       for (let i = drawings.length - 1; i >= 0; i--) {
         const d = drawings[i];
         if (d.ticker && d.ticker !== primary) continue;
@@ -1241,7 +1269,7 @@ export function Chart({
       return null;
     },
     // biome-ignore lint/correctness/useExhaustiveDependencies: primary は本体で直接読まないが、銘柄切替時に hitTest を作り直すための明示的な依存として残す
-    [state.drawings, state.showDrawings, primary, dataToScreen, xScale, paneDefs],
+    [drawings, state.showDrawings, primary, dataToScreen, xScale, paneDefs],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: オーバーレイ描画。上のメイン描画 effect と同じ理由で、既存依存から再計算される派生値（bw/xScale/yScale/lastPaneBottom ほか）を依存に含めない
@@ -1260,7 +1288,7 @@ export function Chart({
 
     // 非表示中は描画レイヤーだけを空にする（state.drawings は保持したまま）
     const allDrawings = state.showDrawings
-      ? [...(state.drawings || []), ...(tempDrawing ? [tempDrawing] : [])]
+      ? [...drawings, ...(tempDrawing ? [tempDrawing] : [])]
       : [];
     const HANDLE_COLOR = '#fff';
     /** 外接矩形の四隅にリサイズハンドルを描く（長方形・楕円で共用） */
@@ -1543,7 +1571,7 @@ export function Chart({
     }
   }, [
     hover,
-    state.drawings,
+    drawings,
     state.selectedDrawingId,
     state.activeTool,
     state.showSqMarkers,
@@ -1577,7 +1605,7 @@ export function Chart({
       // - ellipse の隅は楕円の外側なので、後にすると「空クリック＝選択解除」に食われる
       const handle = findSelectedHandleAt(sx, sy);
       const selected =
-        handle != null ? state.drawings.find((x) => x.id === state.selectedDrawingId) : undefined;
+        handle != null ? drawings.find((x) => x.id === state.selectedDrawingId) : undefined;
       if (handle && selected) {
         setDragging({ type: 'resize-drawing', snapshot: selected, handle });
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -1586,7 +1614,7 @@ export function Chart({
 
       const hitId = hitTest(sx, sy);
       if (hitId != null) {
-        const d = state.drawings.find((x) => x.id === hitId);
+        const d = drawings.find((x) => x.id === hitId);
         if (d) {
           const { v: startV } = screenToData(sx, sy, d.pane);
           setState((s) => ({ ...s, selectedDrawingId: hitId }));
@@ -1630,14 +1658,14 @@ export function Chart({
         ...s,
         drawings: [
           ...s.drawings,
-          {
+          anchor({
             type: 'vline',
             idx: si,
             pane: paneId,
             color: s.drawingColor,
             ticker: primary,
             id: Math.random(),
-          },
+          }),
         ],
         activeTool: 'pan',
       }));
@@ -1710,8 +1738,9 @@ export function Chart({
           if (d.type === 'hline' && snap.v != null) {
             return { ...d, v: snap.v + dV };
           }
+          // snap は解決済み（現在のデータでのインデックス）なので、差分を足してから時刻を付け直す
           if (d.type === 'vline' && snap.idx != null) {
-            return { ...d, idx: snap.idx + dIdx };
+            return anchor({ ...d, idx: snap.idx + dIdx });
           }
           if (
             (d.type === 'trend' || d.type === 'rect' || d.type === 'ellipse') &&
@@ -1720,16 +1749,16 @@ export function Chart({
             snap.i2 != null &&
             snap.v2 != null
           ) {
-            return {
+            return anchor({
               ...d,
               i1: snap.i1 + dIdx,
               v1: snap.v1 + dV,
               i2: snap.i2 + dIdx,
               v2: snap.v2 + dV,
-            };
+            });
           }
           if (d.type === 'text' && snap.idx != null && snap.v != null) {
-            return { ...d, idx: snap.idx + dIdx, v: snap.v + dV };
+            return anchor({ ...d, idx: snap.idx + dIdx, v: snap.v + dV });
           }
           return d;
         }),
@@ -1741,9 +1770,15 @@ export function Chart({
       const { idx: si, v: sv } = snapPoint(sx, sy, getSnapMode(snap.type), snap.pane);
       setState((s) => ({
         ...s,
-        drawings: s.drawings.map((d) =>
-          d.id === snap.id ? applyHandleDrag(d, handle, si, sv) : d,
-        ),
+        // d は保存形式なので、解決してから掴んだ成分を差し替える
+        // （解決しないと掴んでいない側の隅が保存時点の古いインデックスに戻る）
+        drawings: s.drawings.map((d) => {
+          if (d.id !== snap.id) return d;
+          const resolved = primaryData?.length
+            ? resolveDrawing(d, primaryData, state.timeframe)
+            : d;
+          return anchor(applyHandleDrag(resolved, handle, si, sv));
+        }),
       }));
     }
   };
@@ -1752,7 +1787,7 @@ export function Chart({
     if (dragging?.type === 'drawing' && tempDrawing) {
       setState((s) => ({
         ...s,
-        drawings: [...s.drawings, tempDrawing],
+        drawings: [...s.drawings, anchor(tempDrawing)],
         activeTool: 'pan',
       }));
       setTempDrawing(null);
