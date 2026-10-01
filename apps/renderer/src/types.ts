@@ -96,6 +96,15 @@ export interface DrawingObject {
   v1?: number;
   i2?: number;
   v2?: number;
+  /**
+   * 時間軸の真実源（バー時刻 ms）。`idx` / `i1` / `i2` と 1 対 1 に対応する。
+   * 存在すれば表示時に `lib/drawingAnchor.ts` が現在のデータでのインデックスへ解決し直す
+   * （日足はローリング窓なので、バー番号だけだと日数経過でずれる。issue #81）。
+   * 無いのは時刻導入前に保存された旧データで、初回表示時に固定される。
+   */
+  t?: number;
+  t1?: number;
+  t2?: number;
   text?: string;
 }
 

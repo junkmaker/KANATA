@@ -175,7 +175,7 @@ export function App() {
   // Real data for all tickers from backend (keeps prices consistent regardless of selection)
   const allSymbols = useMemo(() => chartTickers.map((t) => t.code), [chartTickers]);
   const { realData, status } = useChartData(allSymbols, state.timeframe);
-  useAlertCheck(state.drawings, realData, status);
+  useAlertCheck(state.drawings, realData, status, state.timeframe);
 
   const data = realData;
 

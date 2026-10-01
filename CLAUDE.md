@@ -59,11 +59,11 @@ cd backend && pytest
 
 - **`App.tsx` が全状態の単一ソース**。`localStorage` キーは `kanata.*` 名前空間（`kanata.state` / `kanata.aesthetic` / `kanata.activeWatchlistId` / `kanata.migrated.v1` / `kanata.view` / `kanata.screening.universeId` / `kanata.screening.pattern`）
 - **`apps/renderer/src/types.ts` が型の起点**。新しい描画ツールやインジケーターを追加するときはここから変更する
-- **描画ツールは OHLC インデックスと価格で保存**（`DrawingObject`）、座標ではない。タイムフレーム変更でも位置が維持される設計
+- **描画ツールの時間軸はバー時刻（`t` / `t1` / `t2`）が真実源**（`DrawingObject`）、座標ではない。`idx` / `i1` / `i2` は表示直前に `lib/drawingAnchor.ts` の `resolveDrawings` が現在のデータから解決し直す器で、保存時は `anchorDrawing` を通す。日足は `period="5y"` のローリング窓なので、バー番号だけで保存すると日数経過でずれる（issue #81）。**Chart で位置を読むのは解決済みの `drawings`、`state.drawings` は保存形式**。保存形式の描画を `applyHandleDrag` などインデックス空間の関数へ渡すときは先に `resolveDrawing` する。時刻を持たない旧データは表示時に `pinLegacyDrawings` が固定する（既にずれた分は戻せない）
 - **描画の表示/非表示（`state.showDrawings`）は 3 箇所で抑制する** — `Chart.tsx` のオーバーレイ描画・`hitTest`・`onPointerDown` のツール判定。描画を止めるだけだと見えない線を掴めてしまい、掴めなくするだけだと見えない線を新規作成できてしまう。非表示化時は `activeTool` をパンへ戻す。この状態は永続化せず、`loadState` が起動時に必ず `true` へ戻す
 - **`onPointerDown` の判定順は「ハンドル → 形状（`hitTest`）→ 空クリック」で固定**。選択中描画のハンドル判定（`lib/drawingEdit.ts` の `findHandleAt`）を先に置かないと、長方形の隅は「内部＝全体移動」に、楕円の隅は「外側＝選択解除」に食われてリサイズできない。`lib/drawingEdit.ts` は `types.ts` だけを見るリーフモジュールで、座標変換は呼び出し側から関数で注入する（ペインとスケールを知らせない）。**全体移動は「掴んだ点からの差分」・リサイズは「掴んだハンドルをカーソル位置へ置く絶対指定」**で、混ぜると二重補正になるため `resize-drawing` に `startIdx` / `startV` を持たせない
 - **チャートの単独キーショートカットを無視させたい領域には `data-chart-shortcuts="off"` を付ける**（`SHORTCUT_OPT_OUT_SELECTOR`）。フォーム要素の判定は `isTypingTarget` に集約。`select` もブラウザの type-ahead と衝突するため入力対象として扱う
-- **未来インデックス（`idx >= data.length`）の時刻計算は `lib/futureBars.ts` の `barTimestampAt` に集約**。`MAX_FUTURE_BARS = 120` で最大 120 バー先の空白領域にパン・描画できる
+- **未来インデックス（`idx >= data.length`）の時刻計算は `lib/futureBars.ts` の `barTimestampAt` に集約**。`MAX_FUTURE_BARS = 120` で最大 120 バー先の空白領域にパン・描画できる。**日足の未来バーは土日を飛ばす**（曜日は `t + 12h` の UTC 曜日＝取引所ローカルの暦日で判定し、端末のタイムゾーンに依存させない）。暦日で進めると未来に置いた描画が実データ到着後に週末ぶんずれる。祝日は飛ばせない
 - **Chart サブペインの Y 座標チェーンに手を入れない**（`Chart.tsx` の `priceH` → `volY0` 以降の連鎖）。ペイン高さを変えるときは `priceH` の計算（`gapsToLastPane` ternary）だけを変更する
 - **Canvas は高 DPI 対応**（`devicePixelRatio`）。サイズ計算を触るときは論理ピクセルと物理ピクセルの区別に注意
 - `useChartData` は `symbols.join(',')` を useEffect 依存にして配列の参照等価性問題を回避している
